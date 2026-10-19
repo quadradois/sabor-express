@@ -34,3 +34,29 @@ def test_chave_que_falhou_pode_ser_tentada_de_novo():
     with pytest.raises(RegraViolada):
         executar("teste", falha, autor="dono", chave="k3")
     assert executar("teste", lambda op: {"ok": 1}, autor="dono", chave="k3") == {"ok": 1}
+
+def test_corrida_mesma_chave_devolve_resultado_gravado(monkeypatch):
+    import nucleo.operacoes as ops
+    RegistroOperacao.objects.create(nome="teste", chave="k-race", canal="web", autor="dono",
+                                    status="sucesso", resultado={"n": 7})
+    real = ops._sucesso
+    chamadas = []
+    # a 1a consulta "perde" a corrida: não vê a linha que já existe
+    monkeypatch.setattr(ops, "_sucesso", lambda c: None if not chamadas.append(1) and len(chamadas) == 1 else real(c))
+    r = executar("teste", lambda op: {"n": 99}, autor="dono", chave="k-race")
+    assert r == {"n": 7}
+    assert RegistroOperacao.objects.count() == 1
+
+def test_retry_apos_falha_mantem_erro_e_sucesso():
+    def falha(op): raise RegraViolada("x")
+    with pytest.raises(RegraViolada):
+        executar("teste", falha, autor="dono", chave="k3")
+    executar("teste", lambda op: {"ok": 1}, autor="dono", chave="k3")
+    erro = RegistroOperacao.objects.get(status="erro")
+    assert erro.chave is None and "k3" in erro.erro
+    assert RegistroOperacao.objects.get(chave="k3").status == "sucesso"
+
+def test_chave_vazia_repetida_nao_levanta():
+    executar("teste", lambda op: {"a": 1}, autor="dono", chave="")
+    executar("teste", lambda op: {"a": 1}, autor="dono", chave="")
+    assert RegistroOperacao.objects.count() == 2
