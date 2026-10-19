@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from .models import FichaVersao
 
 
@@ -5,7 +7,8 @@ def foto(ficha):
     s = str
     return {
         "tipo": ficha.tipo,
-        "rendimento_g": None if ficha.rendimento_g is None else s(ficha.rendimento_g),
+        # o form do admin traz o valor como digitado ("500"); o banco guarda 3 casas
+        "rendimento_g": None if ficha.rendimento_g is None else s(Decimal(ficha.rendimento_g).quantize(Decimal("0.001"))),
         "itens": [[c.item_id, c.item.nome, s(c.quantidade)]
                   for c in ficha.itens.select_related("item").order_by("ordem", "id")],
         "subpreparacoes": [[c.preparacao_id, c.preparacao.nome, s(c.quantidade_g)]

@@ -31,3 +31,7 @@ class AdminViaExecutar:
 
         executar(f"excluir_{self.opts.model_name}", func, autor=request.user.username,
                  canal="web", parametros={"id": pk})
+
+    def delete_queryset(self, request, queryset):
+        for obj in queryset:
+            self.delete_model(request, obj)

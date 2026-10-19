@@ -106,3 +106,25 @@ def test_admin_salva_item_pelo_nucleo(client, admin_user):
     item = Item.objects.get(nome="Sal")
     op = RegistroOperacao.objects.get(nome="salvar_item")
     assert op.status == "sucesso" and op.resultado == {"id": item.pk}
+
+
+def test_admin_resalvar_sem_mudar_nao_cria_versao(client, admin_user):
+    client.force_login(admin_user)
+    add = "/admin/fichas/ficha/add/"
+    dados = dados_admin(client, add) | {"nome": "Molho", "tipo": "preparacao", "rendimento_g": "500"}
+    assert client.post(add, dados).status_code == 302
+    ficha = Ficha.objects.get(nome="Molho")
+    url = f"/admin/fichas/ficha/{ficha.pk}/change/"
+    assert client.post(url, dados_admin(client, url)).status_code == 302
+    assert FichaVersao.objects.filter(ficha=ficha).count() == 1
+
+
+def test_admin_excluir_em_massa_pelo_nucleo(client, admin_user):
+    client.force_login(admin_user)
+    item = Item.objects.create(nome="Sal", tipo="ingrediente", unidade_base="g", controla_validade=False)
+    r = client.post("/admin/cadastros/item/", {
+        "action": "delete_selected", "_selected_action": [item.pk], "post": "yes",
+    })
+    assert r.status_code == 302 and not Item.objects.filter(pk=item.pk).exists()
+    op = RegistroOperacao.objects.get(nome="excluir_item")
+    assert op.status == "sucesso" and op.parametros == {"id": item.pk}
