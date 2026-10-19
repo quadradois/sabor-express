@@ -34,3 +34,5 @@ table { display: block; overflow-x: auto; }
 .cancelar { margin-top: 24px; }
 .cancelar summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
 .campo { margin: 12px 0; }
+.cronometro .tocar-som { display: none; }
+.tocando.mudo .tocar-som { display: inline-block; }

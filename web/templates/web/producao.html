@@ -70,7 +70,7 @@
 {% if cronometros %}<section class="cronometros">
   <h2>Cronômetros</h2>
   {% for c in cronometros %}<div class="cronometro" data-fim="{{ c.fim|utc|date:'Y-m-d\TH:i:s\Z' }}">
-    <span class="nome">{{ c.nome }}</span> <strong class="resta">--:--</strong> <strong class="tempo">Tempo!</strong>
+    <span class="nome">{{ c.nome }}</span> <strong class="resta">--:--</strong> <strong class="tempo">Tempo!</strong> <button type="button" class="tocar-som">Tocar som</button>
     <form method="post">{% csrf_token %}{% chave %}<input type="hidden" name="cronometro" value="{{ c.id }}">
       <button name="acao" value="parar">Parar</button></form>
   </div>{% endfor %}

@@ -85,7 +85,9 @@ def test_outro_aparelho_ve_o_mesmo_estado(client, dono, producao, django_user_mo
 def test_cronometro_aparece_em_todas_as_etapas(client, dono, producao):
     post(client, producao, acao="previsto_todos")
     post(client, producao, acao="etapa", indice=1)
-    fim = fins(post(client, producao, acao="cronometro"))
+    r = post(client, producao, acao="cronometro")
+    fim = fins(r)
+    assert 'class="tocar-som">Tocar som</button>' in texto(r)
     for i in (2, 3, 0):
         assert fins(post(client, producao, acao="etapa", indice=i)) == fim
     c = producao.cronometros.get()
