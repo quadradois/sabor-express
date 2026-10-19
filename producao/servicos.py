@@ -1,9 +1,13 @@
+from collections import defaultdict
 from datetime import timedelta
+from decimal import ROUND_HALF_UP, Decimal
 
+from django.db.models import Min, Sum
 from django.utils import timezone
 
 from cadastros.models import Item
-from estoque.models import FORMAS, Lote
+from estoque.models import ESTADOS, FORMAS, Lote, Movimento
+from estoque.servicos import alocar_fefo, calcular_validade, saldo_lote
 from fichas.escala import escalar
 from fichas.versoes import versao_vigente
 from nucleo.operacoes import RegraViolada, executar
@@ -55,6 +59,12 @@ def _em_andamento(producao_id):
     return p
 
 
+def _tudo_pesado(p):
+    faltam = [l.item.nome for l in p.linhas.select_related("item").filter(usado__isnull=True)]
+    if faltam:
+        raise RegraViolada(f"Pese ou marque 'usei o previsto' em: {', '.join(faltam)}.")
+
+
 def registrar_peso(*, linha_id, usado, lote_id=None, autor, canal="web", chave=None) -> dict:
     def func(op):
         l = LinhaPreparo.objects.select_related("item").filter(id=linha_id).first()
@@ -97,9 +107,7 @@ def ir_para_etapa(*, producao_id, indice, autor, canal="web", chave=None) -> dic
         if not 0 <= indice <= p.fechamento:
             raise RegraViolada("Etapa inexistente.")
         if indice > 0:
-            faltam = [l.item.nome for l in p.linhas.select_related("item").filter(usado__isnull=True)]
-            if faltam:
-                raise RegraViolada(f"Pese ou marque 'usei o previsto' em: {', '.join(faltam)}.")
+            _tudo_pesado(p)
         p.etapa_atual = indice
         p.save()
         return {"etapa_atual": indice}
@@ -146,3 +154,74 @@ def cancelar_producao(*, producao_id, motivo, autor, canal="web", chave=None) ->
 
     return executar("cancelar_producao", func, autor=autor, canal=canal, chave=chave,
                     parametros={"producao_id": producao_id, "motivo": motivo})
+
+
+def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="", estado, validade_manual=None,
+                      justificativa="", anotacao="", confirmar_perda_total=False, autor, canal="web", chave=None) -> dict:
+    parametros = {"producao_id": producao_id, "quantidade_boa": quantidade_boa, "perdas": perdas,
+                  "perda_motivo": perda_motivo, "estado": estado, "validade_manual": validade_manual,
+                  "justificativa": justificativa, "anotacao": anotacao, "confirmar_perda_total": confirmar_perda_total}
+
+    def func(op):
+        p = _em_andamento(producao_id)
+        _tudo_pesado(p)
+        if quantidade_boa < 0 or perdas < 0:
+            raise RegraViolada("As quantidades não podem ser negativas.")
+        if perdas > 0 and not perda_motivo.strip():
+            raise RegraViolada("Informe o motivo das perdas.")
+        if estado not in dict(ESTADOS):
+            raise RegraViolada("Escolha a conservação.")
+        if quantidade_boa == 0 and not confirmar_perda_total:
+            raise RegraViolada("Nenhuma unidade boa: confirme a perda total.")
+        hoje, motivo, custo = timezone.localdate(), f"Produção {p.id}", Decimal("0")
+
+        def consumir(lote, q):
+            nonlocal custo
+            Movimento.objects.create(tipo="consumo_producao", item=lote.item, lote=lote, quantidade=-q,
+                                     quantidade_informada=q, unidade_informada=lote.item.unidade_base,
+                                     fator=Decimal("1"), motivo=motivo, operacao=op)
+            custo += q * lote.custo_unitario
+
+        por_item = defaultdict(lambda: [Decimal("0"), defaultdict(Decimal)])  # item -> [total, {lote: q}]
+        for l in p.linhas.select_related("item", "lote__item"):
+            por_item[l.item][0] += l.usado
+            if l.lote:
+                por_item[l.item][1][l.lote] += l.usado
+        for item, (total, fixos) in por_item.items():
+            for lote, q in fixos.items():
+                if (lote.validade and lote.validade < hoje) or saldo_lote(lote) < q:
+                    raise RegraViolada(f"O lote escolhido de '{item.nome}' não tem {fmt_qtd(q, item.unidade_base)} disponíveis.")
+                if q > 0:
+                    consumir(lote, q)
+            resto = total - sum(fixos.values())
+            if resto > 0:  # depois dos fixados: o saldo já reflete o que eles consumiram
+                for lote, q in alocar_fefo(item, resto, hoje=hoje):
+                    consumir(lote, q)
+        if p.forma == "frito":
+            custo += p.produto.oleo_ref_un * (quantidade_boa + perdas)
+        p.custo_total = custo.quantize(Decimal("0.01"), ROUND_HALF_UP)
+        if quantidade_boa > 0:
+            p.custo_unitario = (p.custo_total / quantidade_boa).quantize(Decimal("0.0001"), ROUND_HALF_UP)
+            validade, manual = calcular_validade(p.produto, p.forma, estado, hoje=hoje, manual=validade_manual,
+                                                 justificativa=justificativa)
+            p.lote = Lote.objects.create(item=p.produto, codigo=f"{hoje:%y%m%d}-{p.id}", forma=p.forma,
+                                         validade=validade, custo_unitario=p.custo_unitario)
+            Movimento.objects.create(tipo="entrada_producao", item=p.produto, lote=p.lote, quantidade=quantidade_boa,
+                                     quantidade_informada=quantidade_boa, unidade_informada="un", fator=Decimal("1"),
+                                     motivo=motivo, estado=estado, validade=validade, validade_manual=manual, operacao=op)
+        p.status, p.quantidade_boa, p.perdas, p.perda_motivo = "concluida", quantidade_boa, perdas, perda_motivo.strip()
+        p.anotacao, p.encerrada_em = anotacao.strip(), timezone.now()
+        p.save()
+        return {"lote_id": p.lote_id, "custo_total": p.custo_total, "custo_unitario": p.custo_unitario}
+
+    return executar("concluir_producao", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
+
+
+def origem(lote) -> list:
+    entrada = Movimento.objects.filter(lote=lote, tipo="entrada_producao").first()
+    if entrada is None:
+        return []
+    linhas = (Movimento.objects.filter(operacao_id=entrada.operacao_id, quantidade__lt=0)
+              .values("lote").annotate(q=Sum("quantidade"), primeiro=Min("id")).order_by("primeiro"))
+    lotes = Lote.objects.in_bulk([r["lote"] for r in linhas])
+    return [(lotes[r["lote"]], -r["q"]) for r in linhas]
