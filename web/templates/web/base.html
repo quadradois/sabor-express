@@ -1,0 +1,18 @@
+{% load static %}<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Sabor Express{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'web/app.css' %}">
+</head>
+<body>
+  <header>
+    <a href="{% url 'inicio' %}"><strong>Sabor Express</strong></a>
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button>Sair</button></form>
+    {% endif %}
+  </header>
+  <main>{% block conteudo %}{% endblock %}</main>
+</body>
+</html>

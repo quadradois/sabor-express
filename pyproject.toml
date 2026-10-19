@@ -1,0 +1,17 @@
+[project]
+name = "sabor-express"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Quadra Dois", email = "219756605+quadradois@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2,<5.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
+]

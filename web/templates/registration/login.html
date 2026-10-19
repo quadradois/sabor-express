@@ -1,0 +1,8 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Entrar</h1>
+<form method="post">{% csrf_token %}
+  {{ form.as_p }}
+  <button>Entrar</button>
+</form>
+{% endblock %}
