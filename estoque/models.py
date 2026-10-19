@@ -47,3 +47,12 @@ class CriterioValidade(models.Model):
 
     def __str__(self):
         return f"{self.produto} {self.forma} {self.estado}: {self.dias} dias"
+
+
+class EtiquetaImpressa(models.Model):
+    lote = models.ForeignKey(Lote, on_delete=models.PROTECT)
+    estado = models.CharField(max_length=20, choices=ESTADOS)
+    copias = models.PositiveIntegerField()
+    reimpressao = models.BooleanField(default=False)
+    operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
+    criado_em = models.DateTimeField(auto_now_add=True)

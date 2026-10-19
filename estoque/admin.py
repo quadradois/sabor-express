@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from nucleo.admin_executar import AdminViaExecutar
 
-from .models import CriterioValidade, Lote, Movimento
+from .models import CriterioValidade, EtiquetaImpressa, Lote, Movimento
 
 
 class SomenteLeitura(admin.ModelAdmin):
@@ -18,6 +18,7 @@ class SomenteLeitura(admin.ModelAdmin):
 
 admin.site.register(Lote, SomenteLeitura)
 admin.site.register(Movimento, SomenteLeitura)
+admin.site.register(EtiquetaImpressa, SomenteLeitura)
 
 
 @admin.register(CriterioValidade)
