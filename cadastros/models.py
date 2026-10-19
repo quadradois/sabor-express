@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 
@@ -17,6 +18,14 @@ class Item(models.Model):
 
     def __str__(self):
         return self.nome
+
+    def clean(self):
+        from estoque.models import Movimento  # evita import circular
+
+        if self.pk and Movimento.objects.filter(item_id=self.pk).exists():
+            antes = Item.objects.get(pk=self.pk).unidade_base
+            if antes != self.unidade_base:
+                raise ValidationError({"unidade_base": "Item com movimentos não pode mudar de unidade base."})
 
 
 class Conversao(models.Model):

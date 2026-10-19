@@ -1,11 +1,18 @@
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from cadastros.models import Item
 from estoque.servicos import saldo
 from fichas.models import Etapa, Ficha
 from fichas.validacao import validar_ficha
 from nucleo.operacoes import RegraViolada
+
+
+MILESIMO = Decimal("0.001")
+
+
+def _q(v: Decimal) -> Decimal:
+    return v.quantize(MILESIMO, ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)
@@ -36,12 +43,14 @@ class ReceitaEscalada:
 
 def _expandir(prep, alvo_g, blocos):
     """Pós-ordem: sub-preparações entram na lista antes da preparação que as usa."""
+    if not prep.ativa:
+        raise RegraViolada(f"A preparação '{prep.nome}' está inativa.")
     validar_ficha(prep)
     fator = alvo_g / prep.rendimento_g
     for c in prep.subpreparacoes.select_related("preparacao").order_by("ordem", "id"):
         _expandir(c.preparacao, c.quantidade_g * fator, blocos)
     linhas = [
-        Linha(c.item_id, c.item.nome, c.item.unidade_base, c.quantidade * fator, Decimal(0))
+        Linha(c.item_id, c.item.nome, c.item.unidade_base, _q(c.quantidade * fator), Decimal(0))
         for c in prep.itens.select_related("item").order_by("ordem", "id")
     ]
     blocos.append(Bloco(prep.nome, alvo_g, linhas, list(prep.etapas.order_by("ordem", "id"))))
@@ -68,7 +77,7 @@ def escalar(ficha_produto: Ficha, unidades: int, peso_unitario_g: Decimal) -> Re
         for l in b.linhas:
             necessidade[l.item_id] = necessidade.get(l.item_id, Decimal(0)) + l.quantidade
     faltas = {
-        i.id: max(Decimal(0), necessidade[i.id] - saldo(i))
+        i.id: max(Decimal(0), _q(necessidade[i.id]) - saldo(i))
         for i in Item.objects.filter(id__in=necessidade)
     }
     blocos = [

@@ -7,6 +7,7 @@ class RegistroOperacao(models.Model):
     canal = models.CharField(max_length=20)  # web | telegram | agente | sistema
     autor = models.CharField(max_length=100)
     status = models.CharField(max_length=10)  # sucesso | erro
+    parametros = models.JSONField(null=True)
     resultado = models.JSONField(null=True)
     erro = models.TextField(blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)

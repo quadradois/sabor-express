@@ -48,3 +48,27 @@ def test_pedido_invalido(coxinha, unidades, peso):
 def test_so_ficha_de_produto(coxinha):
     with pytest.raises(RegraViolada, match="produto"):
         escalar(Ficha.objects.get(nome="Massa"), 10, D("100"))
+
+def _produto_900_285_300():
+    sal = item("Sal")
+    base = prep("Base", "900")
+    ComponenteItem.objects.create(ficha=base, item=sal, quantidade=D("300"), ordem=1)
+    p = Ficha.objects.create(nome="Teste", tipo="produto")
+    Proporcao.objects.create(ficha=p, preparacao=base, percentual=D("100"), ordem=1)
+    entrada_manual(item_id=sal.id, quantidade=D("95"), unidade="g", custo_total=D("1"), motivo="x", autor="dono")
+    return p
+
+def test_necessidade_arredondada_nao_gera_falta_fantasma():
+    r = escalar(_produto_900_285_300(), 1, D("285"))
+    linha = r.blocos[0].linhas[0]
+    assert linha.quantidade == D("95.000") and linha.falta == 0
+
+def test_pagina_nao_mostra_falta_fantasma(client, dono):
+    p = _produto_900_285_300()
+    html = client.get("/receita/", {"ficha": p.id, "unidades": 1, "peso": "285"}).content.decode()
+    assert "falta" not in html.replace('class="falta"', "")
+
+def test_preparacao_inativa_recusa(coxinha):
+    Ficha.objects.filter(nome="Massa").update(ativa=False)
+    with pytest.raises(RegraViolada, match="Massa"):
+        escalar(coxinha, 50, D("150"))

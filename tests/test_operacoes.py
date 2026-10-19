@@ -60,3 +60,21 @@ def test_chave_vazia_repetida_nao_levanta():
     executar("teste", lambda op: {"a": 1}, autor="dono", chave="")
     executar("teste", lambda op: {"a": 1}, autor="dono", chave="")
     assert RegistroOperacao.objects.count() == 2
+
+def test_mesma_chave_outra_operacao_recusa():
+    executar("teste", lambda op: {"ok": 1}, autor="dono", chave="k4", parametros={"q": 1})
+    with pytest.raises(RegraViolada, match="já foi usada para outra operação"):
+        executar("outra", lambda op: {"ok": 2}, autor="dono", chave="k4", parametros={"q": 1})
+
+def test_mesma_chave_outros_parametros_recusa():
+    from decimal import Decimal
+    executar("teste", lambda op: {"ok": 1}, autor="dono", chave="k5", parametros={"q": Decimal("1")})
+    with pytest.raises(RegraViolada, match="já foi usada para outra operação"):
+        executar("teste", lambda op: {"ok": 2}, autor="dono", chave="k5", parametros={"q": Decimal("5")})
+
+def test_mesma_chave_mesmos_parametros_devolve_resultado_gravado():
+    from decimal import Decimal
+    p = {"b": Decimal("1.5"), "a": "x"}
+    executar("teste", lambda op: {"ok": 1}, autor="dono", chave="k6", parametros=p)
+    assert executar("teste", lambda op: {"ok": 2}, autor="dono", chave="k6", parametros=dict(p)) == {"ok": 1}
+    assert RegistroOperacao.objects.get().parametros == {"a": "x", "b": "1.5"}

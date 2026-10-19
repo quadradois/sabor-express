@@ -38,3 +38,16 @@ def test_validade_obrigatoria_quando_item_controla(requeijao):
 
 def test_saldo_sem_movimentos_e_zero(requeijao):
     assert saldo(requeijao) == D("0")
+
+def test_movimento_guarda_como_foi_informado(requeijao):
+    entrada_manual(item_id=requeijao.id, quantidade=D("1.5"), unidade="Kg", custo_total=D("45"),
+                   motivo="x", validade=dt.date(2026, 10, 24), autor="dono")
+    m = Movimento.objects.get()
+    assert (m.quantidade_informada, m.unidade_informada, m.fator, m.quantidade) == (D("1.5"), "kg", D("1000"), D("1500"))
+
+def test_recusa_fica_na_trilha(requeijao):
+    from nucleo.models import RegistroOperacao
+    with pytest.raises(RegraViolada):
+        entrada_manual(item_id=requeijao.id, quantidade=D("1"), unidade="g", custo_total=D("1"), motivo="", autor="dono")
+    reg = RegistroOperacao.objects.get()
+    assert reg.status == "erro" and reg.parametros["quantidade"] == "1"

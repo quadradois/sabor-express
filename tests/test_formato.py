@@ -9,3 +9,7 @@ from web.templatetags.formato import quantidade
 ])
 def test_quantidade(q, u, esperado):
     assert quantidade(q, u) == esperado
+
+@pytest.mark.parametrize("q,esperado", [(D("999.9996"), "1 kg"), (D("1000"), "1 kg")])
+def test_quantidade_arredonda_antes_de_escolher_unidade(q, esperado):
+    assert quantidade(q, "g") == esperado
