@@ -18,7 +18,12 @@ def _checar_ciclo(ficha, caminho):
 
 
 def validar_ficha(ficha):
+    for c in [*ficha.proporcoes.select_related("preparacao"), *ficha.subpreparacoes.select_related("preparacao")]:
+        if c.preparacao.tipo != "preparacao":
+            raise RegraViolada(f"'{c.preparacao.nome}' não é uma preparação.")
     if ficha.tipo == "produto":
+        if ficha.itens.exists() or ficha.subpreparacoes.exists():
+            raise RegraViolada("Produto não pode ter itens nem subpreparações; use proporções.")
         props = list(ficha.proporcoes.all())
         if not props:
             raise RegraViolada("O produto precisa ter ao menos uma proporção.")
@@ -26,6 +31,8 @@ def validar_ficha(ficha):
         if soma != 100:
             raise RegraViolada(f"As proporções somam {_fmt(soma)}%, precisam somar 100%.")
         return
+    if ficha.proporcoes.exists():
+        raise RegraViolada("Preparação não pode ter proporções.")
     if ficha.rendimento_g is None or ficha.rendimento_g <= 0:
         raise RegraViolada("A preparação precisa de rendimento maior que zero.")
     _checar_ciclo(ficha, [])

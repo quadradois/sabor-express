@@ -1,10 +1,15 @@
 from django.contrib import admin, messages
-from django.db import transaction
+from django.http import HttpResponseRedirect
+from django.urls import reverse
 
 from nucleo.operacoes import RegraViolada
 
 from .models import ComponenteItem, ComponentePreparacao, Etapa, Ficha, Proporcao
 from .validacao import validar_ficha
+
+
+class _FichaInvalida(Exception):
+    pass
 
 
 class ComponenteItemInline(admin.TabularInline):
@@ -39,6 +44,12 @@ class FichaAdmin(admin.ModelAdmin):
         try:
             validar_ficha(form.instance)
         except RegraViolada as e:
-            # a changeform_view do admin já roda em transaction.atomic: desfaz tudo
-            transaction.set_rollback(True)
+            raise _FichaInvalida(str(e))
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        # a exceção sai do transaction.atomic do admin: tudo é desfeito
+        try:
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except _FichaInvalida as e:
             messages.error(request, f"Ficha não salva: {e}")
+            return HttpResponseRedirect(reverse("admin:fichas_ficha_changelist"))

@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Q
 
 from cadastros.models import Item
 
@@ -24,28 +25,35 @@ class ComponenteItem(models.Model):
     ordem = models.PositiveIntegerField(default=0)
 
     class Meta:
+        constraints = [models.CheckConstraint(condition=Q(quantidade__gt=0), name="componenteitem_quantidade_positiva")]
         ordering = ["ordem"]
 
 
 class ComponentePreparacao(models.Model):
     """Só em fichas de preparação."""
     ficha = models.ForeignKey(Ficha, on_delete=models.CASCADE, related_name="subpreparacoes")
-    preparacao = models.ForeignKey(Ficha, on_delete=models.PROTECT, related_name="+")
+    preparacao = models.ForeignKey(
+        Ficha, on_delete=models.PROTECT, related_name="+", limit_choices_to={"tipo": "preparacao"}
+    )
     quantidade_g = models.DecimalField(max_digits=14, decimal_places=3)
     ordem = models.PositiveIntegerField(default=0)
 
     class Meta:
+        constraints = [models.CheckConstraint(condition=Q(quantidade_g__gt=0), name="componentepreparacao_quantidade_positiva")]
         ordering = ["ordem"]
 
 
 class Proporcao(models.Model):
     """Só em fichas de produto."""
     ficha = models.ForeignKey(Ficha, on_delete=models.CASCADE, related_name="proporcoes")
-    preparacao = models.ForeignKey(Ficha, on_delete=models.PROTECT, related_name="+")
+    preparacao = models.ForeignKey(
+        Ficha, on_delete=models.PROTECT, related_name="+", limit_choices_to={"tipo": "preparacao"}
+    )
     percentual = models.DecimalField(max_digits=6, decimal_places=3)
     ordem = models.PositiveIntegerField(default=0)
 
     class Meta:
+        constraints = [models.CheckConstraint(condition=Q(percentual__gt=0), name="proporcao_percentual_positivo")]
         ordering = ["ordem"]
 
 
