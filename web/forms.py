@@ -33,14 +33,14 @@ class ProducaoForm(forms.Form):
                                   error_messages={"min_value": MAIOR_QUE_ZERO})
     forma = forms.ChoiceField(choices=[("cru", "Cru (guardar ou congelar)"), ("frito", "Frito")],
                               widget=forms.RadioSelect, initial="cru", label="Forma")
-    chave = forms.CharField(widget=forms.HiddenInput, required=False)
+    chave = forms.CharField(widget=forms.HiddenInput)
 
 
 class TamanhoForm(forms.Form):
     ficha = forms.ModelChoiceField(Ficha.objects.filter(tipo="produto", ativa=True), label="Receita")
     peso = DecimalBR(min_value=0.001, label="Peso de cada unidade (g)",
                      error_messages={"min_value": MAIOR_QUE_ZERO})
-    chave = forms.CharField(widget=forms.HiddenInput, required=False)
+    chave = forms.CharField(widget=forms.HiddenInput)
 
 
 class EntradaForm(forms.Form):

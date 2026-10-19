@@ -74,13 +74,15 @@ def producao_nova(request):
             d = form.cleaned_data
             try:
                 r = iniciar_producao(produto_id=d["produto"].id, unidades=d["unidades"], forma=d["forma"],
-                                     autor=request.user.username, canal="web", chave=d["chave"] or None)
+                                     autor=request.user.username, canal="web", chave=d["chave"])
             except RegraViolada as e:
                 form.add_error(None, str(e))
             else:
                 return redirect("producao", id=r["producao_id"])
     else:
-        form = ProducaoForm(request.GET or None, initial={"chave": uuid.uuid4().hex})
+        form = ProducaoForm(request.GET or None)
+        del form.fields["chave"]  # a chave só vale no POST
+        ctx["chave"] = uuid.uuid4().hex
         if request.GET and form.is_valid():
             d = form.cleaned_data
             ctx["r"] = escalar(d["produto"].ficha, d["unidades"], d["produto"].peso_g)
@@ -96,7 +98,7 @@ def tamanho_novo(request):
         d = form.cleaned_data
         try:
             r = criar_tamanho(ficha_id=d["ficha"].id, peso_g=d["peso"], autor=request.user.username,
-                              canal="web", chave=d["chave"] or None)
+                              canal="web", chave=d["chave"])
         except RegraViolada as e:
             form.add_error(None, str(e))
         else:

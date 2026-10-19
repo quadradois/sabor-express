@@ -10,7 +10,7 @@
 {% include "web/_blocos.html" %}
 <form method="post" class="form">
   {% csrf_token %}
-  {% for f in form.hidden_fields %}{{ f }}{% endfor %}
+  <input type="hidden" name="chave" value="{{ chave }}">
   <input type="hidden" name="produto" value="{{ form.cleaned_data.produto.id }}">
   <input type="hidden" name="unidades" value="{{ form.cleaned_data.unidades }}">
   <input type="hidden" name="forma" value="{{ form.cleaned_data.forma }}">

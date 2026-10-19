@@ -1,4 +1,5 @@
 import html as _html
+import re
 from decimal import Decimal as D
 import pytest
 from cadastros.models import Item
@@ -42,8 +43,10 @@ def test_comecar_com_falta_mostra_erro(client, dono, bolinha):
 
 
 def test_duplo_envio_uma_producao(client, dono, bolinha, farinha_em_estoque):
-    client.post("/producao/nova/", dados(bolinha))
-    client.post("/producao/nova/", dados(bolinha))
+    h = texto(client.get("/producao/nova/", {"produto": bolinha.id, "unidades": 10, "forma": "cru"}))
+    d = dados(bolinha, re.search(r'name="chave" value="(\w+)"', h).group(1))
+    client.post("/producao/nova/", d)
+    client.post("/producao/nova/", d)
     assert Producao.objects.count() == 1
 
 
