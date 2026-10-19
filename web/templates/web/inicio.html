@@ -1,5 +1,9 @@
 {% extends "web/base.html" %}
 {% block conteudo %}
 <h1>Sabor Express</h1>
-<p>Bem-vindo(a). As telas de cozinha aparecerão aqui.</p>
+<nav class="menu">
+  <a href="{% url 'receita' %}">Gerar receita</a>
+  <a href="{% url 'entrada' %}">Entrada de estoque</a>
+  <a href="/admin/">Cadastros</a>
+</nav>
 {% endblock %}

@@ -1,0 +1,23 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Gerar receita</h1>
+{% include "web/receita_form.html" %}
+{% if r %}
+<h2>{{ r.produto }}: {{ r.unidades }} × {{ r.peso_unitario_g|quantidade:"g" }}</h2>
+<p><strong>Total: {{ r.total_g|quantidade:"g" }}</strong></p>
+{% for b in r.blocos %}
+<section class="bloco">
+  <h3>{{ forloop.counter }}. {{ b.nome }} <small>({{ b.total_g|quantidade:"g" }})</small></h3>
+  {% if b.linhas %}<ul class="linhas">
+    {% for l in b.linhas %}<li><label><input type="checkbox"> separado</label>
+      <span class="nome">{{ l.nome }}</span> <span class="qtd">{{ l.quantidade|quantidade:l.unidade_base }}</span>
+      {% if l.falta > 0 %}<strong class="falta">falta {{ l.falta|quantidade:l.unidade_base }}</strong>{% endif %}</li>{% endfor %}
+  </ul>{% endif %}
+  {% if b.etapas %}<ol class="etapas">
+    {% for e in b.etapas %}<li>{{ e.instrucao }}{% if e.tempo_seg %} ({{ e.tempo_seg|minutos }} min){% endif %}{% if e.ponto %} — ponto: {{ e.ponto }}{% endif %}</li>{% endfor %}
+  </ol>{% endif %}
+</section>
+{% endfor %}
+{% endif %}
+{% endblock %}

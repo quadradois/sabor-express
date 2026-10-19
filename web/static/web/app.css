@@ -5,3 +5,14 @@ header { display: flex; justify-content: space-between; align-items: center; }
 button, input, select { min-height: 44px; font: inherit; }
 input, select { max-width: 100%; }
 table { display: block; overflow-x: auto; }
+.menu a, .form button { display: block; min-height: 44px; padding: 10px 14px; margin: 8px 0; background: #eee; border-radius: 6px; text-decoration: none; color: inherit; }
+.form input, .form select { width: 100%; }
+.bloco { border: 1px solid #ccc; border-radius: 6px; padding: 8px 12px; margin: 12px 0; }
+.linhas { list-style: none; padding: 0; }
+.linhas li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; min-height: 44px; border-bottom: 1px solid #eee; }
+.linhas label { display: flex; align-items: center; gap: 4px; min-height: 44px; }
+.linhas input[type=checkbox] { min-height: 0; width: 24px; height: 24px; }
+.nome { flex: 1 1 8em; }
+.falta { background: #fde68a; color: #7c2d12; padding: 2px 6px; border-radius: 4px; }
+.ok { background: #d1fae5; padding: 8px; border-radius: 4px; }
+.errorlist { color: #b91c1c; list-style: none; padding: 0; margin: 4px 0; }

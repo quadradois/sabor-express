@@ -1,0 +1,5 @@
+<form method="get" class="form">
+  {{ form.non_field_errors }}
+  {% for f in form %}<p>{{ f.label_tag }} {{ f }} {{ f.errors }}</p>{% endfor %}
+  <button type="submit">Gerar receita</button>
+</form>

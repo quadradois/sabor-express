@@ -1,0 +1,12 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Entrada de estoque</h1>
+{% for m in messages %}<p class="ok">{{ m }}</p>{% endfor %}
+<form method="post" class="form">{% csrf_token %}
+  {{ form.non_field_errors }}
+  {% for f in form %}{% if f.is_hidden %}{{ f }}{% else %}
+  <p>{{ f.label_tag }} {{ f }} {{ f.errors }}</p>{% endif %}{% endfor %}
+  <datalist id="unidades"><option>g</option><option>kg</option><option>mL</option><option>L</option><option>un</option></datalist>
+  <button type="submit">Registrar entrada</button>
+</form>
+{% endblock %}
