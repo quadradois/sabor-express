@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from estoque.models import Movimento
+from nucleo.admin_executar import AdminViaExecutar
 
 from .models import Conversao, Item
 
@@ -11,7 +12,7 @@ class ConversaoInline(admin.TabularInline):
 
 
 @admin.register(Item)
-class ItemAdmin(admin.ModelAdmin):
+class ItemAdmin(AdminViaExecutar, admin.ModelAdmin):
     list_display = ("nome", "tipo", "unidade_base", "ficha", "peso_g", "ativo")
     inlines = [ConversaoInline]
 

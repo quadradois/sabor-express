@@ -67,3 +67,16 @@ class Etapa(models.Model):
 
     class Meta:
         ordering = ["ordem"]
+
+
+class FichaVersao(models.Model):
+    """Foto imutável da ficha (RN-14); nunca editada nem apagada."""
+    ficha = models.ForeignKey(Ficha, on_delete=models.PROTECT, related_name="versoes")
+    numero = models.PositiveIntegerField()
+    conteudo = models.JSONField()
+    operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["ficha", "numero"], name="fichaversao_numero_unico")]
+        ordering = ["numero"]
