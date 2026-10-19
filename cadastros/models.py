@@ -6,7 +6,8 @@ from django.db import models
 
 
 class Item(models.Model):
-    TIPOS = [("ingrediente", "Ingrediente"), ("insumo", "Insumo"), ("embalagem", "Embalagem")]
+    TIPOS = [("ingrediente", "Ingrediente"), ("insumo", "Insumo"), ("embalagem", "Embalagem"),
+             ("produto", "Produto")]
     UNIDADES = [("g", "g"), ("mL", "mL"), ("un", "un")]
 
     nome = models.CharField(max_length=120, unique=True)
@@ -15,11 +16,24 @@ class Item(models.Model):
     controla_validade = models.BooleanField(default=True)
     estoque_minimo = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     ativo = models.BooleanField(default=True)
+    ficha = models.ForeignKey("fichas.Ficha", null=True, blank=True, on_delete=models.PROTECT,
+                              limit_choices_to={"tipo": "produto"})
+    peso_g = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    oleo_ref_un = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)  # R$ por unidade frita
 
     def __str__(self):
         return self.nome
 
     def clean(self):
+        if self.tipo == "produto":
+            if not self.ficha_id or self.ficha.tipo != "produto":
+                raise ValidationError({"ficha": "Produto precisa de uma ficha de produto."})
+            if not self.peso_g or self.peso_g <= 0:
+                raise ValidationError({"peso_g": "Informe o peso de cada unidade (g)."})
+            if self.unidade_base != "un":
+                raise ValidationError({"unidade_base": "Produto é controlado em unidades (un)."})
+        elif self.ficha_id or self.peso_g is not None:
+            raise ValidationError("Só produto tem ficha e peso por unidade.")
         from estoque.models import Movimento  # evita import circular
 
         if self.pk and Movimento.objects.filter(item_id=self.pk).exists():

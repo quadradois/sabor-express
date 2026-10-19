@@ -12,7 +12,7 @@ class ConversaoInline(admin.TabularInline):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ("nome", "tipo", "unidade_base", "ativo")
+    list_display = ("nome", "tipo", "unidade_base", "ficha", "peso_g", "ativo")
     inlines = [ConversaoInline]
 
     def get_readonly_fields(self, request, obj=None):

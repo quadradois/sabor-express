@@ -32,3 +32,17 @@ def coxinha():
     Proporcao.objects.create(ficha=p, preparacao=emp, percentual=D("7"), ordem=3)
     Etapa.objects.create(ficha=p, ordem=1, instrucao="Modele as coxinhas")
     return p
+
+
+@pytest.fixture
+def bolinha():
+    from cadastros.servicos import criar_tamanho
+    farinha = item("Farinha de trigo")
+    massa = prep("Massa simples")
+    ComponenteItem.objects.create(ficha=massa, item=farinha, quantidade=D("1000"), ordem=1)
+    Etapa.objects.create(ficha=massa, ordem=1, instrucao="Sove a massa", tempo_seg=300)
+    p = Ficha.objects.create(nome="Bolinha", tipo="produto")
+    Proporcao.objects.create(ficha=p, preparacao=massa, percentual=D("100"), ordem=1)
+    Etapa.objects.create(ficha=p, ordem=1, instrucao="Modele as bolinhas")
+    r = criar_tamanho(ficha_id=p.id, peso_g=D("100"), oleo_ref_un=D("0.05"), autor="teste")
+    return Item.objects.get(id=r["item_id"])

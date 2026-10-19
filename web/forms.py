@@ -28,7 +28,7 @@ class ReceitaForm(forms.Form):
 
 
 class EntradaForm(forms.Form):
-    item = forms.ModelChoiceField(Item.objects.filter(ativo=True), label="Item")
+    item = forms.ModelChoiceField(Item.objects.filter(ativo=True).exclude(tipo="produto"), label="Item")
     quantidade = DecimalBR(label="Quantidade")
     unidade = forms.CharField(label="Unidade", widget=forms.TextInput(
         attrs={"list": "unidades", "autocapitalize": "off"}))
