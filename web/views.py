@@ -10,9 +10,10 @@ from estoque.servicos import entrada_manual
 from fichas.escala import escalar
 from nucleo.operacoes import RegraViolada
 from producao.models import Producao
-from producao.servicos import iniciar_producao
+from producao.servicos import (cancelar_producao, concluir_producao, iniciar_cronometro, iniciar_producao,
+                               ir_para_etapa, parar_cronometro, registrar_peso, usar_previsto_restantes)
 
-from .forms import EntradaForm, ProducaoForm, ReceitaForm, TamanhoForm
+from .forms import ConclusaoForm, EntradaForm, PesoForm, ProducaoForm, ReceitaForm, TamanhoForm
 
 
 @login_required
@@ -60,9 +61,63 @@ def producoes(request):
                   {"producoes": Producao.objects.filter(status="andamento").select_related("produto")})
 
 
+def _validado(form):
+    if not form.is_valid():
+        campo, erros = next(iter(form.errors.items()))
+        raise RegraViolada(f"{form[campo].label}: {erros[0]}" if campo in form.fields else erros[0])
+    return form.cleaned_data
+
+
+def _acao_preparo(request, p):
+    kw = {"autor": request.user.username, "canal": "web", "chave": request.POST.get("chave")}
+    if not kw["chave"]:
+        raise RegraViolada("Formulário sem chave: recarregue a página e tente de novo.")
+    acao = request.POST.get("acao")
+    if acao == "peso":
+        linha = get_object_or_404(p.linhas, id=request.POST.get("linha"))
+        registrar_peso(linha_id=linha.id, usado=_validado(PesoForm(request.POST))["usado"], **kw)
+    elif acao == "previsto":
+        registrar_peso(linha_id=get_object_or_404(p.linhas, id=request.POST.get("linha")).id, usado=None, **kw)
+    elif acao == "previsto_todos":
+        usar_previsto_restantes(producao_id=p.id, **kw)
+    elif acao == "etapa":
+        try:
+            indice = int(request.POST.get("indice"))
+        except (TypeError, ValueError):
+            raise RegraViolada("Etapa inexistente.")
+        ir_para_etapa(producao_id=p.id, indice=indice, **kw)
+    elif acao == "cronometro":
+        e = p.etapas[p.etapa_atual - 1] if 1 <= p.etapa_atual <= len(p.etapas) else {}
+        if not e.get("tempo_seg"):
+            raise RegraViolada("Esta etapa não tem tempo.")
+        iniciar_cronometro(producao_id=p.id, nome=e["instrucao"][:120], segundos=e["tempo_seg"], **kw)
+    elif acao == "parar":
+        parar_cronometro(cronometro_id=get_object_or_404(p.cronometros, id=request.POST.get("cronometro")).id, **kw)
+    elif acao == "cancelar":
+        cancelar_producao(producao_id=p.id, motivo=request.POST.get("motivo", ""), **kw)
+    elif acao == "concluir":
+        concluir_producao(producao_id=p.id, **_validado(ConclusaoForm(request.POST)), **kw)
+    else:
+        raise RegraViolada("Ação desconhecida.")
+
+
 @login_required
-def producao(request, id):  # ponytail: mínima; a Task 10 substitui pela tela de preparo
-    return render(request, "web/producao.html", {"p": get_object_or_404(Producao, id=id)})
+def producao(request, id):
+    p = get_object_or_404(Producao.objects.select_related("produto", "lote"), id=id)
+    if request.method == "POST":
+        try:
+            _acao_preparo(request, p)
+        except RegraViolada as e:
+            messages.error(request, str(e))
+        return redirect("producao", id=p.id)
+    ctx = {"p": p, "linhas": p.linhas.select_related("item"), "n": len(p.etapas),
+           "cronometros": p.cronometros.filter(parado_em__isnull=True).order_by("fim")}
+    if 1 <= p.etapa_atual <= len(p.etapas):
+        ctx["etapa"] = e = p.etapas[p.etapa_atual - 1]
+        ctx["video"] = e["midia"].lower().endswith((".mp4", ".webm", ".mov"))
+    elif p.etapa_atual == p.fechamento:
+        ctx["form"] = ConclusaoForm(initial={"quantidade_boa": p.unidades})
+    return render(request, "web/producao.html", ctx)
 
 
 @login_required

@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from cadastros.models import Item
+from estoque.models import ESTADOS
 from fichas.models import Ficha
 
 MAIOR_QUE_ZERO = "Informe um valor maior que zero."
@@ -53,3 +54,20 @@ class EntradaForm(forms.Form):
     validade = forms.DateField(required=False, label="Validade", widget=forms.DateInput(attrs={"type": "date"}))
     motivo = forms.CharField(required=False, label="Motivo")  # regra validada (e auditada) no serviço
     chave = forms.CharField(widget=forms.HiddenInput)
+
+
+class PesoForm(forms.Form):
+    usado = DecimalBR(label="Peso")
+
+
+class ConclusaoForm(forms.Form):
+    quantidade_boa = forms.IntegerField(min_value=0, label="Quantidade boa")
+    perdas = forms.IntegerField(min_value=0, initial=0, label="Perdas")
+    perda_motivo = forms.CharField(required=False, label="Motivo das perdas")
+    estado = forms.ChoiceField(choices=ESTADOS, widget=forms.RadioSelect, label="Estado inicial")
+    validade_manual = forms.DateField(required=False, label="Validade manual",
+                                      help_text="Só se não houver critério de validade",
+                                      widget=forms.DateInput(attrs={"type": "date"}))
+    justificativa = forms.CharField(required=False, label="Justificativa da validade")
+    anotacao = forms.CharField(required=False, label="Como foi? (inclui sobras)", widget=forms.Textarea(attrs={"rows": 3}))
+    confirmar_perda_total = forms.BooleanField(required=False, label="Confirmo a perda total")

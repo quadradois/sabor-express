@@ -16,3 +16,21 @@ table { display: block; overflow-x: auto; }
 .falta { background: #fde68a; color: #7c2d12; padding: 2px 6px; border-radius: 4px; }
 .ok { background: #d1fae5; padding: 8px; border-radius: 4px; }
 .errorlist { color: #b91c1c; list-style: none; padding: 0; margin: 4px 0; }
+.erro { background: #fee2e2; color: #991b1b; padding: 8px; border-radius: 4px; }
+.preparo button { min-height: 56px; padding: 10px 16px; font-size: 1.1em; }
+.preparo .principal { background: #1d4ed8; color: #fff; border: 0; border-radius: 6px; }
+.preparo form { margin: 8px 0; }
+.preparo .peso { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.preparo .peso input { width: 7em; }
+.preparo img, .preparo video { max-width: 100%; height: auto; }
+.instrucao { font-size: 1.4em; }
+.navegar { display: flex; gap: 8px; flex-wrap: wrap; }
+.cronometros { border-top: 2px solid #ccc; margin-top: 16px; }
+.cronometro { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 8px; border-radius: 6px; }
+.cronometro .resta { font-size: 1.6em; font-variant-numeric: tabular-nums; }
+.cronometro .tempo { display: none; }
+.tocando { background: #dc2626; color: #fff; }
+.tocando .tempo { display: inline; font-size: 1.6em; }
+.cancelar { margin-top: 24px; }
+.cancelar summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
+.campo { margin: 12px 0; }
