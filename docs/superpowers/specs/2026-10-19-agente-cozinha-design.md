@@ -152,12 +152,25 @@ Em cada registro (lote, compra, produção): **o que o agente fez e por quê**, 
 - **Orçamento de uso:** um limite configurável de chamadas ao modelo por dia ou por tarefa. Atingir o limite encerra a tarefa normalmente e avisa. Isso controla o custo.
 - Leitura de cupom ruim: vira uma proposta com os campos incertos destacados (PRD RN-10). Nunca é gravada direto.
 
+### 6.9 Provedor de IA configurável (BYOK)
+
+O dono traz as próprias chaves e escolhe o provedor sem afetar a operação.
+
+- **Provedores iniciais:** NVIDIA (API de modelos da build.nvidia.com), OpenRouter (incluindo modelos gratuitos), OpenAI e Google (Gemini). Os quatro oferecem uma interface compatível com o padrão de chat da OpenAI (endereço base, chave e modelo). Por isso **um único adaptador** atende a todos, e um provedor novo do mesmo padrão é só configuração. A Anthropic pode ser acrescentada depois.
+- **Tudo isolado no "cérebro" do agente:** nenhum outro módulo chama provedor de IA. Ferramentas (MCP), regras e dados não dependem de provedor.
+- **Configuração pela tela,** sem reiniciar nem mexer em código. Para cada provedor, a chave fica guardada no servidor e nunca é exibida de volta (PRD RNF-07). Para cada **função** do agente (conversa e ferramentas, leitura de cupom com imagem, resumos), o dono escolhe um modelo **principal** e um **reserva**.
+- **Troca sem afetar a operação:** se o modelo principal falhar (erro, limite de uso, indisponibilidade), o agente tenta o reserva. Se os dois falharem, o agente aparece "fora do ar", a fila de tarefas espera, e núcleo e formulários seguem normais (§6.8).
+- **Teste de conexão:** ao salvar um provedor ou modelo, a tela faz uma chamada de teste e mostra se o modelo responde, se usa ferramentas e se lê imagem. Leitura de cupom exige um modelo com visão; conversa exige um modelo que chame ferramentas.
+- **Modelos gratuitos (OpenRouter):** servem para testar e para funções leves, mas têm limites de uso apertados, disponibilidade instável e chamada de ferramentas menos confiável. Além disso, **alguns provedores gratuitos podem usar os dados enviados para treino**. A tela avisa isso ao escolher um modelo gratuito para a leitura de cupom, que envia documentos fiscais (PRD DEC-F2-009).
+- **Segurança independe do modelo:** um modelo mais fraco erra mais, mas não consegue gravar fora da alçada, porque o núcleo decide (§6.2). Ele produz mais propostas recusadas, não dados errados.
+- **Custo:** cada chamada registra provedor, modelo e tokens usados, quando o provedor informa. O orçamento diário (§6.8) vale para qualquer provedor.
+
 ## 7. Escolhas técnicas (decisão do construtor-arquiteto, aceitas pelo dono por delegação)
 
 - **Python** no núcleo e no agente.
 - **SQLite** com acesso exclusivo do serviço central.
 - **Ferramentas no padrão MCP.**
-- **Modelo de IA em nuvem**: família Claude da Anthropic, chamada via SDK oficial. O modelo exato por tarefa fica a cargo do construtor, equilibrando custo e qualidade; por exemplo, um modelo menor para resumos e um maior para leitura de cupom e conversa.
+- **Modelo de IA: BYOK, provedor escolhido pelo dono** (decisão de 19/10/2026, ver §6.9).
 - **Bot do Telegram** pela API oficial, com comunicação de saída (PVD §7).
 - **Não usar como base** os repositórios `trycompai/crm` nem `omnigentx/jarvis`. Aproveitar os **padrões** do CRM (fila de tarefas, caminho único de gravação, skills em Markdown, rastro do agente) e, depois, as **peças de voz** do Jarvis ou equivalentes. Justificativa nos dois documentos em `docs/arquitetura/`.
 

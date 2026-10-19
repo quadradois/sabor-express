@@ -17,7 +17,7 @@ O design aprovado cobre vários subsistemas. Por isso, cada plano entrega softwa
 1. **Este plano:** núcleo, cadastros, estoque básico, fichas e escala da receita.
 2. Produção guiada: preparo etapa por etapa, cronômetros, pesagem, conclusão com lote e custo real, produto por tamanho, conservação e etiquetas.
 3. Compras manuais, recebimento, pendências e contas a pagar.
-4. Agente: ferramentas MCP sobre `executar()`, alçada, caixa de decisões, conversa web, fila de tarefas, resumo da manhã e backup.
+4. Agente: cérebro BYOK (NVIDIA, OpenRouter, OpenAI, Google), ferramentas MCP sobre `executar()`, alçada, caixa de decisões, conversa web, fila de tarefas, resumo da manhã e backup.
 5. Telegram e leitura de cupom.
 6. Vendas, encomendas, contas a receber, fritura e óleo.
 7. Custos do período e relatórios.
