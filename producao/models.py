@@ -43,3 +43,10 @@ class LinhaPreparo(models.Model):
 
     class Meta:
         ordering = ["ordem", "id"]
+
+
+class Cronometro(models.Model):
+    producao = models.ForeignKey(Producao, on_delete=models.CASCADE, related_name="cronometros")
+    nome = models.CharField(max_length=120)
+    fim = models.DateTimeField()
+    parado_em = models.DateTimeField(null=True, blank=True)
