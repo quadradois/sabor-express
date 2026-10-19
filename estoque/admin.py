@@ -1,6 +1,8 @@
 from django.contrib import admin
 
-from .models import Lote, Movimento
+from nucleo.admin_executar import AdminViaExecutar
+
+from .models import CriterioValidade, Lote, Movimento
 
 
 class SomenteLeitura(admin.ModelAdmin):
@@ -16,3 +18,8 @@ class SomenteLeitura(admin.ModelAdmin):
 
 admin.site.register(Lote, SomenteLeitura)
 admin.site.register(Movimento, SomenteLeitura)
+
+
+@admin.register(CriterioValidade)
+class CriterioValidadeAdmin(AdminViaExecutar, admin.ModelAdmin):
+    list_display = ("produto", "forma", "estado", "dias", "fonte")

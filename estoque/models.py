@@ -33,3 +33,17 @@ class Movimento(models.Model):
     validade_manual = models.BooleanField(default=False)
     operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
     criado_em = models.DateTimeField(auto_now_add=True)
+
+
+class CriterioValidade(models.Model):
+    produto = models.ForeignKey("cadastros.Item", on_delete=models.CASCADE, limit_choices_to={"tipo": "produto"})
+    forma = models.CharField(max_length=10, choices=FORMAS)
+    estado = models.CharField(max_length=20, choices=ESTADOS)
+    dias = models.PositiveIntegerField()
+    fonte = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["produto", "forma", "estado"], name="criterio_unico")]
+
+    def __str__(self):
+        return f"{self.produto} {self.forma} {self.estado}: {self.dias} dias"
