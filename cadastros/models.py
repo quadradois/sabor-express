@@ -1,3 +1,6 @@
+from decimal import Decimal
+
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -20,11 +23,15 @@ class Conversao(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name="conversoes")
     unidade = models.CharField(max_length=10)
     # quantas unidades base há em 1 `unidade`
-    fator = models.DecimalField(max_digits=14, decimal_places=6)
+    fator = models.DecimalField(
+        max_digits=14, decimal_places=6,
+        validators=[MinValueValidator(Decimal("0.000001"))],
+    )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["item", "unidade"], name="conversao_unica_por_item"),
+            models.CheckConstraint(condition=models.Q(fator__gt=0), name="conversao_fator_positivo"),
         ]
 
     def __str__(self):

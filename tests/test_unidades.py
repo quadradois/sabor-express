@@ -29,3 +29,9 @@ def test_sem_fator_recusa_com_mensagem(oleo, ovo):
         para_base(ovo, D("1"), "kg")
     with pytest.raises(RegraViolada, match="Cadastre o fator de 'g' para 'Óleo'"):
         para_base(oleo, D("1"), "g")
+
+def test_fator_zero_recusado_pelo_banco(ovo):
+    from django.db import IntegrityError, transaction
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            Conversao.objects.create(item=ovo, unidade="dz", fator=D("0"))
