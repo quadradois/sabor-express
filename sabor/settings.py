@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'nucleo',
     'cadastros',
     'estoque',
+    'fichas',
 ]
 
 MIDDLEWARE = [
