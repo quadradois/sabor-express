@@ -6,6 +6,10 @@ from . import views
 urlpatterns = [
     path("", views.inicio, name="inicio"),
     path("receita/", views.receita, name="receita"),
+    path("producao/", views.producoes, name="producoes"),
+    path("producao/nova/", views.producao_nova, name="producao_nova"),
+    path("producao/tamanho/", views.tamanho_novo, name="tamanho_novo"),
+    path("producao/<int:id>/", views.producao, name="producao"),
     path("estoque/entrada/", views.entrada, name="entrada"),
     path("entrar/", auth.LoginView.as_view(), name="login"),
     path("sair/", auth.LogoutView.as_view(), name="logout"),
