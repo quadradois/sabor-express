@@ -1,6 +1,6 @@
 # Design — Sabor Express como agente de cozinha
 
-**Data:** 19/10/2026 · **Status:** rascunho para aprovação do proprietário
+**Data:** 19/10/2026 · **Status:** aprovado pelo proprietário em 19/10/2026
 **Substitui em parte:** PRD v1.0 (`docs/prd/02-prd.md`), quanto à forma de operar. As regras de domínio continuam valendo.
 **Base:** PVD v1.1 · PRD v1.0 · decisões DEC-F2-001 a 047 (`docs/prd/01-registro-decisoes.md`) · `docs/arquitetura/01-viabilidade-jarvis.md` · `docs/arquitetura/02-conceito-agente-primeiro.md`
 
