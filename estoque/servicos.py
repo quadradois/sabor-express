@@ -1,16 +1,43 @@
 from decimal import ROUND_HALF_UP, Decimal
 
-from django.db.models import Sum
+from django.db.models import F, Min, Sum
 
 from cadastros.models import Item
 from cadastros.unidades import fator
 from nucleo.operacoes import RegraViolada, executar
+
+from web.templatetags.formato import quantidade as fmt_qtd
 
 from .models import Lote, Movimento
 
 
 def saldo(item) -> Decimal:
     return Movimento.objects.filter(item=item).aggregate(s=Sum("quantidade"))["s"] or Decimal("0")
+
+
+def saldo_lote(lote, estado: str = "") -> Decimal:
+    return Movimento.objects.filter(lote=lote, estado=estado).aggregate(s=Sum("quantidade"))["s"] or Decimal("0")
+
+
+def validade_porcao(lote, estado: str = ""):
+    v = Movimento.objects.filter(lote=lote, estado=estado, quantidade__gt=0).aggregate(v=Min("validade"))["v"]
+    return v or lote.validade
+
+
+def alocar_fefo(item, quantidade: Decimal, *, hoje) -> list:
+    lotes = (Lote.objects.filter(item=item).exclude(validade__lt=hoje)
+             .order_by(F("validade").asc(nulls_last=True), "criado_em", "id"))
+    falta, saida = quantidade, []
+    for l in lotes:
+        s = saldo_lote(l)
+        if s <= 0:
+            continue
+        q = min(s, falta)
+        saida.append((l, q))
+        falta -= q
+        if falta <= 0:
+            return saida
+    raise RegraViolada(f"Falta {fmt_qtd(falta, item.unidade_base)} de '{item.nome}' no estoque.")
 
 
 def entrada_manual(*, item_id, quantidade, unidade, custo_total, motivo, lote_codigo="",
@@ -44,7 +71,7 @@ def entrada_manual(*, item_id, quantidade, unidade, custo_total, motivo, lote_co
                                    validade=validade, custo_unitario=custo)
         Movimento.objects.create(tipo="entrada_manual", item=item, lote=lote, quantidade=qtd,
                                  quantidade_informada=quantidade, unidade_informada=un, fator=f,
-                                 motivo=texto_motivo, operacao=op)
+                                 motivo=texto_motivo, validade=validade, operacao=op)
         return {"lote_id": lote.id, "quantidade_base": qtd}
 
     return executar("entrada_manual", func, autor=autor, canal=canal, chave=chave,
