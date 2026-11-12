@@ -190,6 +190,9 @@ def lote(request, id):
     return render(request, "web/lote.html", {"l": l, "estados": estados, "origem": origem(l), "form": form})
 
 
+COPIAS_MAX = 200  # uma página com milhares de etiquetas trava o navegador e a impressora
+
+
 @login_required
 def etiquetas(request, id):
     l = get_object_or_404(Lote.objects.select_related("item"), id=id)
@@ -201,6 +204,7 @@ def etiquetas(request, id):
         copias = int(request.POST.get("copias") or request.GET.get("copias") or dados["quantidade"])
     except ValueError:
         copias = 1
+    copias = min(max(copias, 1), COPIAS_MAX)
     if request.method == "POST":
         try:
             r = registrar_impressao(lote_id=l.id, estado=estado, copias=copias, autor=request.user.username,
