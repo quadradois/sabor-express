@@ -1,0 +1,1 @@
+{% for m in messages %}<p class="{% if m.level_tag == 'error' %}erro{% elif m.level_tag == 'warning' %}aviso{% else %}ok{% endif %}">{{ m }}</p>{% endfor %}

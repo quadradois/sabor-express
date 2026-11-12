@@ -1,0 +1,56 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Compra #{{ c.compra_id }} — {{ c.fornecedor }}</h1>
+{% include "web/_mensagens.html" %}
+<p>{{ c.data|date:"d/m/Y" }} · {{ c.status_texto }} · total <strong>{{ c.total|dinheiro }}</strong>{% if c.documento %} · documento {{ c.documento }}{% endif %}</p>
+<p>Soma dos itens {{ c.soma_itens|dinheiro }}{% if c.frete %} · frete {{ c.frete|dinheiro }}{% endif %}{% if c.desconto %} · desconto {{ c.desconto|dinheiro }}{% endif %}{% if c.acrescimo %} · acréscimo {{ c.acrescimo|dinheiro }}{% endif %}{% if c.justificativa %} · justificativa: {{ c.justificativa }}{% endif %}</p>
+<p>Lançada por {{ c.aprovada_por }} em {{ c.aprovada_em|date:"d/m/Y H:i" }}.{% if c.motivo_cancelamento %} Cancelada: {{ c.motivo_cancelamento }}.{% endif %}</p>
+
+<h2>Itens</h2>
+{% for l in c.linhas %}<section class="bloco">
+  <h3>{{ l.item }} — {{ l.quantidade|quantidade:l.unidade }} · {{ l.valor|dinheiro }}</h3>
+  <p>Documentado {{ l.documentado|quantidade:l.unidade_base }} · recebido {{ l.recebido|quantidade:l.unidade_base }}{% if l.encerrado %} · não entregue {{ l.encerrado|quantidade:l.unidade_base }} ({{ l.motivo_encerramento }}){% endif %}
+    {% if l.pendente > 0 %}<strong class="falta">falta {{ l.pendente|quantidade:l.unidade_base }}</strong>{% endif %}</p>
+  {% for r in l.recebimentos %}<p>Recebido {{ r.quantidade|quantidade:l.unidade_base }} em {{ r.recebido_em|date:"d/m/Y" }} — lote <a href="{% url 'lote' r.lote_id %}">{{ r.lote_codigo|default:r.lote_id }}</a>{% if r.validade %} (validade {{ r.validade|date:"d/m/Y" }}){% endif %}{% if r.estornado %} <strong class="falta">estornado: {{ r.motivo_estorno }}</strong>{% endif %}</p>
+    {% if not r.estornado and c.status != "cancelada" %}
+    <details class="cancelar"><summary>Estornar recebimento</summary>
+      <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="estornar_recebimento"><input type="hidden" name="recebimento_id" value="{{ r.recebimento_id }}">
+        <p><label>Motivo <input name="motivo"></label></p><button type="submit">Estornar</button></form></details>
+    <details class="cancelar"><summary>Devolver ao fornecedor</summary>
+      <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="devolver"><input type="hidden" name="lote_id" value="{{ r.lote_id }}">
+        <p><label>Quantidade ({{ l.unidade_base }}) <input name="quantidade" inputmode="decimal"></label></p>
+        <p><label>Motivo <input name="motivo"></label></p><button type="submit">Devolver</button></form></details>
+    {% endif %}{% endfor %}
+</section>{% endfor %}
+
+{% if aberta %}
+<h2>Receber</h2>
+<form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="receber">
+  {% for l in c.linhas %}{% if l.pendente > 0 %}<div class="bloco"><strong>{{ l.item }}</strong> (falta {{ l.pendente|quantidade:l.unidade_base }})
+    <p><label>Quantidade recebida ({{ l.unidade }}) <input name="quantidade_{{ l.linha_id }}" placeholder="{{ l.quantidade }}" inputmode="decimal"></label></p>
+    <p><label>Lote <input name="lote_{{ l.linha_id }}"></label></p>
+    <p><label>Validade <input type="date" name="validade_{{ l.linha_id }}"></label></p></div>{% endif %}{% endfor %}
+  <button type="submit">Registrar recebimento</button>
+</form>
+<details class="cancelar"><summary>Encerrar pendência (não vai chegar)</summary>
+  <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="encerrar">
+    <p><label>Motivo <input name="motivo"></label></p><button type="submit">Encerrar pendência</button></form></details>
+{% endif %}
+{% if c.status != "cancelada" %}
+<details class="cancelar"><summary>Cancelar compra</summary>
+  <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="cancelar">
+    <p><label>Motivo <input name="motivo"></label></p><button type="submit">Cancelar compra</button></form></details>
+{% endif %}
+
+<h2>Conta a pagar</h2>
+{% with conta=c.conta %}
+{% for p in conta.parcelas %}<section class="bloco">
+  <p>Parcela {{ p.numero }}/{{ p.de }} — {{ p.valor|dinheiro }} · vence {{ p.vencimento|date:"d/m/Y" }} · {{ p.situacao }}{% if p.vencida %} <strong class="falta">vencida</strong>{% endif %} · saldo {{ p.saldo|dinheiro }}</p>
+  {% for pg in p.pagamentos %}<p>Pago {{ pg.valor_pago|dinheiro }} em {{ pg.data|date:"d/m/Y" }}{% if pg.diferenca %} ({{ pg.diferenca_tipo }} {{ pg.diferenca|dinheiro }}){% endif %}{% if pg.estornado %} <strong class="falta">estornado: {{ pg.motivo_estorno }}</strong>{% endif %}</p>
+    {% if not pg.estornado %}{% include "web/_estorno_pagamento.html" with next=request.path %}{% endif %}{% endfor %}
+  {% if p.situacao == "aberta" or p.situacao == "parcial" %}{% include "web/_paguei.html" with next=request.path %}{% endif %}
+</section>{% endfor %}
+{% for a in conta.avisos %}<p class="aviso">Aviso: {{ a.texto }}{% if a.resolvido %} (resolvido: {{ a.observacao }}){% endif %}</p>{% endfor %}
+{% endwith %}
+{% endblock %}

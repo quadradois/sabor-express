@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Compras em aberto</h1>
+<p class="acoes"><a href="{% url 'compra_nova' %}">Nova compra</a> <a href="{% url 'falta_receber' %}">Falta receber</a> <a href="{% url 'bonificacao' %}">Bonificação</a></p>
+<ul class="linhas">
+{% for c in compras %}<li><a class="nome" href="{% url 'compra' c.compra_id %}">#{{ c.compra_id }} {{ c.fornecedor }}</a> {{ c.data|date:"d/m/Y" }} · {{ c.total|dinheiro }} · {{ c.dias }} dia(s) · {{ c.status }}</li>
+{% empty %}<li>Nenhuma compra esperando entrega.</li>{% endfor %}
+</ul>
+{% endblock %}

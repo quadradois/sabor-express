@@ -1,0 +1,3 @@
+{% load formato %}
+<p><a href="{% url 'compra' p.compra_id %}">{{ p.fornecedor }}</a> — {{ p.descricao }} · parcela {{ p.numero }}/{{ p.de }} · vence {{ p.vencimento|date:"d/m/Y" }}{% if p.vencida %} <strong class="falta">{{ p.dias }} dia(s) de atraso</strong>{% endif %} · saldo <strong>{{ p.saldo|dinheiro }}</strong></p>
+{% include "web/_paguei.html" with next=request.path %}

@@ -1,0 +1,11 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Consumos pendentes</h1>
+{% include "web/_mensagens.html" %}
+{% for p in pendentes %}<section class="bloco"><p><strong>{{ p.item }}</strong>: {{ p.quantidade|quantidade:p.unidade_base }} usados sem saldo{% if p.producao_id %} (<a href="{% url 'producao' p.producao_id %}">produção #{{ p.producao_id }}</a>){% endif %} — {{ p.justificativa }}</p>
+  {% for l in p.lotes_possiveis %}<form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="pendente" value="{{ p.pendente_id }}"><input type="hidden" name="lote" value="{{ l.lote_id }}">
+    <button type="submit">Conciliar com lote {{ l.codigo|default:l.lote_id }} (saldo {{ l.saldo|quantidade:p.unidade_base }}{% if l.validade %}, validade {{ l.validade|date:"d/m/Y" }}{% endif %})</button></form>
+  {% empty %}<p>Nenhum lote com saldo para conciliar ainda. Receba a compra primeiro.</p>{% endfor %}</section>
+{% empty %}<p>Nenhum consumo pendente.</p>{% endfor %}
+{% endblock %}
