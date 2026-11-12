@@ -33,6 +33,14 @@ def test_etiquetas_tem_uso_interno_e_nao_registram_no_get(client, dono, lote_pro
     assert not EtiquetaImpressa.objects.exists()
 
 
+def test_copias_limitadas_de_1_a_200(client, dono, lote_produzido):
+    url = reverse("etiquetas", args=[lote_produzido.id])
+    assert texto(client.get(url, {"estado": "resfriado", "copias": 5000})).count("USO INTERNO") == 200
+    assert texto(client.get(url, {"estado": "resfriado", "copias": -3})).count("USO INTERNO") == 1
+    client.post(url + "?estado=resfriado", {"copias": 999999, "chave": "a"})
+    assert EtiquetaImpressa.objects.get().copias == 200
+
+
 def test_saiu_certo_registra_e_depois_reimpressao(client, dono, lote_produzido):
     url = reverse("etiquetas", args=[lote_produzido.id]) + "?estado=resfriado"
     r = client.post(url, {"copias": 3, "chave": "a"}, follow=True)

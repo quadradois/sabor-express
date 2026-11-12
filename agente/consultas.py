@@ -42,11 +42,33 @@ def _normal(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c)).strip()
 
 
-def _filtrar(itens, busca):
+def _casa(busca: str, nome: str) -> bool:
+    """Cada palavra dita aparece no nome ("farinha empanamento" casa "Farinha de trigo (Empanamento)")."""
+    n = _normal(nome)
+    return all(p in n for p in _normal(busca).split())
+
+
+def _filtrar(itens, busca, rotulo=lambda i: i.nome):
     if not busca:
         return list(itens)
-    b = _normal(busca)
-    return [i for i in itens if b in _normal(i.nome)]
+    return [i for i in itens if _casa(busca, rotulo(i))]
+
+
+def escolher(candidatos, busca, *, oque, rotulo=lambda i: i.nome):
+    """Exatamente um candidato pelo nome falado; senão erro com as opções para perguntar.
+
+    Nome idêntico a um rótulo ganha dos parciais ("bolinha 25 g" entre "Bolinha 25 g" e "Bolinha 250 g").
+    """
+    candidatos = _filtrar(candidatos, busca, rotulo)
+    exatos = [c for c in candidatos if _normal(rotulo(c)) == _normal(busca)]
+    if len(exatos) == 1:
+        return exatos[0]
+    if len(candidatos) == 1:
+        return candidatos[0]
+    if not candidatos:
+        raise ConsultaInvalida(f"Nenhum {oque} com o nome '{busca}'.", 404)
+    raise ConsultaInvalida(f"Mais de um {oque} com o nome '{busca}'; diga qual.", 409,
+                           opcoes=[rotulo(c) for c in candidatos])
 
 
 def _qtd(q: Decimal, unidade: str) -> dict:
@@ -113,16 +135,7 @@ def resolver_produto(nome):
     """Acha o produto pelo nome falado; exige exatamente uma correspondência."""
     if not (nome or "").strip():
         raise ConsultaInvalida("Diga o nome do produto.")
-    candidatos = _filtrar(_produtos_ativos(), nome)
-    exatos = [i for i in candidatos if _normal(i.nome) == _normal(nome)]
-    if len(exatos) == 1:
-        return exatos[0]
-    if len(candidatos) == 1:
-        return candidatos[0]
-    if not candidatos:
-        raise ConsultaInvalida(f"Nenhum produto com o nome '{nome}'.", 404)
-    raise ConsultaInvalida(f"Mais de um produto com o nome '{nome}'; diga qual.", 409,
-                           opcoes=[i.nome for i in candidatos])
+    return escolher(_produtos_ativos(), nome, oque="produto")
 
 
 def receita(produto_id, unidades):
