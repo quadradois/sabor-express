@@ -71,3 +71,13 @@ class ConclusaoForm(forms.Form):
     justificativa = forms.CharField(required=False, label="Justificativa da validade")
     anotacao = forms.CharField(required=False, label="Como foi? (inclui sobras)", widget=forms.Textarea(attrs={"rows": 3}))
     confirmar_perda_total = forms.BooleanField(required=False, label="Confirmo a perda total")
+
+
+class TransferenciaForm(forms.Form):
+    quantidade = DecimalBR(min_value=0.001, label="Quantidade", error_messages={"min_value": MAIOR_QUE_ZERO})
+    de = forms.ChoiceField(choices=ESTADOS, label="De")
+    para = forms.ChoiceField(choices=ESTADOS, label="Para")
+    validade_manual = forms.DateField(required=False, label="Validade manual (opcional)",
+                                      widget=forms.DateInput(attrs={"type": "date"}))
+    justificativa = forms.CharField(required=False, label="Justificativa (opcional)")
+    chave = forms.CharField(widget=forms.HiddenInput)

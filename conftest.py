@@ -46,3 +46,17 @@ def bolinha():
     Etapa.objects.create(ficha=p, ordem=1, instrucao="Modele as bolinhas")
     r = criar_tamanho(ficha_id=p.id, peso_g=D("100"), oleo_ref_un=D("0.05"), autor="teste")
     return Item.objects.get(id=r["item_id"])
+
+
+@pytest.fixture
+def lote_produzido(bolinha):
+    from estoque.models import CriterioValidade, Lote
+    from estoque.servicos import entrada_manual
+    from producao.servicos import concluir_producao, iniciar_producao, usar_previsto_restantes
+    farinha = bolinha.ficha.proporcoes.get().preparacao.itens.get().item
+    entrada_manual(item_id=farinha.id, quantidade=D("2"), unidade="kg", custo_total=D("10"), motivo="compra", autor="dono")
+    CriterioValidade.objects.create(produto=bolinha, forma="cru", estado="resfriado", dias=3)
+    p = iniciar_producao(produto_id=bolinha.id, unidades=10, forma="cru", autor="dono")["producao_id"]
+    usar_previsto_restantes(producao_id=p, autor="dono")
+    r = concluir_producao(producao_id=p, quantidade_boa=9, perdas=1, perda_motivo="rasgou", estado="resfriado", autor="dono")
+    return Lote.objects.get(id=r["lote_id"])

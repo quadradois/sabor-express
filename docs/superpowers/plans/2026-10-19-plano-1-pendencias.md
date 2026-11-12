@@ -12,7 +12,7 @@ Registro preservado do ledger de execução (o ledger temporário foi apagado). 
 | A idempotência compara o nome da operação e os parâmetros. Uma chave repetida com dados diferentes é recusada ("Esta chave já foi usada para outra operação."). | Um reenvio legítimo com campo alterado precisa de uma chave nova, que o formulário já gera a cada abertura. |
 | Blocos de preparação mostram as próprias etapas (modo de preparo), não só a "Montagem". | Remover um campo do bloco. |
 | O RED da Task 6 não foi rodado separadamente; aceito porque os testes são os do plano e os números foram conferidos à mão. | Um guarda sem prova de falha. |
-| O admin como formulário plano B dos cadastros (itens, conversões, fichas) fica **fora** de `executar()` no Plano 1. **Precisa passar por `executar()` antes do Plano 4 (agente)**, junto com o versionamento de fichas (RN-14). | Escritas de cadastro sem auditoria até lá. |
+| ~~O admin como formulário plano B dos cadastros (itens, conversões, fichas) fica **fora** de `executar()` no Plano 1.~~ **Resolvida no Plano 2:** o admin passa por `executar()` (`nucleo/admin_executar.py`), junto com o versionamento de fichas (RN-14). | — |
 
 ## Antes de entregar o sistema ao dono
 
