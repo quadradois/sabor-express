@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Produção</h1>
+<nav class="menu"><a href="{% url 'producao_nova' %}">Nova produção</a></nav>
+<h2>Em andamento</h2>
+<ul>
+  {% for p in producoes %}<li><a href="{% url 'producao' p.id %}">{{ p.produto.nome }} — {{ p.unidades }} un ({{ p.get_forma_display }})</a></li>
+  {% empty %}<li>Nenhuma produção em andamento.</li>{% endfor %}
+</ul>
+{% endblock %}

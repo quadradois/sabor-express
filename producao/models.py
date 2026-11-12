@@ -1,0 +1,52 @@
+from django.db import models
+
+from estoque.models import FORMAS
+
+
+class Producao(models.Model):
+    produto = models.ForeignKey("cadastros.Item", on_delete=models.PROTECT)
+    versao = models.ForeignKey("fichas.FichaVersao", on_delete=models.PROTECT)
+    unidades = models.PositiveIntegerField()
+    peso_g = models.DecimalField(max_digits=14, decimal_places=3)
+    forma = models.CharField(max_length=10, choices=FORMAS)
+    status = models.CharField(max_length=10, default="andamento")  # andamento | concluida | cancelada
+    etapa_atual = models.PositiveIntegerField(default=0)
+    # [{"bloco", "instrucao", "tempo_seg", "ponto", "midia"}]
+    etapas = models.JSONField(default=list)
+    quantidade_boa = models.PositiveIntegerField(null=True, blank=True)
+    perdas = models.PositiveIntegerField(null=True, blank=True)
+    perda_motivo = models.CharField(max_length=200, blank=True)
+    anotacao = models.TextField(blank=True)
+    motivo_cancelamento = models.CharField(max_length=200, blank=True)
+    lote = models.OneToOneField("estoque.Lote", null=True, blank=True, on_delete=models.PROTECT)
+    custo_total = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    custo_unitario = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    iniciada_em = models.DateTimeField(auto_now_add=True)
+    encerrada_em = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def fechamento(self):
+        return len(self.etapas) + 1  # 0 é o mise en place
+
+    def __str__(self):
+        return f"{self.produto} x{self.unidades} ({self.status})"
+
+
+class LinhaPreparo(models.Model):
+    producao = models.ForeignKey(Producao, on_delete=models.CASCADE, related_name="linhas")
+    bloco = models.CharField(max_length=120)
+    item = models.ForeignKey("cadastros.Item", on_delete=models.PROTECT)
+    previsto = models.DecimalField(max_digits=14, decimal_places=3)
+    usado = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
+    lote = models.ForeignKey("estoque.Lote", null=True, blank=True, on_delete=models.PROTECT)
+    ordem = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ordem", "id"]
+
+
+class Cronometro(models.Model):
+    producao = models.ForeignKey(Producao, on_delete=models.CASCADE, related_name="cronometros")
+    nome = models.CharField(max_length=120)
+    fim = models.DateTimeField()
+    parado_em = models.DateTimeField(null=True, blank=True)

@@ -1,6 +1,8 @@
+import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
 from django import template
+from django.utils.html import format_html
 
 register = template.Library()
 _GRANDE = {"g": ("kg", "g"), "mL": ("L", "mL")}
@@ -19,3 +21,9 @@ def quantidade(q, unidade_base):
 @register.filter
 def minutos(seg):
     return quantidade(Decimal(seg) / 60, "un").removesuffix(" un")
+
+
+@register.simple_tag
+def chave():
+    """Chave de idempotência nova a cada render: cada formulário do POST leva a sua."""
+    return format_html('<input type="hidden" name="chave" value="{}">', uuid.uuid4().hex)

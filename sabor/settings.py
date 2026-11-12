@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'cadastros',
     'estoque',
     'fichas',
+    'producao',
 ]
 
 MIDDLEWARE = [

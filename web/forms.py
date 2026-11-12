@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from cadastros.models import Item
+from estoque.models import ESTADOS
 from fichas.models import Ficha
 
 MAIOR_QUE_ZERO = "Informe um valor maior que zero."
@@ -27,8 +28,24 @@ class ReceitaForm(forms.Form):
                               error_messages={"min_value": MAIOR_QUE_ZERO})
 
 
+class ProducaoForm(forms.Form):
+    produto = forms.ModelChoiceField(Item.objects.filter(tipo="produto", ativo=True), label="Produto")
+    unidades = forms.IntegerField(min_value=1, label="Unidades",
+                                  error_messages={"min_value": MAIOR_QUE_ZERO})
+    forma = forms.ChoiceField(choices=[("cru", "Cru (guardar ou congelar)"), ("frito", "Frito")],
+                              widget=forms.RadioSelect, initial="cru", label="Forma")
+    chave = forms.CharField(widget=forms.HiddenInput)
+
+
+class TamanhoForm(forms.Form):
+    ficha = forms.ModelChoiceField(Ficha.objects.filter(tipo="produto", ativa=True), label="Receita")
+    peso = DecimalBR(min_value=0.001, label="Peso de cada unidade (g)",
+                     error_messages={"min_value": MAIOR_QUE_ZERO})
+    chave = forms.CharField(widget=forms.HiddenInput)
+
+
 class EntradaForm(forms.Form):
-    item = forms.ModelChoiceField(Item.objects.filter(ativo=True), label="Item")
+    item = forms.ModelChoiceField(Item.objects.filter(ativo=True).exclude(tipo="produto"), label="Item")
     quantidade = DecimalBR(label="Quantidade")
     unidade = forms.CharField(label="Unidade", widget=forms.TextInput(
         attrs={"list": "unidades", "autocapitalize": "off"}))
@@ -36,4 +53,31 @@ class EntradaForm(forms.Form):
     lote_codigo = forms.CharField(required=False, label="Lote")
     validade = forms.DateField(required=False, label="Validade", widget=forms.DateInput(attrs={"type": "date"}))
     motivo = forms.CharField(required=False, label="Motivo")  # regra validada (e auditada) no serviço
+    chave = forms.CharField(widget=forms.HiddenInput)
+
+
+class PesoForm(forms.Form):
+    usado = DecimalBR(label="Peso")
+
+
+class ConclusaoForm(forms.Form):
+    quantidade_boa = forms.IntegerField(min_value=0, label="Quantidade boa")
+    perdas = forms.IntegerField(min_value=0, initial=0, label="Perdas")
+    perda_motivo = forms.CharField(required=False, label="Motivo das perdas")
+    estado = forms.ChoiceField(choices=ESTADOS, widget=forms.RadioSelect, label="Estado inicial")
+    validade_manual = forms.DateField(required=False, label="Validade manual",
+                                      help_text="Só se não houver critério de validade",
+                                      widget=forms.DateInput(attrs={"type": "date"}))
+    justificativa = forms.CharField(required=False, label="Justificativa da validade")
+    anotacao = forms.CharField(required=False, label="Como foi? (inclui sobras)", widget=forms.Textarea(attrs={"rows": 3}))
+    confirmar_perda_total = forms.BooleanField(required=False, label="Confirmo a perda total")
+
+
+class TransferenciaForm(forms.Form):
+    quantidade = DecimalBR(min_value=0.001, label="Quantidade", error_messages={"min_value": MAIOR_QUE_ZERO})
+    de = forms.ChoiceField(choices=ESTADOS, label="De")
+    para = forms.ChoiceField(choices=ESTADOS, label="Para")
+    validade_manual = forms.DateField(required=False, label="Validade manual (opcional)",
+                                      widget=forms.DateInput(attrs={"type": "date"}))
+    justificativa = forms.CharField(required=False, label="Justificativa (opcional)")
     chave = forms.CharField(widget=forms.HiddenInput)

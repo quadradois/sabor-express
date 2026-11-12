@@ -1,0 +1,88 @@
+{% extends "web/base.html" %}
+{% load formato static tz %}
+{% block titulo %}{{ p.produto.nome }} — Sabor Express{% endblock %}
+{% block conteudo %}
+<div class="preparo">
+<h1>{{ p.produto.nome }} <small>{{ p.unidades }} un ({{ p.get_forma_display }})</small></h1>
+{% for m in messages %}<p class="{% if m.level_tag == 'error' %}erro{% else %}ok{% endif %}">{{ m }}</p>{% endfor %}
+
+{% if p.status == "concluida" %}
+<h2>Produção concluída</h2>
+<table>
+  <tr><th>Bloco</th><th>Item</th><th>Previsto</th><th>Usado</th></tr>
+  {% for l in linhas %}<tr><td>{{ l.bloco }}</td><td>{{ l.item.nome }}</td>
+    <td>{{ l.previsto|quantidade:l.item.unidade_base }}</td><td>{{ l.usado|quantidade:l.item.unidade_base }}</td></tr>{% endfor %}
+</table>
+<p>Unidades: {{ p.unidades }} planejadas, {{ p.quantidade_boa }} boas, {{ p.perdas }} perdidas{% if p.perda_motivo %} ({{ p.perda_motivo }}){% endif %}.</p>
+<p>Custo total: R$ {{ p.custo_total|floatformat:2 }}{% if p.custo_unitario is not None %} — por unidade: R$ {{ p.custo_unitario|floatformat:4 }}{% endif %}</p>
+{% if p.lote %}<p>Lote: <a href="{% url 'lote' p.lote_id %}">{{ p.lote.codigo }}</a>
+ — <a href="{% url 'etiquetas' p.lote_id %}?estado={{ estado_inicial }}">Etiquetas</a></p>{% else %}<p>Perda total: nenhum lote gerado.</p>{% endif %}
+{% if p.anotacao %}<p>Como foi: {{ p.anotacao }}</p>{% endif %}
+
+{% elif p.status == "cancelada" %}
+<h2>Produção cancelada</h2>
+<p>Motivo: {{ p.motivo_cancelamento }}</p>
+
+{% else %}
+{% if p.etapa_atual == 0 %}
+<h2>Mise en place</h2>
+<ul class="linhas">
+  {% for l in linhas %}<li>
+    <span class="nome"><small>{{ l.bloco }}</small><br>{{ l.item.nome }}</span>
+    <span class="qtd">{{ l.previsto|quantidade:l.item.unidade_base }}</span>
+    {% if l.usado is not None %}<strong class="ok">Usado: {{ l.usado|quantidade:l.item.unidade_base }}</strong>{% endif %}
+    <form method="post" class="peso">{% csrf_token %}{% chave %}<input type="hidden" name="linha" value="{{ l.id }}">
+      <label>Peso <input name="usado" inputmode="decimal" autocomplete="off"> {{ l.item.unidade_base }}</label>
+      <button name="acao" value="peso">Pesei</button>
+      <button name="acao" value="previsto">Usei o previsto</button>
+    </form>
+  </li>{% endfor %}
+</ul>
+<form method="post">{% csrf_token %}{% chave %}<button name="acao" value="previsto_todos">Usei o previsto em todos</button></form>
+<form method="post">{% csrf_token %}{% chave %}<input type="hidden" name="indice" value="1">
+  <button name="acao" value="etapa" class="principal">Começar etapas</button></form>
+
+{% elif etapa %}
+<h2>Etapa {{ p.etapa_atual }} de {{ n }}</h2>
+<p><small>{{ etapa.bloco }}</small></p>
+<p class="instrucao">{{ etapa.instrucao }}</p>
+{% if etapa.ponto %}<p>Ponto: {{ etapa.ponto }}</p>{% endif %}
+{% if etapa.midia %}{% if video %}<video src="{{ etapa.midia }}" controls playsinline></video>{% else %}<img src="{{ etapa.midia }}" alt="{{ etapa.instrucao }}">{% endif %}{% endif %}
+{% if etapa.tempo_seg %}<form method="post">{% csrf_token %}{% chave %}
+  <button name="acao" value="cronometro">Iniciar cronômetro ({{ etapa.tempo_seg|minutos }} min)</button></form>{% endif %}
+<div class="navegar">
+  <form method="post">{% csrf_token %}{% chave %}<input type="hidden" name="indice" value="{{ p.etapa_atual|add:-1 }}">
+    <button name="acao" value="etapa">Voltar</button></form>
+  <form method="post">{% csrf_token %}{% chave %}<input type="hidden" name="indice" value="{{ p.etapa_atual|add:1 }}">
+    <button name="acao" value="etapa" class="principal">Próxima etapa</button></form>
+</div>
+
+{% else %}
+<h2>Fechamento</h2>
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  {% for f in form %}<div class="campo">{% if f.name == "confirmar_perda_total" %}<label>{{ f }} {{ f.label }}</label>{% else %}{{ f.label_tag }} {{ f }}{% endif %}
+    {% if f.help_text %}<small>{{ f.help_text }}</small>{% endif %}</div>{% endfor %}
+  <button name="acao" value="concluir" class="principal">Concluir produção</button>
+</form>
+<form method="post">{% csrf_token %}{% chave %}<input type="hidden" name="indice" value="{{ n }}">
+  <button name="acao" value="etapa">Voltar</button></form>
+{% endif %}
+
+{% if cronometros %}<section class="cronometros">
+  <h2>Cronômetros</h2>
+  {% for c in cronometros %}<div class="cronometro" data-fim="{{ c.fim|utc|date:'Y-m-d\TH:i:s\Z' }}">
+    <span class="nome">{{ c.nome }}</span> <strong class="resta">--:--</strong> <strong class="tempo">Tempo!</strong> <button type="button" class="tocar-som">Tocar som</button>
+    <form method="post">{% csrf_token %}{% chave %}<input type="hidden" name="cronometro" value="{{ c.id }}">
+      <button name="acao" value="parar">Parar</button></form>
+  </div>{% endfor %}
+</section>{% endif %}
+
+<details class="cancelar"><summary>Cancelar produção</summary>
+  <form method="post" class="form">{% csrf_token %}{% chave %}
+    <p><label>Motivo <input name="motivo" required></label></p>
+    <button name="acao" value="cancelar">Cancelar produção</button></form>
+</details>
+<script src="{% static 'web/preparo.js' %}" defer></script>
+{% endif %}
+</div>
+{% endblock %}

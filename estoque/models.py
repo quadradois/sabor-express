@@ -1,11 +1,16 @@
 from django.db import models
 
 
+ESTADOS = [("fresco", "Fresco"), ("resfriado", "Resfriado"), ("congelado", "Congelado")]
+FORMAS = [("cru", "Cru"), ("frito", "Frito")]
+
+
 class Lote(models.Model):
     item = models.ForeignKey("cadastros.Item", on_delete=models.PROTECT)
     codigo = models.CharField(max_length=60, blank=True)
     sem_lote = models.BooleanField(default=False)
     validade = models.DateField(null=True, blank=True)
+    forma = models.CharField(max_length=10, choices=FORMAS, blank=True, default="")
     custo_unitario = models.DecimalField(max_digits=14, decimal_places=4)  # por unidade base
     criado_em = models.DateTimeField(auto_now_add=True)
 
@@ -23,5 +28,31 @@ class Movimento(models.Model):
     unidade_informada = models.CharField(max_length=10)
     fator = models.DecimalField(max_digits=14, decimal_places=6)  # unidades base por unidade informada
     motivo = models.CharField(max_length=200)
+    estado = models.CharField(max_length=20, choices=ESTADOS, blank=True, default="")
+    validade = models.DateField(null=True, blank=True)
+    validade_manual = models.BooleanField(default=False)
+    operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+
+class CriterioValidade(models.Model):
+    produto = models.ForeignKey("cadastros.Item", on_delete=models.CASCADE, limit_choices_to={"tipo": "produto"})
+    forma = models.CharField(max_length=10, choices=FORMAS)
+    estado = models.CharField(max_length=20, choices=ESTADOS)
+    dias = models.PositiveIntegerField()
+    fonte = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["produto", "forma", "estado"], name="criterio_unico")]
+
+    def __str__(self):
+        return f"{self.produto} {self.forma} {self.estado}: {self.dias} dias"
+
+
+class EtiquetaImpressa(models.Model):
+    lote = models.ForeignKey(Lote, on_delete=models.PROTECT)
+    estado = models.CharField(max_length=20, choices=ESTADOS)
+    copias = models.PositiveIntegerField()
+    reimpressao = models.BooleanField(default=False)
     operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
     criado_em = models.DateTimeField(auto_now_add=True)

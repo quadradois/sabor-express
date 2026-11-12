@@ -1,0 +1,27 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Nova produção</h1>
+<form method="get" class="form">
+  {{ form.non_field_errors }}
+  {% for f in form %}{% if not f.is_hidden %}<p>{{ f.label_tag }} {{ f }} {{ f.errors }}</p>{% endif %}{% endfor %}
+  <button type="submit">Ver receita</button>
+</form>
+{% if r %}
+{% include "web/_blocos.html" %}
+<form method="post" class="form">
+  {% csrf_token %}
+  <input type="hidden" name="chave" value="{{ chave }}">
+  <input type="hidden" name="produto" value="{{ form.cleaned_data.produto.id }}">
+  <input type="hidden" name="unidades" value="{{ form.cleaned_data.unidades }}">
+  <input type="hidden" name="forma" value="{{ form.cleaned_data.forma }}">
+  <button type="submit">Começar preparo</button>
+</form>
+{% endif %}
+<h2>Outro tamanho</h2>
+<form method="post" action="{% url 'tamanho_novo' %}" class="form">
+  {% csrf_token %}
+  {{ tamanho_form.non_field_errors }}
+  {% for f in tamanho_form %}{% if f.is_hidden %}{{ f }}{% else %}<p>{{ f.label_tag }} {{ f }} {{ f.errors }}</p>{% endif %}{% endfor %}
+  <button type="submit">Criar tamanho</button>
+</form>
+{% endblock %}
