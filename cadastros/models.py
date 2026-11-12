@@ -59,3 +59,16 @@ class Conversao(models.Model):
 
     def __str__(self):
         return f"1 {self.unidade} de {self.item} = {self.fator} {self.item.unidade_base}"
+
+
+class Fornecedor(models.Model):
+    nome = models.CharField(max_length=120, unique=True)
+    documento = models.CharField(max_length=20, blank=True)  # CNPJ ou CPF, opcional (RF-CAD-05)
+    contato = models.CharField(max_length=120, blank=True)
+    ativo = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "fornecedores"
+
+    def __str__(self):
+        return self.nome

@@ -6,8 +6,8 @@ from django.db.models import Min, Sum
 from django.utils import timezone
 
 from cadastros.models import Item
-from estoque.models import ESTADOS, FORMAS, Lote, Movimento
-from estoque.servicos import alocar_fefo, calcular_validade, saldo_lote
+from estoque.models import ESTADOS, FORMAS, ConsumoPendente, Lote, Movimento
+from estoque.servicos import alocar_fefo, alocar_fefo_parcial, calcular_validade, saldo_lote
 from fichas.escala import escalar
 from fichas.versoes import versao_vigente
 from nucleo.operacoes import RegraViolada, executar
@@ -16,8 +16,13 @@ from web.templatetags.formato import quantidade as fmt_qtd
 from .models import Cronometro, LinhaPreparo, Producao
 
 
-def iniciar_producao(*, produto_id, unidades, forma, autor, canal="web", chave=None) -> dict:
+def iniciar_producao(*, produto_id, unidades, forma, pendente_justificativa="", autor, canal="web",
+                     chave=None) -> dict:
+    """Com `pendente_justificativa`, começa mesmo faltando estoque: o que faltar na conclusão vira
+    consumo pendente de conciliação (DEC-F2-005)."""
     parametros = {"produto_id": produto_id, "unidades": unidades, "forma": forma}
+    if pendente_justificativa:
+        parametros["pendente_justificativa"] = pendente_justificativa
 
     def func(op):
         try:
@@ -31,9 +36,10 @@ def iniciar_producao(*, produto_id, unidades, forma, autor, canal="web", chave=N
         if forma == "frito" and not produto.oleo_ref_un:
             raise RegraViolada(f"Cadastre a referência de óleo de '{produto.nome}'.")
         receita = escalar(produto.ficha, unidades, produto.peso_g)
+        justificativa = (pendente_justificativa or "").strip()
         for b in receita.blocos:
             for l in b.linhas:
-                if l.falta > 0:
+                if l.falta > 0 and not justificativa:
                     raise RegraViolada(f"Falta {fmt_qtd(l.falta, l.unidade_base)} de '{l.nome}'. Dê entrada no estoque antes de começar.")
         etapas = [{"bloco": b.nome, "instrucao": e.instrucao, "tempo_seg": e.tempo_seg, "ponto": e.ponto,
                    "midia": e.midia.url if e.midia else ""} for b in receita.blocos for e in b.etapas]
@@ -41,7 +47,8 @@ def iniciar_producao(*, produto_id, unidades, forma, autor, canal="web", chave=N
             etapas.append({"bloco": "Fritura", "instrucao": f"Frite as {unidades} unidades.",
                            "tempo_seg": None, "ponto": "", "midia": ""})
         p = Producao.objects.create(produto=produto, versao=versao_vigente(produto.ficha), unidades=unidades,
-                                    peso_g=produto.peso_g, forma=forma, etapas=etapas)
+                                    peso_g=produto.peso_g, forma=forma, etapas=etapas,
+                                    pendente_justificativa=justificativa)
         LinhaPreparo.objects.bulk_create([
             LinhaPreparo(producao=p, bloco=b.nome, item_id=l.item_id, previsto=l.quantidade, ordem=i)
             for i, (b, l) in enumerate((b, l) for b in receita.blocos for l in b.linhas)])
@@ -157,10 +164,15 @@ def cancelar_producao(*, producao_id, motivo, autor, canal="web", chave=None) ->
 
 
 def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="", estado, validade_manual=None,
-                      justificativa="", anotacao="", confirmar_perda_total=False, autor, canal="web", chave=None) -> dict:
+                      justificativa="", anotacao="", confirmar_perda_total=False, pendente_justificativa="",
+                      autor, canal="web", chave=None) -> dict:
+    """Sem saldo para o que foi pesado: recusa, a menos que haja justificativa de consumo pendente
+    (aqui ou ao iniciar); então o que faltar vira `ConsumoPendente` e o custo fica pendente."""
     parametros = {"producao_id": producao_id, "quantidade_boa": quantidade_boa, "perdas": perdas,
                   "perda_motivo": perda_motivo, "estado": estado, "validade_manual": validade_manual,
                   "justificativa": justificativa, "anotacao": anotacao, "confirmar_perda_total": confirmar_perda_total}
+    if pendente_justificativa:
+        parametros["pendente_justificativa"] = pendente_justificativa
 
     def func(op):
         p = _em_andamento(producao_id)
@@ -174,6 +186,7 @@ def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="",
         if quantidade_boa == 0 and not confirmar_perda_total:
             raise RegraViolada("Nenhuma unidade boa: confirme a perda total.")
         hoje, motivo, custo = timezone.localdate(), f"Produção {p.id}", Decimal("0")
+        pendente = (pendente_justificativa or "").strip() or p.pendente_justificativa
 
         def consumir(lote, q):
             nonlocal custo
@@ -195,8 +208,16 @@ def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="",
                     consumir(lote, q)
             resto = total - sum(fixos.values())
             if resto > 0:  # depois dos fixados: o saldo já reflete o que eles consumiram
-                for lote, q in alocar_fefo(item, resto, hoje=hoje):
+                if not pendente:
+                    alocacao, falta = alocar_fefo(item, resto, hoje=hoje), Decimal("0")
+                else:
+                    alocacao, falta = alocar_fefo_parcial(item, resto, hoje=hoje)
+                for lote, q in alocacao:
                     consumir(lote, q)
+                if falta > 0:
+                    ConsumoPendente.objects.create(item=item, quantidade=falta, justificativa=pendente,
+                                                   producao=p, operacao=op)
+                    p.custo_pendente = True
         if p.forma == "frito":
             custo += p.produto.oleo_ref_un * (quantidade_boa + perdas)
         p.custo_total = custo.quantize(Decimal("0.01"), ROUND_HALF_UP)
@@ -212,9 +233,55 @@ def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="",
         p.status, p.quantidade_boa, p.perdas, p.perda_motivo = "concluida", quantidade_boa, perdas, perda_motivo.strip()
         p.anotacao, p.encerrada_em = anotacao.strip(), timezone.now()
         p.save()
-        return {"lote_id": p.lote_id, "custo_total": p.custo_total, "custo_unitario": p.custo_unitario}
+        return {"lote_id": p.lote_id, "custo_total": p.custo_total, "custo_unitario": p.custo_unitario,
+                "custo_pendente": p.custo_pendente,
+                "pendentes": [{"pendente_id": c.id, "item": c.item.nome, "quantidade": c.quantidade}
+                              for c in p.consumos_pendentes.select_related("item")]}
 
     return executar("concluir_producao", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
+
+
+def conciliar_consumo(*, pendente_id, lote_id, autor, canal="web", chave=None) -> dict:
+    """Vincula um consumo pendente a um lote (DEC-F2-033): baixa do lote e fecha o custo, uma única vez.
+
+    O custo da produção (e do lote que ela gerou) passa a incluir o custo desse lote; quando não restar
+    pendência, o custo deixa de ser "pendente" (RN-25 a).
+    """
+
+    def func(op):
+        c = ConsumoPendente.objects.select_related("item", "producao__lote").filter(id=pendente_id).first()
+        if c is None:
+            raise RegraViolada("Consumo pendente não encontrado.")
+        if not c.aberto:
+            raise RegraViolada("Este consumo pendente já foi conciliado.")
+        lote = Lote.objects.select_related("item").filter(id=lote_id).first()
+        if lote is None or lote.item_id != c.item_id:
+            raise RegraViolada(f"Esse lote não é de '{c.item.nome}'.")
+        if lote.validade and lote.validade < timezone.localdate():
+            raise RegraViolada("Lote vencido não pode ser consumido.")
+        disponivel = saldo_lote(lote)
+        if disponivel < c.quantidade:
+            raise RegraViolada(f"O lote só tem {fmt_qtd(disponivel, c.item.unidade_base)} de '{c.item.nome}'.")
+        Movimento.objects.create(tipo="consumo_producao", item=c.item, lote=lote, quantidade=-c.quantidade,
+                                 quantidade_informada=c.quantidade, unidade_informada=c.item.unidade_base,
+                                 fator=Decimal("1"), motivo=f"Conciliação do consumo pendente {c.id}", operacao=op)
+        c.lote, c.conciliacao_operacao = lote, op
+        c.custo = (c.quantidade * lote.custo_unitario).quantize(Decimal("0.01"), ROUND_HALF_UP)
+        c.save(update_fields=["lote", "conciliacao_operacao", "custo"])
+        p = c.producao
+        if p is not None:
+            p.custo_total += c.custo
+            p.custo_pendente = p.consumos_pendentes.filter(lote__isnull=True).exists()
+            if p.quantidade_boa:
+                p.custo_unitario = (p.custo_total / p.quantidade_boa).quantize(Decimal("0.0001"), ROUND_HALF_UP)
+                p.lote.custo_unitario = p.custo_unitario
+                p.lote.save(update_fields=["custo_unitario"])
+            p.save(update_fields=["custo_total", "custo_pendente", "custo_unitario"])
+        return {"pendente_id": c.id, "lote_id": lote.id, "custo": c.custo, "producao_id": c.producao_id,
+                "custo_total": p.custo_total if p else None, "custo_pendente": p.custo_pendente if p else False}
+
+    return executar("conciliar_consumo", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"pendente_id": pendente_id, "lote_id": lote_id})
 
 
 def origem(lote) -> list:
@@ -224,4 +291,5 @@ def origem(lote) -> list:
     linhas = (Movimento.objects.filter(operacao_id=entrada.operacao_id, quantidade__lt=0)
               .values("lote").annotate(q=Sum("quantidade"), primeiro=Min("id")).order_by("primeiro"))
     lotes = Lote.objects.in_bulk([r["lote"] for r in linhas])
-    return [(lotes[r["lote"]], -r["q"]) for r in linhas]
+    conciliados = ConsumoPendente.objects.filter(producao__lote=lote, lote__isnull=False).select_related("lote")
+    return [(lotes[r["lote"]], -r["q"]) for r in linhas] + [(c.lote, c.quantidade) for c in conciliados]

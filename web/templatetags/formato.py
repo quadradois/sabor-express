@@ -19,6 +19,14 @@ def quantidade(q, unidade_base):
 
 
 @register.filter
+def dinheiro(v):
+    """R$ com vírgula decimal e ponto de milhar: 1234.5 -> "R$ 1.234,50"."""
+    v = Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    txt = f"{abs(v):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{'-' if v < 0 else ''}R$ {txt}"
+
+
+@register.filter
 def minutos(seg):
     return quantidade(Decimal(seg) / 60, "un").removesuffix(" un")
 

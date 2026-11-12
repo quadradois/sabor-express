@@ -26,3 +26,30 @@ def criar_tamanho(*, ficha_id: int, peso_g: Decimal, oleo_ref_un: Decimal | None
 
     return executar("criar_tamanho", func, autor=autor, canal=canal, chave=chave,
                     parametros={"ficha_id": ficha_id, "peso_g": peso_g, "oleo_ref_un": oleo_ref_un})
+
+
+def salvar_fornecedor(*, nome, documento="", contato="", ativo=True, fornecedor_id=None,
+                      autor: str, canal: str = "web", chave: str | None = None) -> dict:
+    """Cria (sem `fornecedor_id`) ou altera um fornecedor. Fornecedor com compras não é apagado: inativa-se."""
+    from .models import Fornecedor
+
+    def func(op):
+        n = (nome or "").strip()
+        if not n:
+            raise RegraViolada("Informe o nome do fornecedor.")
+        outro = Fornecedor.objects.filter(nome__iexact=n).exclude(id=fornecedor_id).first()
+        if outro:
+            raise RegraViolada(f"Já existe o fornecedor '{outro.nome}'.")
+        if fornecedor_id is None:
+            f = Fornecedor(nome=n)
+        else:
+            f = Fornecedor.objects.filter(id=fornecedor_id).first()
+            if f is None:
+                raise RegraViolada("Fornecedor não encontrado.")
+        f.nome, f.documento, f.contato, f.ativo = n, (documento or "").strip(), (contato or "").strip(), bool(ativo)
+        f.save()
+        return {"fornecedor_id": f.id, "nome": f.nome}
+
+    return executar("salvar_fornecedor", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"fornecedor_id": fornecedor_id, "nome": nome, "documento": documento,
+                                "contato": contato, "ativo": ativo})
