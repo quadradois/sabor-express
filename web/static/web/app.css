@@ -36,3 +36,7 @@ table { display: block; overflow-x: auto; }
 .campo { margin: 12px 0; }
 .cronometro .tocar-som { display: none; }
 .tocando.mudo .tocar-som { display: inline-block; }
+.etiqueta { border: 1px dashed #333; padding: 8px 12px; margin: 8px 0; max-width: 20em; }
+.etiqueta .interno { font-weight: bold; text-align: center; border-top: 1px solid #333; margin-top: 4px; }
+.acoes { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+@media print { header, .acoes, .erro { display: none; } .etiqueta { break-inside: avoid; } }

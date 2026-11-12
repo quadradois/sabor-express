@@ -1,0 +1,21 @@
+{% extends "web/base.html" %}
+{% block titulo %}Etiquetas — Sabor Express{% endblock %}
+{% block conteudo %}
+{% for m in messages %}<p class="erro">{{ m }}</p>{% endfor %}
+<div class="etiquetas">
+{% for _ in range %}<div class="etiqueta">
+  <strong>{{ e.produto }}</strong>
+  <div>Lote: {{ e.lote }}</div>
+  <div>Fabricação: {{ e.fabricacao|date:"d/m/Y" }}</div>
+  <div>Validade: {{ e.validade|date:"d/m/Y"|default:"—" }}{% if e.validade_manual %} (informada manualmente){% endif %}</div>
+  <div>{{ e.conservacao }} — {{ e.forma|default:"—" }} — {{ e.quantidade }} un</div>
+  <div class="interno">USO INTERNO</div>
+</div>{% endfor %}
+</div>
+<form method="post" class="acoes">{% csrf_token %}{% load formato %}{% chave %}
+  <input type="hidden" name="copias" value="{{ copias }}">
+  <button type="button" onclick="window.print()">Imprimir</button>
+  <button class="principal">Saiu certo</button>
+  <a href="{% url 'lote' l.id %}">Voltar ao lote</a>
+</form>
+{% endblock %}

@@ -2,18 +2,21 @@ import uuid
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from cadastros.servicos import criar_tamanho
-from estoque.servicos import entrada_manual
+from estoque.etiquetas import dados_etiqueta, registrar_impressao
+from estoque.models import ESTADOS, Lote, Movimento
+from estoque.servicos import entrada_manual, saldo_lote, transferir_estado
 from fichas.escala import escalar
 from nucleo.operacoes import RegraViolada
 from producao.models import Producao
-from producao.servicos import (cancelar_producao, concluir_producao, iniciar_cronometro, iniciar_producao,
+from producao.servicos import (origem, cancelar_producao, concluir_producao, iniciar_cronometro, iniciar_producao,
                                ir_para_etapa, parar_cronometro, registrar_peso, usar_previsto_restantes)
 
-from .forms import ConclusaoForm, EntradaForm, PesoForm, ProducaoForm, ReceitaForm, TamanhoForm
+from .forms import ConclusaoForm, EntradaForm, PesoForm, ProducaoForm, ReceitaForm, TamanhoForm, TransferenciaForm
 
 
 @login_required
@@ -112,6 +115,8 @@ def producao(request, id):
         return redirect("producao", id=p.id)
     ctx = {"p": p, "linhas": p.linhas.select_related("item"), "n": len(p.etapas),
            "cronometros": p.cronometros.filter(parado_em__isnull=True).order_by("fim")}
+    if p.lote_id:
+        ctx["estado_inicial"] = Movimento.objects.filter(lote_id=p.lote_id, tipo="entrada_producao").values_list("estado", flat=True).first()
     if 1 <= p.etapa_atual <= len(p.etapas):
         ctx["etapa"] = e = p.etapas[p.etapa_atual - 1]
         ctx["video"] = e["midia"].lower().endswith((".mp4", ".webm", ".mov"))
@@ -161,3 +166,49 @@ def tamanho_novo(request):
             return redirect(f"{reverse('producao_nova')}?produto={r['item_id']}")
     return render(request, "web/producao_nova.html", {"form": ProducaoForm(initial={"chave": uuid.uuid4().hex}),
                                                       "tamanho_form": form})
+
+
+@login_required
+def lote(request, id):
+    l = get_object_or_404(Lote.objects.select_related("item"), id=id)
+    if request.method == "POST":
+        form = TransferenciaForm(request.POST)
+        if form.is_valid():
+            d = form.cleaned_data
+            try:
+                transferir_estado(lote_id=l.id, quantidade=d["quantidade"], de=d["de"], para=d["para"],
+                                  validade_manual=d["validade_manual"], justificativa=d["justificativa"],
+                                  autor=request.user.username, canal="web", chave=d["chave"])
+            except RegraViolada as e:
+                form.add_error(None, str(e))
+            else:
+                messages.success(request, "Conservação alterada.")
+                return redirect("lote", id=l.id)
+    else:
+        form = TransferenciaForm()
+    estados = [dados_etiqueta(l, e) | {"estado": e} for e, _ in ESTADOS if saldo_lote(l, e) != 0]
+    return render(request, "web/lote.html", {"l": l, "estados": estados, "origem": origem(l), "form": form})
+
+
+@login_required
+def etiquetas(request, id):
+    l = get_object_or_404(Lote.objects.select_related("item"), id=id)
+    estado = request.GET.get("estado", "")
+    if estado not in dict(ESTADOS):
+        raise Http404
+    dados = dados_etiqueta(l, estado)
+    try:
+        copias = int(request.POST.get("copias") or request.GET.get("copias") or dados["quantidade"])
+    except ValueError:
+        copias = 1
+    if request.method == "POST":
+        try:
+            r = registrar_impressao(lote_id=l.id, estado=estado, copias=copias, autor=request.user.username,
+                                    canal="web", chave=request.POST.get("chave"))
+        except RegraViolada as e:
+            messages.error(request, str(e))
+        else:
+            messages.success(request, "Reimpressão registrada." if r["reimpressao"] else "Impressão registrada.")
+            return redirect("lote", id=l.id)
+    return render(request, "web/etiquetas.html", {"l": l, "e": dados, "estado": estado, "copias": copias,
+                                                  "range": range(max(copias, 0))})
