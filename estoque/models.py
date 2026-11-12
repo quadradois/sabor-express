@@ -56,3 +56,24 @@ class EtiquetaImpressa(models.Model):
     reimpressao = models.BooleanField(default=False)
     operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
     criado_em = models.DateTimeField(auto_now_add=True)
+
+
+class ConsumoPendente(models.Model):
+    """Consumo sem saldo registrado (DEC-F2-005): não gera movimento até ser conciliado com um lote."""
+
+    item = models.ForeignKey("cadastros.Item", on_delete=models.PROTECT)
+    quantidade = models.DecimalField(max_digits=14, decimal_places=3)  # unidade base
+    justificativa = models.CharField(max_length=200)
+    producao = models.ForeignKey("producao.Producao", null=True, blank=True, on_delete=models.PROTECT,
+                                 related_name="consumos_pendentes")
+    operacao = models.ForeignKey("nucleo.RegistroOperacao", on_delete=models.PROTECT)
+    # conciliação única (DEC-F2-033): lote e custo definidos uma vez
+    lote = models.ForeignKey(Lote, null=True, blank=True, on_delete=models.PROTECT)
+    custo = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    conciliacao_operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, blank=True,
+                                             on_delete=models.PROTECT, related_name="+")
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def aberto(self):
+        return self.lote_id is None

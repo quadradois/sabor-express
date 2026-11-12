@@ -3,7 +3,7 @@ from django.contrib import admin
 from estoque.models import Movimento
 from nucleo.admin_executar import AdminViaExecutar
 
-from .models import Conversao, Item
+from .models import Conversao, Fornecedor, Item
 
 
 class ConversaoInline(admin.TabularInline):
@@ -20,3 +20,8 @@ class ItemAdmin(AdminViaExecutar, admin.ModelAdmin):
         if obj and Movimento.objects.filter(item=obj).exists():
             return ("unidade_base",)
         return ()
+
+
+@admin.register(Fornecedor)
+class FornecedorAdmin(AdminViaExecutar, admin.ModelAdmin):
+    list_display = ("nome", "documento", "contato", "ativo")

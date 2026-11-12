@@ -10,7 +10,7 @@ from nucleo.operacoes import RegraViolada, executar
 
 from web.templatetags.formato import quantidade as fmt_qtd
 
-from .models import ESTADOS, CriterioValidade, Lote, Movimento
+from .models import ESTADOS, ConsumoPendente, CriterioValidade, Lote, Movimento
 
 
 def saldo(item) -> Decimal:
@@ -26,20 +26,51 @@ def validade_porcao(lote, estado: str = ""):
     return v or lote.validade
 
 
-def alocar_fefo(item, quantidade: Decimal, *, hoje) -> list:
+def alocar_fefo_parcial(item, quantidade: Decimal, *, hoje) -> tuple[list, Decimal]:
+    """Como `alocar_fefo`, mas devolve (alocação, quanto faltou) em vez de recusar."""
     lotes = (Lote.objects.filter(item=item).exclude(validade__lt=hoje)
              .order_by(F("validade").asc(nulls_last=True), "criado_em", "id"))
     falta, saida = quantidade, []
     for l in lotes:
+        if falta <= 0:
+            break
         s = saldo_lote(l)
         if s <= 0:
             continue
         q = min(s, falta)
         saida.append((l, q))
         falta -= q
-        if falta <= 0:
-            return saida
-    raise RegraViolada(f"Falta {fmt_qtd(falta, item.unidade_base)} de '{item.nome}' no estoque.")
+    return saida, max(falta, Decimal("0"))
+
+
+def alocar_fefo(item, quantidade: Decimal, *, hoje) -> list:
+    saida, falta = alocar_fefo_parcial(item, quantidade, hoje=hoje)
+    if falta > 0:
+        raise RegraViolada(f"Falta {fmt_qtd(falta, item.unidade_base)} de '{item.nome}' no estoque.")
+    return saida
+
+
+def consumos_pendentes(*, item_id=None, abertos=True) -> list[dict]:
+    """Consumos sem saldo à espera de conciliação (RF-EST-04), com os lotes que podem cobri-los."""
+    hoje = timezone.localdate()
+    qs = ConsumoPendente.objects.select_related("item", "lote").order_by("criado_em", "id")
+    if abertos:
+        qs = qs.filter(lote__isnull=True)
+    if item_id:
+        qs = qs.filter(item_id=item_id)
+    saida = []
+    for p in qs:
+        candidatos = [] if not p.aberto else [
+            {"lote_id": l.id, "codigo": l.codigo or "sem lote", "validade": l.validade, "saldo": s,
+             "custo_unitario": l.custo_unitario}
+            for l in Lote.objects.filter(item=p.item).exclude(validade__lt=hoje).order_by(
+                F("validade").asc(nulls_last=True), "criado_em", "id")
+            if (s := saldo_lote(l)) >= p.quantidade]
+        saida.append({"pendente_id": p.id, "item_id": p.item_id, "item": p.item.nome,
+                      "unidade_base": p.item.unidade_base, "quantidade": p.quantidade,
+                      "justificativa": p.justificativa, "producao_id": p.producao_id, "criado_em": p.criado_em,
+                      "lote_id": p.lote_id, "custo": p.custo, "lotes_possiveis": candidatos})
+    return saida
 
 
 def entrada_manual(*, item_id, quantidade, unidade, custo_total, motivo, lote_codigo="",

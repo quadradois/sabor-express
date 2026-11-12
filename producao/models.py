@@ -21,6 +21,10 @@ class Producao(models.Model):
     lote = models.OneToOneField("estoque.Lote", null=True, blank=True, on_delete=models.PROTECT)
     custo_total = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     custo_unitario = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    # consumo pendente (DEC-F2-005/033): justificativa dada ao iniciar ou concluir sem saldo;
+    # o custo fica pendente até cada pendência ser conciliada com um lote
+    pendente_justificativa = models.CharField(max_length=200, blank=True)
+    custo_pendente = models.BooleanField(default=False)
     iniciada_em = models.DateTimeField(auto_now_add=True)
     encerrada_em = models.DateTimeField(null=True, blank=True)
 
