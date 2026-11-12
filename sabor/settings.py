@@ -27,6 +27,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.environ.get("SABOR_DEBUG", "1") == "1"
 SECRET_KEY = os.environ["SABOR_SECRET_KEY"] if not DEBUG else os.environ.get("SABOR_SECRET_KEY", "dev-insegura")
 ALLOWED_HOSTS = os.environ.get("SABOR_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+# Token da API do agente de voz (/api/agente/). Vazio = API desligada.
+AGENTE_TOKEN = os.environ.get("SABOR_AGENTE_TOKEN", "")
 
 
 # Application definition
@@ -44,6 +46,7 @@ INSTALLED_APPS = [
     'estoque',
     'fichas',
     'producao',
+    'agente',
 ]
 
 MIDDLEWARE = [
