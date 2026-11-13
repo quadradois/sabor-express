@@ -1,0 +1,25 @@
+{% load formato %}
+{# De qual lote pegar (Plano 9). Vem de `separacao_venda`/`separacao_encomenda`; "peguei de outro lote" são os campos lote_{chave}_{lote}. #}
+<section class="bloco separacao">
+  <h2>De onde pegar</h2>
+  {% if passada %}<p class="aviso">Venda de {{ sep.data_venda|date:"d/m/Y" }}: a validade é julgada naquele dia.</p>{% endif %}
+  {% for x in painel %}{% with l=x.linha %}
+  <div class="bloco">
+    <p><strong>{{ l.produto }}</strong> <span class="mudo">({{ l.forma|forma_nome|lower }}, {{ l.estado|conservacao|lower }})</span> — {{ l.unidades|numero }} un</p>
+    <ul class="separar">{% for lo in l.lotes %}
+      <li>Pegar <strong>{{ lo.unidades|numero }} un</strong> do <strong>{{ lo.nome }}</strong> <span class="mudo">(código {{ lo.codigo }})</span>
+        {% if lo.validade %} · vence {{ lo.validade|date:"d/m" }}{% endif %}{% if lo.vencido %} <span class="falta">vencido</span>{% endif %}
+        · {% if lo.sobra <= 0 %}o lote zera{% else %}sobram {{ lo.sobra|numero }} un nele{% endif %}</li>
+    {% empty %}<li><span class="falta">Não há de onde pegar.</span></li>{% endfor %}</ul>
+    {% for a in l.avisos %}<p class="aviso">{{ a.texto }}</p>{% endfor %}
+    <details {% if l.lotes_indicados %}open{% endif %}><summary>Peguei de outro lote</summary>
+      <p class="mudo">Digite quantas unidades você pegou de cada lote e toque em "Atualizar a separação". O que não for digitado sai pelo que vence primeiro.</p>
+      {% for d in x.disponiveis %}<p><label>{{ d.nome }} <span class="mudo">(código {{ d.codigo }}{% if d.validade %}, vence {{ d.validade|date:"d/m" }}{% endif %}, {{ d.livre|numero }} livres)</span>{% if d.vencido %} <span class="falta">vencido</span>{% endif %}
+        <input name="lote_{{ x.chave }}_{{ d.lote_id }}" value="{{ d.digitado }}" inputmode="numeric" placeholder="0"></label></p>
+      {% empty %}<p class="mudo">Nenhum outro lote com saldo livre.</p>{% endfor %}
+    </details>
+  </div>{% endwith %}{% endfor %}
+  {% include "web/_motivo_vencido.html" with aberto=sep.precisa_motivo|default:pede_motivo valor=p.motivo_vencido %}
+  <input type="hidden" name="visto" value="{{ visto }}">
+  <button type="submit" name="acao" value="separar" formnovalidate>Atualizar a separação</button>
+</section>

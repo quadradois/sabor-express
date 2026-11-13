@@ -109,6 +109,8 @@ def producao(request, id):
             _acao_preparo(request, p)
         except RegraViolada as e:
             messages.error(request, str(e))
+            if "motivo" in str(e).lower() and request.POST.get("acao") == "concluir":
+                return redirect(f"{reverse('producao', args=[p.id])}?motivo=1")  # reabre com o campo do motivo
         return redirect("producao", id=p.id)
     ctx = {"p": p, "linhas": p.linhas.select_related("item"), "n": len(p.etapas),
            "cronometros": p.cronometros.filter(parado_em__isnull=True).order_by("fim")}
@@ -119,6 +121,8 @@ def producao(request, id):
         ctx["video"] = e["midia"].lower().endswith((".mp4", ".webm", ".mov"))
     elif p.etapa_atual == p.fechamento:
         ctx["form"] = ConclusaoForm(initial={"quantidade_boa": p.unidades})
+        if not request.GET.get("motivo"):  # o motivo do vencido só aparece quando o sistema pediu
+            del ctx["form"].fields["motivo_vencido"]
     return render(request, "web/producao.html", ctx)
 
 
@@ -170,6 +174,7 @@ def tamanho_novo(request):
 @login_required
 def lote(request, id):
     l = get_object_or_404(Lote.objects.select_related("item"), id=id)
+    pede_motivo = False
     if request.method == "POST":
         form = TransferenciaForm(request.POST)
         if form.is_valid():
@@ -177,14 +182,18 @@ def lote(request, id):
             try:
                 transferir_estado(lote_id=l.id, quantidade=d["quantidade"], de=d["de"], para=d["para"],
                                   validade_manual=d["validade_manual"], justificativa=d["justificativa"],
+                                  motivo_vencido=(d["motivo_vencido"] or "").strip(),
                                   autor=request.user.username, canal="web", chave=d["chave"])
             except RegraViolada as e:
                 form.add_error(None, str(e))
+                pede_motivo = "motivo" in str(e).lower()
             else:
                 messages.success(request, "Conservação alterada.")
                 return redirect("lote", id=l.id)
     else:
         form = TransferenciaForm()
+    if not (pede_motivo or form.data.get("motivo_vencido")):  # o motivo do vencido só aparece quando pedido
+        del form.fields["motivo_vencido"]
     estados = [dados_etiqueta(l, e) | {"estado": e} for e, _ in ESTADOS if saldo_lote(l, e) != 0]
     vencidos = {p["estado"] for p in porcoes(item=l.item_id) if p["lote_id"] == l.id and p["vencido"]}
     return render(request, "web/lote.html", {"l": l, "estados": estados, "origem": origem(l), "form": form,
