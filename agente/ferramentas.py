@@ -12,7 +12,7 @@ devolve `confirmar` + `proposta_id` e só `confirmar_proposta` executa; o nível
 3 ("nunca") não tem ferramenta e o núcleo recusa. Toda gravação passa por
 `nucleo.operacoes.executar` com canal="agente". A lógica está em
 `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`, `agente/vendas.py` e
-`agente/propostas.py`.
+`agente/propostas.py`; custos, margens e relatórios (só leitura) em `agente/custos.py`.
 """
 
 import functools
@@ -25,7 +25,7 @@ from django.db import close_old_connections
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from . import acoes, compras, consultas, decisoes, vendas
+from . import acoes, compras, consultas, custos, decisoes, vendas
 from .consultas import ConsultaInvalida
 from nucleo.operacoes import RegraViolada
 
@@ -44,7 +44,10 @@ INSTRUCOES = (
     "Caixa de decisões: cada item tem um número (decisao_id), que é o que o dono diz (\"aprova a doze\"); "
     "aprovar uma decisão sempre passa pelo 'confirmar'; recusar exige o motivo dito pelo dono. "
     "Vendas e encomendas: passe produto, apresentação e cliente pelo nome falado; o preço é sempre o da tabela "
-    "(nunca diga um preço que não veio do sistema). registrar_recebimento só anota que o cliente pagou."
+    "(nunca diga um preço que não veio do sistema). registrar_recebimento só anota que o cliente pagou. "
+    "Custos e margens: são sempre estimados; diga \"margem estimada\" e, do resultado, \"antes das despesas\"; "
+    "nunca chame de lucro, nunca calcule diferença, porcentagem ou ponto (já vêm prontos no 'texto') e nunca "
+    "recomende preço. Sem dado, diga que não há dado."
 )
 
 AUTOR = "agente-mcp"
@@ -321,6 +324,62 @@ def ver_a_receber(cliente: str = "", situacao: str = "todas", dias: int = 7) -> 
 def ver_sobras() -> dict:
     """"Sobrou frito?": salgados fritos ainda no estoque (sobras do balcão), de quando são e quanto de cada."""
     return vendas.ver_sobras()
+
+
+# custos, margens e relatórios (Plano 7): só leitura, tudo estimado
+
+@leitura
+def ver_custo(produto: str) -> dict:
+    """"Quanto me custa uma coxinha?": custo estimado de uma unidade do produto (ou de uma preparação, como a
+    massa) pela ficha e pela última compra de cada ingrediente: ingredientes, cru e frito (com óleo), e o que não
+    inclui. Ingrediente nunca comprado deixa o custo incompleto (diz qual falta). 'produto' é o nome falado."""
+    return custos.ver_custo(produto)
+
+
+@leitura
+def ver_margem(periodo: str = "semana", agrupar: str = "produto", comparar: bool = True) -> dict:
+    """"Qual minha margem esta semana?", "a margem caiu?": margem ESTIMADA das vendas do período, com a variação
+    em pontos sobre o mesmo trecho do período anterior ('comparar') e quantos itens de venda ficaram fora (custo
+    não confiável). 'periodo': hoje, ontem, semana, semana passada, mes, mes passado, ultimos 7 dias, ultimos 30
+    dias. 'agrupar': produto, apresentacao, cliente, tabela ou dia."""
+    return custos.ver_margem(periodo, agrupar, comparar)
+
+
+@leitura
+def ver_margem_tabela(produto: str = "") -> dict:
+    """Margem ESTIMADA de cada preço de tabela (varejo e atacado) pelo custo da ficha de hoje e a embalagem.
+    'produto' filtra pelo nome falado. Não sugere preço."""
+    return custos.ver_margem_tabela(produto)
+
+
+@leitura
+def ver_mais_vendidos(periodo: str = "mes", ordem: str = "receita") -> dict:
+    """"O que mais vende?", "o que dá mais margem?": produtos do período do maior para o menor, com a participação
+    no total. 'ordem': receita, unidades ou margem (estimada). 'periodo' como em ver_margem."""
+    return custos.ver_mais_vendidos(periodo, ordem)
+
+
+@leitura
+def ver_previsto_realizado(producao_id: int | None = None, periodo: str = "semana", produto: str = "") -> dict:
+    """"A última produção rendeu quanto?": previsto × realizado das produções concluídas — rendimento (boas sobre
+    planejadas), ingrediente que passou do previsto e custo previsto × real. Com 'producao_id', só ela; senão o
+    'periodo' (como em ver_margem), filtrado por 'produto' se dito."""
+    return custos.ver_previsto_realizado(producao_id, periodo, produto)
+
+
+@leitura
+def ver_relatorio(periodo: str = "mes") -> dict:
+    """"Como foi o mês?": vendas, margem estimada, perdas com valor, resultado ESTIMADO ANTES DAS DESPESAS (não é
+    lucro), produção, compras, dinheiro anotado e contas em aberto hoje, com as ressalvas. 'periodo' como em
+    ver_margem."""
+    return custos.ver_relatorio(periodo)
+
+
+@leitura
+def ver_evolucao_preco(item: str) -> dict:
+    """"A farinha subiu?": preço de cada compra do item (por quilo, litro ou unidade), a variação da última sobre
+    a anterior e desde a primeira compra. 'item' é o nome falado."""
+    return custos.ver_evolucao_preco(item)
 
 
 # --- nível 1: faz e repete -------------------------------------------------

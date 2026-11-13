@@ -152,15 +152,15 @@ Padrão das telas existentes: login obrigatório, sem rolagem horizontal a 360 p
 Todas de **leitura (nível 0)**. O agente repete os números do retorno, sempre dizendo "estimada" e, se perguntado, o que não inclui.
 
 ### Task 12: Leitura (nível 0)
-- [ ] Ferramentas da tabela "Ferramentas MCP sugeridas".
-- [ ] Produto e item por **nome falado** (sem acento, sem caixa, como `agente.vendas`); ambíguo → pergunta.
+- [x] Ferramentas da tabela "Ferramentas MCP sugeridas".
+- [x] Produto e item por **nome falado** (sem acento, sem caixa, como `agente.vendas`); ambíguo → pergunta.
 
 ### Task 13: `ver_vendas` com margem
-- [ ] Liberar a margem: `ver_vendas` pode citar `margens(de, ate)["totais"]["margem_pct"]` **com o rótulo**, ou deixar a margem só em `ver_margem` (escolha da fase 2b; registrar em pendências).
+- [x] Liberar a margem: `ver_vendas` pode citar `margens(de, ate)["totais"]["margem_pct"]` **com o rótulo**, ou deixar a margem só em `ver_margem` (escolha da fase 2b; registrar em pendências).
 
 ### Task 14: Instruções
-- [ ] `docs/agente-instrucoes-custos.md` (padrão de `docs/agente-instrucoes-vendas.md`): "quanto custa uma coxinha?", "qual a minha margem esta semana?", "a margem caiu?", "o que mais vende?", "a última produção rendeu quanto?", "como foi o mês?", "a farinha subiu?". Seção "O que pode e o que não pode dizer" (ver contrato).
-- [ ] `docs/agente-mcp.md`: tabela das ferramentas novas.
+- [x] `docs/agente-instrucoes-custos.md` (padrão de `docs/agente-instrucoes-vendas.md`): "quanto custa uma coxinha?", "qual a minha margem esta semana?", "a margem caiu?", "o que mais vende?", "a última produção rendeu quanto?", "como foi o mês?", "a farinha subiu?". Seção "O que pode e o que não pode dizer" (ver contrato).
+- [x] `docs/agente-mcp.md`: tabela das ferramentas novas.
 
 ---
 
