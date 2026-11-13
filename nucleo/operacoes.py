@@ -10,6 +10,23 @@ class RegraViolada(Exception):
     """Erro de regra de negócio; a mensagem (pt-BR) é mostrada ao usuário."""
 
 
+_DEPOIS = []  # quem quer saber de cada gravação confirmada (a caixa de decisões se atualiza na hora)
+
+
+def depois_de_gravar(f):
+    """Registra `f(nome)` para rodar depois que uma operação é confirmada no banco. Nunca derruba a operação."""
+    _DEPOIS.append(f)
+    return f
+
+
+def _avisar(nome):
+    for f in _DEPOIS:
+        try:
+            f(nome)
+        except Exception:  # noqa: BLE001 — a gravação já valeu; quem escuta não pode quebrá-la
+            pass
+
+
 def _sucesso(chave):
     return RegistroOperacao.objects.filter(chave=chave, status="sucesso").first()
 
@@ -53,4 +70,6 @@ def executar(nome, func, *, autor, canal="web", chave=None, parametros: dict | N
         except Exception:
             pass  # nunca mascarar a exceção original
         raise
+    if _DEPOIS:
+        transaction.on_commit(lambda: _avisar(nome))
     return resultado
