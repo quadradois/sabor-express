@@ -25,6 +25,9 @@ from vendas.models import Reserva
 from web.templatetags.formato import dinheiro, quantidade
 
 from .consultas import DIAS_ENCOMENDAS, DIAS_RECEBIMENTO, DIAS_VALIDADE
+from nucleo.operacoes import _json
+
+from .models import Decisao
 from .servicos import expirar_decisoes, sincronizar
 
 DIAS_CONTAS = 3  # a caixa avisa a conta que vence em até 3 dias (o resumo mostra a semana)
@@ -339,6 +342,30 @@ GERADORES = {
     "receber_vencidas": receber_vencidas_,
     "sobras_fritas": sobras_fritas_,
 }
+
+
+_SEM_ATUALIZAR = {"gerar_decisoes", "expirar_decisoes", "gerar_despesas_do_mes"}  # as da própria rotina
+
+
+def atualizar_caixa(nome="", *, hoje=None) -> list[str]:
+    """A caixa acompanha o que acabou de ser gravado, sem esperar a rotina: resolveu o lote, a pergunta some na
+    hora. Só sincroniza o gerador cujo retrato mudou (não enche o histórico) e devolve quais mudaram."""
+    if nome in _SEM_ATUALIZAR:
+        return []
+    hoje = hoje or timezone.localdate()
+    mudaram = []
+    for origem, gerar in GERADORES.items():
+        try:
+            itens = gerar(hoje)
+            agora = {i["assunto"]: (i["texto"], _json(i.get("detalhes") or {})) for i in itens}
+            vigentes = list(Decisao.objects.filter(origem=origem, vigente=True))
+            if ({d.assunto for d in vigentes} != set(agora)
+                    or any(d.situacao == "pendente" and (d.texto, d.detalhes) != agora[d.assunto] for d in vigentes)):
+                sincronizar(origem=origem, itens=itens, autor="rotina", canal="sistema")
+                mudaram.append(origem)
+        except Exception:  # noqa: BLE001 — a rotina de 2 em 2 horas acerta depois
+            continue
+    return mudaram
 
 
 def rodar_rotina(*, hoje=None, autor="rotina", canal="sistema") -> dict:

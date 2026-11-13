@@ -354,6 +354,26 @@ def test_conferencia_do_vencido_pergunta_uma_vez_e_as_tres_respostas(coxinha):
     assert caixa("lotes_vencidos") == [] and Decisao.objects.get(origem="lotes_vencidos").situacao == "sem_efeito"
 
 
+def test_caixa_se_atualiza_na_hora_sem_esperar_a_rotina(coxinha, django_capture_on_commit_callbacks):
+    v = lote(coxinha, 10, validade=dia(-1), codigo="V1")
+    rodar_rotina()
+    assert len(caixa("lotes_vencidos")) == 1
+    with django_capture_on_commit_callbacks(execute=True):
+        registrar_perda(lote_id=v.id, estado="congelado", quantidade=4, motivo="vencido", destino="descarte",
+                        autor="dono")
+    assert "6 un no lote V1" in caixa("lotes_vencidos")[0]["texto"]  # números em dia, sem rodar a rotina
+    with django_capture_on_commit_callbacks(execute=True):
+        registrar_perda(lote_id=v.id, estado="congelado", quantidade=6, motivo="vencido", destino="descarte",
+                        autor="dono")
+    assert caixa("lotes_vencidos") == [] and Decisao.objects.get(origem="lotes_vencidos").situacao == "sem_efeito"
+    n = RegistroOperacao.objects.count()
+    with django_capture_on_commit_callbacks(execute=True):
+        lote(coxinha, 5, validade=dia(30), codigo="N1")
+        ajustar_contagem(lote_id=Lote.objects.get(codigo="N1").id, estado="congelado", contado=4, motivo="contei",
+                         autor="dono")
+    assert RegistroOperacao.objects.count() == n + 1  # nada mudou na caixa: só a operação entra no histórico
+
+
 def test_contagem_acha_mais_ou_menos_que_o_reservado(coxinha):
     l = lote(coxinha, 10, validade=dia(10))
     apr = apresentacao(coxinha)
