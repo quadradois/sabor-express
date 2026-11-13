@@ -10,9 +10,6 @@ from cadastros.servicos import criar_tamanho
 from estoque.etiquetas import dados_etiqueta, registrar_impressao
 from estoque.models import ESTADOS, Lote, Movimento
 from estoque.servicos import entrada_manual, saldo_lote, transferir_estado
-from compras.consultas import falta_receber
-from estoque.servicos import consumos_pendentes
-from financeiro.consultas import avisos_de_ajuste, contas_a_vencer, contas_vencidas
 from fichas.escala import escalar
 from nucleo.operacoes import RegraViolada
 from producao.models import Producao
@@ -20,13 +17,6 @@ from producao.servicos import (origem, cancelar_producao, concluir_producao, ini
                                ir_para_etapa, parar_cronometro, registrar_peso, usar_previsto_restantes)
 
 from .forms import ConclusaoForm, EntradaForm, PesoForm, ProducaoForm, ReceitaForm, TamanhoForm, TransferenciaForm
-
-
-@login_required
-def inicio(request):
-    return render(request, "web/inicio.html", {
-        "vencidas": len(contas_vencidas()), "a_vencer": len(contas_a_vencer(dias=7)),
-        "falta": len(falta_receber()), "avisos": len(avisos_de_ajuste()), "pendentes": len(consumos_pendentes())})
 
 
 @login_required

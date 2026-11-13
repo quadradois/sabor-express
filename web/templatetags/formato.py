@@ -35,3 +35,24 @@ def minutos(seg):
 def chave():
     """Chave de idempotência nova a cada render: cada formulário do POST leva a sua."""
     return format_html('<input type="hidden" name="chave" value="{}">', uuid.uuid4().hex)
+
+
+@register.filter
+def bonito(valor):
+    """JSON legível (parâmetros e resultados da trilha), com acentos."""
+    import json
+    return json.dumps(valor, ensure_ascii=False, indent=2, default=str)
+
+
+@register.filter
+def idade(quando):
+    """Há quanto tempo: "agora", "há 5 min", "há 3 h", "há 2 dia(s)"."""
+    from django.utils import timezone
+    seg = max(0, int((timezone.now() - quando).total_seconds()))
+    if seg < 60:
+        return "agora"
+    if seg < 3600:
+        return f"há {seg // 60} min"
+    if seg < 86400:
+        return f"há {seg // 3600} h"
+    return f"há {seg // 86400} dia(s)"

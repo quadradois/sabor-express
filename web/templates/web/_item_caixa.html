@@ -1,0 +1,17 @@
+{% load formato %}
+<section class="bloco">
+  <p><span class="falta">{{ d.origem_rotulo }}</span> <small>{{ d.criada_em|idade }}{% if d.tipo == "aviso" %} · aviso{% endif %}</small></p>
+  <p>{{ d.texto }}</p>
+  {% if d.ultimo_erro %}<p class="erro">Não deu para aprovar: {{ d.ultimo_erro.erro }}</p>{% endif %}
+  {% if d.links %}<p>{% for rotulo, alvo in d.links %}<a href="{% if alvo|length == 2 %}{% url alvo.0 alvo.1 %}{% else %}{% url alvo.0 %}{% endif %}">{{ rotulo }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  {% if d.situacao == "pendente" %}
+  <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="decisao" value="{{ d.decisao_id }}"><input type="hidden" name="next" value="{{ next }}">
+    <button type="submit" name="acao" value="aprovar">{% if d.tipo == "aviso" %}Dar ciência{% else %}Aprovar{% endif %}</button></form>
+  {% if d.tipo == "decisao" %}<details class="cancelar"><summary>Recusar</summary>
+    <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="decisao" value="{{ d.decisao_id }}"><input type="hidden" name="next" value="{{ next }}">
+      <div class="campo"><label>Motivo (obrigatório)<input name="motivo" required></label></div>
+      <button type="submit" name="acao" value="recusar">Recusar</button></form></details>{% endif %}
+  {% else %}
+  <p><strong>{{ d.situacao_rotulo }}</strong>{% if d.decidida_em %} por {{ d.decidida_por }} em {{ d.decidida_em|date:"d/m/Y H:i" }}{% endif %}{% if d.motivo %} · motivo: {{ d.motivo }}{% endif %}</p>
+  {% endif %}
+</section>

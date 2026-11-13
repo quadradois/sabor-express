@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% block titulo %}Caixa de decisões{% endblock %}
+{% block conteudo %}
+<h1>Caixa de decisões</h1>
+{% include "web/_mensagens.html" %}
+<nav class="navegar">{% for k, nome in situacoes.items %}<a href="?situacao={{ k }}"{% if k == filtro %} aria-current="page"{% endif %}>{% if k == filtro %}<strong>{{ nome }}</strong>{% else %}{{ nome }}{% endif %}</a>{% endfor %}</nav>
+{% if filtro == "pendente" %}
+<h2>Decisões ({{ decisoes|length }})</h2>
+{% for d in decisoes %}{% include "web/_item_caixa.html" %}{% empty %}<p>Nenhuma decisão esperando.</p>{% endfor %}
+<h2>Avisos ({{ avisos|length }})</h2>
+{% for d in avisos %}{% include "web/_item_caixa.html" %}{% empty %}<p>Nenhum aviso.</p>{% endfor %}
+{% else %}
+{% for d in itens %}{% include "web/_item_caixa.html" %}{% empty %}<p>Nada por aqui.</p>{% endfor %}
+{% endif %}
+<p><a href="{% url 'inicio' %}">Voltar para Hoje</a> · <a href="{% url 'historico' %}">Histórico de operações</a></p>
+{% endblock %}
