@@ -480,6 +480,15 @@ def test_ver_indireto_real_os_74_centavos(bolinha_a_5, bolinha, mes):
     assert f"Incompleto: falta o valor de Internet de {MES}; o real pode ser maior." in t
 
 
+def test_ver_indireto_real_sem_despesa_nao_diz_zero(bolinha_a_5, bolinha):
+    p = iniciar_producao(produto_id=bolinha.id, unidades=10, forma="cru", pendente_justificativa="teste",
+                         autor="dono")["producao_id"]
+    Producao.objects.filter(id=p).update(status="concluida", quantidade_boa=4000, encerrada_em=timezone.now())
+    t = falado(chamar("ver_indireto_real"))
+    assert "nenhuma despesa da produção lançada" in t and "não dá para conferir" in t
+    assert "a referência cadastrada é 74 centavos" in t and "zero" not in t and "abaixo" not in t
+
+
 # --- resumo do dia, caixa de decisões e contas ------------------------------------------------------
 
 def test_resumo_do_dia_e_caixa_falam_as_despesas_sem_duplicar(mes):

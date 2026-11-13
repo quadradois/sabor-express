@@ -879,6 +879,11 @@ def ver_indireto_real(mes=""):
     if not r["unidades_produzidas"]:
         texto = (f"Em {quando_txt}, nenhuma produção concluída: sem salgados para dividir as despesas, não dá "
                  "para conferir o indireto.")
+    elif not r["despesas_indiretas"]:
+        texto = (f"Em {quando_txt}, nenhuma despesa da produção lançada (mão de obra, energia, gás e diária): sem "
+                 "elas, não dá para conferir o indireto"
+                 + (f"; a referência cadastrada é {_rs(r['referencia_un'])}" if r["referencia_un"] is not None else "")
+                 + ".")
     else:
         texto = (f"Conferência dos indiretos de {quando_txt}: {_un(r['unidades_produzidas'])} boas produzidas; as "
                  f"despesas da produção (mão de obra, energia, gás e diária) somam {reais(r['despesas_indiretas'])}"
