@@ -6,7 +6,7 @@ Branch `claude/onda3-nucleo-decisoes-8cbc69`. Suíte: 284 testes verdes; `makemi
 
 - App novo `decisoes` (não em `nucleo`, que não importa os apps de domínio, nem em `agente`, que é uma camada acima). O registro `decisoes.servicos.OPERACOES` é separado de `agente.propostas.OPERACOES` pelo mesmo motivo.
 - `aprovar_decisao` chama o serviço da operação **dentro** do próprio `executar()`: a operação aninhada usa a chave da decisão e grava o seu próprio `RegistroOperacao` (autor = quem aprovou, canal = de onde aprovou). Se o serviço recusa, as duas desfazem e a trilha guarda `aprovar_decisao` com status "erro"; o "último erro" da decisão é lido da trilha (`parametros.decisao_id`), sem campo próprio.
-- A pendência de aprovação "já aprovada" é verificada **antes** do `executar()`: repetir não cria um `aprovar_decisao` novo na trilha.
+- O caso "já aprovada" é verificado **antes** do `executar()`: repetir não cria um `aprovar_decisao` novo na trilha.
 - Geradores devolvem `detalhes` com os dicts das consultas de origem (serializados em JSON), para a tela montar links sem consulta extra.
 - `estoque.servicos.porcoes` calcula a validade da porção pela entrada mais antiga (mesma regra de `validade_porcao`), enquanto `agente.consultas.validades` usa o menor `validade` de qualquer movimento da porção. Na prática coincidem (saídas não levam validade).
 
