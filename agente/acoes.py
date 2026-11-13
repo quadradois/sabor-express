@@ -278,30 +278,42 @@ def _proposta(operacao, parametros, resumir, autor, canal):
             "expira_em": timezone.localtime(p.expira_em).isoformat(timespec="seconds")}
 
 
-def propor_iniciar_producao(*, produto, unidades, forma="cru", autor, canal):
+def propor_iniciar_producao(*, produto, unidades, forma="cru", justificativa_falta="", autor, canal):
     prod = resolver_produto(produto)
     unidades, forma = _inteiro(unidades, "unidades"), _forma(forma)
-    return _proposta("iniciar_producao", {"produto_id": prod.id, "unidades": unidades, "forma": forma},
-                     lambda r: f"Iniciar a produção de {unidades} {prod.nome}, {forma}", autor, canal)
+    parametros = {"produto_id": prod.id, "unidades": unidades, "forma": forma}
+    falta = (justificativa_falta or "").strip()
+    if falta:
+        parametros["pendente_justificativa"] = falta
+    return _proposta("iniciar_producao", parametros,
+                     lambda r: f"Iniciar a produção de {unidades} {prod.nome}, {forma}" + (
+                         f", mesmo faltando estoque ({falta}): o que faltar fica pendente de conciliar" if falta else ""),
+                     autor, canal)
 
 
 def propor_concluir_producao(*, quantidade_boa, conservacao, perdas=0, motivo_perdas="", anotacao="",
-                             validade="", justificativa="", producao_id=None, autor, canal):
+                             validade="", justificativa="", justificativa_falta="", producao_id=None, autor, canal):
     p = producao_alvo(producao_id)
     boa, perdas = _inteiro(quantidade_boa, "quantidade_boa"), _inteiro(perdas or 0, "perdas")
     estado = _estado(conservacao)
     parametros = {"producao_id": p.id, "quantidade_boa": boa, "perdas": perdas, "perda_motivo": motivo_perdas,
                   "estado": estado, "validade_manual": _data(validade, "validade"), "justificativa": justificativa,
                   "anotacao": anotacao, "confirmar_perda_total": boa == 0}
+    if (justificativa_falta or "").strip():
+        parametros["pendente_justificativa"] = justificativa_falta.strip()
 
     def resumir(r):
+        from .compras import pendentes_txt
+
         t = f"Concluir a produção {p.id} de {p.unidades} {p.produto.nome}: "
         perda = f"{perdas} perdida{'s' if perdas > 1 else ''} ({motivo_perdas.strip()})" if perdas else ""
+        pendente = (f". Sem estoque, fica pendente de conciliar: {pendentes_txt(r['pendentes'])}"
+                    if r.get("pendentes") else "")
         if boa == 0:
-            return t + "PERDA TOTAL, nenhuma unidade boa" + (f", {perda}" if perda else "")
+            return t + "PERDA TOTAL, nenhuma unidade boa" + (f", {perda}" if perda else "") + pendente
         lote = Lote.objects.get(id=r["lote_id"])
         return (t + f"{boa} boa{'s' if boa > 1 else ''}" + (f", {perda}" if perda else "")
-                + f", {estado}, validade {_data_br(lote.validade)}")
+                + f", {estado}, validade {_data_br(lote.validade)}" + pendente)
 
     return _proposta("concluir_producao", parametros, resumir, autor, canal)
 
@@ -357,7 +369,8 @@ def _depois(p) -> str:
     if p.operacao == "iniciar_producao":
         prod = Producao.objects.get(id=p.resultado["producao_id"])
         return f" É a produção {prod.id}. {descrever_etapa(prod)} {_falta_pesar(prod)}"
-    return ""
+    from .compras import depois  # compras importa este módulo
+    return depois(p)
 
 
 def confirmar(proposta_id, *, autor):
