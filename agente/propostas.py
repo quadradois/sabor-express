@@ -21,10 +21,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from cadastros.servicos import criar_tamanho
+from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento,
+                              receber_bonificacao, receber_compra, registrar_compra)
 from estoque.servicos import entrada_manual, transferir_estado
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada, _json
-from producao.servicos import cancelar_producao, concluir_producao, iniciar_producao
+from financeiro.servicos import estornar_pagamento, registrar_pagamento
+from producao.servicos import cancelar_producao, concluir_producao, conciliar_consumo, iniciar_producao
 
 from .models import Proposta
 
@@ -38,6 +41,20 @@ class Operacao:
     datas: tuple = ()
 
 
+def registrar_e_receber_compra(*, recebimento, autor, canal, chave=None, **compra) -> dict:
+    """"Comprei e já chegou": lança a compra e recebe tudo, cada passo uma operação do núcleo.
+
+    `recebimento` = [{"validade", "lote_codigo"}] na ordem das linhas. O recebimento usa a chave
+    da proposta + ":receber": confirmar de novo depois de uma falha no meio só refaz o que faltou.
+    """
+    r = registrar_compra(**compra, autor=autor, canal=canal, chave=chave)
+    linhas = [{"linha_id": l["linha_id"], "quantidade": c["quantidade"], "unidade": c["unidade"], **extra}
+              for l, c, extra in zip(r["linhas"], compra["linhas"], recebimento)]
+    rec = receber_compra(compra_id=r["compra_id"], linhas=linhas, autor=autor, canal=canal,
+                         chave=f"{chave}:receber" if chave else None)
+    return {**r, "recebimento": rec}
+
+
 OPERACOES = {
     "iniciar_producao": Operacao(iniciar_producao),
     "concluir_producao": Operacao(concluir_producao, datas=("validade_manual",)),
@@ -45,6 +62,18 @@ OPERACOES = {
     "transferir_estado": Operacao(transferir_estado, datas=("validade_manual",)),
     "entrada_manual": Operacao(entrada_manual, decimais=("quantidade", "custo_total"), datas=("validade",)),
     "criar_tamanho": Operacao(criar_tamanho, decimais=("peso_g", "oleo_ref_un")),
+    # compras e contas a pagar: os serviços aceitam números e datas como texto
+    "registrar_compra": Operacao(registrar_compra),
+    "registrar_e_receber_compra": Operacao(registrar_e_receber_compra),
+    "receber_compra": Operacao(receber_compra),
+    "encerrar_pendencia": Operacao(encerrar_pendencia),
+    "cancelar_compra": Operacao(cancelar_compra),
+    "estornar_recebimento": Operacao(estornar_recebimento),
+    "devolver_ao_fornecedor": Operacao(devolver_ao_fornecedor),
+    "receber_bonificacao": Operacao(receber_bonificacao),
+    "registrar_pagamento": Operacao(registrar_pagamento),
+    "estornar_pagamento": Operacao(estornar_pagamento),
+    "conciliar_consumo": Operacao(conciliar_consumo),
 }
 
 

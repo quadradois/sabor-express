@@ -63,7 +63,7 @@ def test_ferramentas_de_escrita_com_alcada():
     async def acao(s):
         return (await s.list_tools()).tools
     escrita = {t.name for t in _sessao(acao) if not t.annotations.readOnlyHint}
-    assert escrita == {
+    assert escrita >= {  # compras e contas a pagar: test_mcp_agente_compras
         "registrar_peso", "usar_previsto", "proxima_etapa", "ir_para_etapa", "iniciar_cronometro",
         "parar_cronometro", "registrar_etiqueta",  # nível 1
         "iniciar_producao", "concluir_producao", "cancelar_producao", "mudar_conservacao", "entrada_estoque",
@@ -280,8 +280,10 @@ def test_entrada_com_custo_negativo_recusada(farinha):
     assert r == {"erro": "O custo total não pode ser negativo."}
 
 
-def test_nada_de_apagar_ou_pagar():
-    async def acao(s):
-        return (await s.list_tools()).tools
-    nomes = {t.name for t in _sessao(acao)}
-    assert not {n for n in nomes if any(p in n for p in ("apagar", "excluir", "pagar", "estornar"))}
+def test_nada_de_apagar_e_dinheiro_so_com_o_sim():
+    from agente.ferramentas import REGISTRO
+    nomes = {f.nome: f.nivel for f in REGISTRO}
+    assert not {n for n in nomes if any(p in n for p in ("apagar", "excluir"))}
+    # pagamento é só anotação, e como estorno, espera o "sim" (nível 2)
+    assert {n: v for n, v in nomes.items() if "pagamento" in n or "estornar" in n} == {
+        "registrar_pagamento": 2, "estornar_pagamento": 2, "estornar_recebimento": 2}

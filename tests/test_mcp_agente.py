@@ -38,8 +38,8 @@ def test_lista_as_ferramentas_de_consulta():
     async def acao(s):
         return (await s.list_tools()).tools
     ferramentas = {t.name: t for t in _sessao(acao) if t.annotations.readOnlyHint}
-    assert set(ferramentas) == {"consultar_estoque", "ver_validades", "buscar_produtos",
-                                "calcular_receita", "ver_producoes", "ver_producao"}
+    assert set(ferramentas) >= {"consultar_estoque", "ver_validades", "buscar_produtos",
+                                "calcular_receita", "ver_producoes", "ver_producao"}  # compras: test_mcp_agente_compras
     assert ferramentas["calcular_receita"].inputSchema["required"] == ["produto", "unidades"]
 
 

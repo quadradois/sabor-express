@@ -160,14 +160,14 @@ Padrão das telas existentes: templates Django, login obrigatório, `{% chave %}
 Padrão de `agente/ferramentas.py`: nomes falados resolvidos por `consultas.escolher` (fornecedor, item, compra pelo fornecedor e data), nível 0 consulta, 1 faz e repete, 2 cria `Proposta` simulada e espera o "sim". Quantidades com `texto` falado, dinheiro com texto "R$ 12,50". Registrar cada operação nova em `agente.propostas.OPERACOES` (os serviços já aceitam números e datas como texto, inclusive dentro de `linhas` e `parcelas`; `decimais`/`datas` só precisam ser listados para os parâmetros de topo, se a ferramenta mandar Decimal).
 
 ### Task 13: Consultas (nível 0)
-- [ ] `ver_compras_em_aberto`, `ver_falta_receber`, `ver_compra`, `ver_contas` (vencidas e a vencer), `ver_divida_fornecedores`, `ver_consumos_pendentes`, `ver_avisos_de_ajuste`, `buscar_fornecedores`, `ultimo_preco`.
+- [x] `ver_compras_em_aberto`, `ver_falta_receber`, `ver_compra`, `ver_contas` (vencidas e a vencer), `ver_divida_fornecedores`, `ver_consumos_pendentes`, `ver_avisos_de_ajuste`, `buscar_fornecedores`, `ultimo_preco`.
 
 ### Task 14: Escrita (nível 1 e 2)
-- [ ] Ferramentas da tabela de alçada abaixo, cada uma montando o resumo falado a partir do resultado da simulação (`alertas` de duplicata entram no "Confirma?").
-- [ ] Testes no padrão de `tests/test_mcp_agente_escrita.py`: proposta não grava; confirmar grava uma vez; confirmar duas vezes não duplica.
+- [x] Ferramentas da tabela de alçada abaixo, cada uma montando o resumo falado a partir do resultado da simulação (`alertas` de duplicata entram no "Confirma?").
+- [x] Testes no padrão de `tests/test_mcp_agente_escrita.py`: proposta não grava; confirmar grava uma vez; confirmar duas vezes não duplica.
 
 ### Task 15: Documentação e skill
-- [ ] `docs/agente-mcp.md`: tabela de ferramentas e exemplos ("comprei 10 kg de farinha no Atacadão por 60 reais, a prazo para dia 30").
+- [x] `docs/agente-mcp.md`: tabela de ferramentas e exemplos ("comprei 10 kg de farinha no Atacadão por 60 reais, a prazo para dia 30").
 - [ ] Contas a vencer no resumo da manhã quando a fila de tarefas existir (design §6.7; Plano 4).
 
 ---
