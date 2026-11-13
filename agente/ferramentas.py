@@ -665,6 +665,18 @@ def receber_compra(fornecedor: str = "", item: str = "", quantidade: float | Non
 
 
 @escrita(2)
+def reabrir_pendencia(fornecedor: str = "", item: str = "", quantidade: float | None = None, unidade: str = "",
+                      validade: str = "", lote: str = "", compra_id: int | None = None) -> dict:
+    """Propõe reabrir uma pendência que tinha sido encerrada como não entregue e já dar entrada do que chegou
+    ("o Atacadão acabou mandando os 2 kg de farinha"). Entra pelo custo da compra original, sem conta nova.
+    Sem 'quantidade', recebe tudo o que tinha sido encerrado. Só use depois de o dono dizer que o fornecedor
+    entregou. Não grava: pede confirmação."""
+    return compras.propor_reabrir_pendencia(fornecedor=fornecedor, item=item, quantidade=quantidade, unidade=unidade,
+                                            validade=validade, lote=lote, compra_id=compra_id,
+                                            autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
 def encerrar_pendencia(motivo: str, fornecedor: str = "", item: str = "", compra_id: int | None = None) -> dict:
     """Propõe encerrar o que falta entregar de uma compra (o fornecedor não vai mandar o resto). Sem 'item',
     encerra tudo o que falta da compra. A conta não muda; gera um aviso de ajuste. Não grava: pede confirmação."""

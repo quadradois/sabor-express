@@ -14,7 +14,7 @@ from cadastros.models import Fornecedor, Item
 from cadastros.servicos import salvar_fornecedor
 from compras.models import Compra, Recebimento
 from compras.servicos import receber_compra, registrar_compra
-from estoque.models import ConsumoPendente
+from estoque.models import ConsumoPendente, Lote
 from estoque.servicos import saldo
 from financeiro.models import AvisoAjuste, Pagamento
 from financeiro.servicos import registrar_pagamento
@@ -456,3 +456,21 @@ def test_produzir_sem_estoque_e_conciliar_quando_chega(bolinha, atacadao):
     assert (p.custo_pendente, p.custo_total) == (False, D("5.00"))
     assert saldo(farinha) == D("1000")
     assert chamar("ver_consumos_pendentes")["texto"] == "Nenhum consumo pendente."
+
+
+def test_reabrir_pendencia_encerrada_e_receber(atacadao, farinha):
+    cid = comprar(atacadao, farinha, "10", "kg", "60")["compra_id"]
+    l = Compra.objects.get().linhas.get()
+    receber_compra(compra_id=cid, linhas=[{"linha_id": l.id, "quantidade": "8"}], autor="dono")
+    assert chamar("reabrir_pendencia", fornecedor="Atacadão") == {"erro": "Nenhuma pendência encerrada para reabrir."}
+    confirmar(chamar("encerrar_pendencia", fornecedor="Atacadão", motivo="acabou no fornecedor"))
+    erro = chamar("receber_compra", fornecedor="Atacadão", item="farinha", quantidade=2, unidade="kg")["erro"]
+    assert f"2 kg de Farinha de trigo da compra {cid}, fornecedor Atacadão" in erro and "reabrir_pendencia" in erro
+    r = chamar("reabrir_pendencia", fornecedor="Atacadão", item="farinha")
+    assert r["confirmar"] == (f"Reabrir a pendência da compra {cid}, fornecedor Atacadão, e receber 2 kg de Farinha "
+                              "de trigo, pelo custo da compra e sem conta nova. Com isso a compra fica completa. "
+                              "Confirma?")
+    assert Compra.objects.get().status == "encerrada"
+    confirmar(r)
+    assert Compra.objects.get().status == "recebida" and Compra.objects.count() == 1
+    assert len(set(Lote.objects.values_list("custo_unitario", flat=True))) == 1

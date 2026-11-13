@@ -49,6 +49,16 @@ def falta_receber(*, compra_id=None, item_id=None) -> list[dict]:
             for l in qs if (d := _linha(l, hoje))["pendente"] > 0]
 
 
+def pendencias_encerradas(*, compra_id=None) -> list[dict]:
+    """Linhas com quantidade encerrada como não entregue (podem ser reabertas se o fornecedor entregar depois)."""
+    hoje = timezone.localdate()
+    qs = (LinhaCompra.objects.select_related("item", "compra__fornecedor").filter(encerrado__gt=0)
+          .exclude(compra__status="cancelada").order_by("-compra__data", "-compra_id", "ordem"))
+    if compra_id:
+        qs = qs.filter(compra_id=compra_id)
+    return [{**_linha(l, hoje), "compra_id": l.compra_id, "fornecedor": l.compra.fornecedor.nome} for l in qs]
+
+
 def detalhe_compra(compra_id) -> dict | None:
     c = Compra.objects.select_related("fornecedor", "operacao").filter(id=compra_id).first()
     if c is None:

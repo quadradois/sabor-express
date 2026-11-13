@@ -207,6 +207,9 @@ def _acao_compra(request, c):
         ids = [int(i) for i in post.getlist("linha_ids")] or None
         cs.encerrar_pendencia(compra_id=c["compra_id"], motivo=post.get("motivo", ""), linha_ids=ids, **kw)
         messages.success(request, "Pendência encerrada. Um aviso de ajuste foi criado sobre a conta.")
+    elif acao == "reabrir":
+        cs.reabrir_pendencia(compra_id=c["compra_id"], motivo=post.get("motivo", ""), **kw)
+        messages.success(request, "Pendência reaberta. Agora registre o recebimento do que chegou.")
     elif acao == "estornar_recebimento":
         cs.estornar_recebimento(recebimento_id=_id(post.get("recebimento_id"), "Recebimento"),
                                 motivo=post.get("motivo", ""), **kw)
@@ -234,7 +237,9 @@ def compra(request, id):
         except RegraViolada as e:
             messages.error(request, str(e))
         return redirect("compra", id=id)
-    return render(request, "web/compra.html", {"c": c, "aberta": c["status"] in cc.ABERTAS})
+    return render(request, "web/compra.html", {"c": c, "aberta": c["status"] in cc.ABERTAS,
+                                               "encerrado": c["status"] != "cancelada"
+                                               and any(l["encerrado"] > 0 for l in c["linhas"])})
 
 
 @login_required

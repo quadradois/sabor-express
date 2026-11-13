@@ -37,6 +37,11 @@
   <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="encerrar">
     <p><label>Motivo <input name="motivo"></label></p><button type="submit">Encerrar pendência</button></form></details>
 {% endif %}
+{% if encerrado %}
+<details class="cancelar"><summary>Reabrir pendência (o fornecedor entregou depois)</summary>
+  <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="reabrir">
+    <p><label>Motivo <input name="motivo"></label></p><button type="submit">Reabrir pendência</button></form></details>
+{% endif %}
 {% if c.status != "cancelada" %}
 <details class="cancelar"><summary>Cancelar compra</summary>
   <form method="post" class="form">{% csrf_token %}{% chave %}<input type="hidden" name="acao" value="cancelar">

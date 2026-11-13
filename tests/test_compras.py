@@ -8,7 +8,7 @@ from cadastros.models import Conversao, Fornecedor, Item
 from cadastros.servicos import salvar_fornecedor
 from compras.consultas import compras_em_aberto, detalhe_compra, falta_receber, possiveis_duplicatas, ultimo_custo
 from compras.models import Compra, LinhaCompra
-from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento,
+from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento, reabrir_pendencia,
                               receber_bonificacao, receber_compra, registrar_compra)
 from estoque.models import Lote, Movimento
 from estoque.servicos import saldo, saldo_lote
@@ -334,3 +334,22 @@ def test_fornecedor_repetido_ignora_acento_e_caixa(atacadao):
     with pytest.raises(RegraViolada, match="Já existe o fornecedor 'Atacadão Centro'"):
         salvar_fornecedor(fornecedor_id=atacadao.id, nome="ATACADAO CENTRO", autor="dono")
     salvar_fornecedor(fornecedor_id=atacadao.id, nome="Atacadão Centro 2", ativo=False, autor="dono")
+
+
+def test_reabrir_pendencia_quando_o_fornecedor_entrega_depois(atacadao, farinha):
+    r = farinha_10kg(atacadao, farinha)
+    cid, lid = r["compra_id"], r["linhas"][0]["linha_id"]
+    receber_compra(compra_id=cid, linhas=[{"linha_id": lid, "quantidade": D("8")}], autor="dono")
+    with pytest.raises(RegraViolada, match="Não há pendência encerrada"):
+        reabrir_pendencia(compra_id=cid, motivo="chegou", autor="dono")
+    encerrar_pendencia(compra_id=cid, motivo="fornecedor sem estoque", autor="dono")
+    with pytest.raises(RegraViolada, match="Informe o motivo"):
+        reabrir_pendencia(compra_id=cid, motivo=" ", autor="dono")
+    x = reabrir_pendencia(compra_id=cid, motivo="entregou depois", autor="dono")
+    assert x["status"] == "parcial" and D(x["linhas"][0]["reaberto"]) == D("2000")
+    assert falta_receber()[0]["pendente"] == D("2000")
+    assert "pendência reaberta de 2 kg de Farinha de trigo" in avisos_de_ajuste()[-1]["texto"]
+    receber_compra(compra_id=cid, linhas=[{"linha_id": lid, "quantidade": D("2")}], autor="dono")
+    assert Compra.objects.get().status == "recebida" and Conta.objects.get().total == D("60")
+    custos = set(Lote.objects.values_list("custo_unitario", flat=True))
+    assert len(custos) == 1  # os 2 kg entram pelo custo da própria compra, sem conta nova
