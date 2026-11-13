@@ -19,6 +19,12 @@ def quantidade(q, unidade_base):
 
 
 @register.filter
+def numero(q):
+    """Número para preencher campo de formulário: vírgula decimal, sem milhar e sem zeros à toa (12,000 -> 12)."""
+    return quantidade(q, "un").removesuffix(" un")
+
+
+@register.filter
 def dinheiro(v):
     """R$ com vírgula decimal e ponto de milhar: 1234.5 -> "R$ 1.234,50"."""
     v = Decimal(v).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -56,3 +62,16 @@ def idade(quando):
     if seg < 86400:
         return f"há {seg // 3600} h"
     return f"há {seg // 86400} dia(s)"
+
+
+@register.filter
+def conservacao(estado):
+    """"congelado" -> "Congelado" (o rótulo do estoque); desconhecido volta como veio."""
+    from estoque.models import ESTADOS
+    return dict(ESTADOS).get(estado, estado)
+
+
+@register.filter
+def forma_nome(forma):
+    from estoque.models import FORMAS
+    return dict(FORMAS).get(forma, forma)

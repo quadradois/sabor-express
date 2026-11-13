@@ -1,0 +1,14 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Clientes — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Clientes</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'cliente_novo' %}">Novo cliente</a> <a href="{% url 'receber' %}">Contas a receber</a></p>
+<ul class="linhas">
+{% for c in clientes %}<li><a class="nome" href="{% url 'cliente' c.cliente_id %}">{{ c.nome }}</a>{% if c.contato %}<span>{{ c.contato }}</span>{% endif %}
+  {% if c.divida %}<a href="{% url 'receber' %}?cliente={{ c.cliente_id }}">deve {{ c.divida.devido|dinheiro }}</a>{% if c.divida.vencido %} <strong class="falta">vencido {{ c.divida.vencido|dinheiro }}</strong>{% endif %}{% endif %}
+  {% if not c.ativo %}<strong class="falta">inativo</strong>{% endif %}</li>
+{% empty %}<li>Nenhum cliente cadastrado.</li>{% endfor %}
+</ul>
+{% endblock %}

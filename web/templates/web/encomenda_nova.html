@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Nova encomenda — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Nova encomenda</h1>
+{% include "web/_mensagens.html" %}
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Cliente <select name="cliente"><option value="">—</option>{% for c in clientes %}<option value="{{ c.cliente_id }}" {% if p.cliente == c.cliente_id|stringformat:"s" %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></label>
+     <a href="{% url 'cliente_novo' %}">cadastrar cliente</a></p>
+  <p><label>Dia da entrega ou retirada <input type="date" name="entrega_data" value="{{ p.entrega_data|default:'' }}" min="{{ hoje|date:'Y-m-d' }}"></label></p>
+  <p><label>Hora (opcional) <input type="time" name="entrega_hora" value="{{ p.entrega_hora|default:'' }}"></label></p>
+  <p>{% for v, nome in modos %}<label><input type="radio" name="modo" value="{{ v }}" {% if p.modo == v or not p.modo and v == "retirada" %}checked{% endif %}> {{ nome }}</label> {% endfor %}</p>
+  <p><label>Tabela <select name="tabela">{% for v, nome in tabelas %}<option value="{{ v }}" {% if p.tabela == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Observação (opcional) <input name="observacao" value="{{ p.observacao|default:'' }}"></label></p>
+  <h2>O que o cliente pediu</h2>
+  {% include "web/_grade_itens.html" %}
+  <h2>Sinal</h2>
+  <p><label>Sinal já pago (R$, opcional) <input name="sinal" value="{{ p.sinal|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Forma do sinal (pix, dinheiro...) <input name="sinal_forma" value="{{ p.sinal_forma|default:'' }}"></label></p>
+  <button type="submit">Criar encomenda</button>
+</form>
+{% endblock %}

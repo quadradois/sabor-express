@@ -1,0 +1,24 @@
+{% load formato %}
+{# grade de apresentações: quantidade com − e +, preço de tabela e preço combinado (opcional) #}
+{% for a in grade %}{% ifchanged a.produto %}<h3>{{ a.produto }}</h3>{% endifchanged %}
+<div class="bloco item-venda">
+  <p><strong>{{ a.nome }}</strong> <span class="mudo">({{ a.forma|forma_nome|lower }}, {{ a.estado|conservacao|lower }})</span></p>
+  <p>Varejo {{ a.preco_varejo|dinheiro }}{% if a.preco_atacado %} · Atacado {{ a.preco_atacado|dinheiro }}{% else %} · sem preço de atacado{% endif %}</p>
+  <p>{% if a.livre_apresentacoes %}Dá para vender <strong>{{ a.livre_apresentacoes }}</strong>{% else %}<span class="falta">Sem estoque para vender</span>{% endif %}
+     {% if a.unidades > 1 %}<span class="mudo">({{ a.unidades }} un cada)</span>{% endif %}</p>
+  <div class="qtd">
+    <button type="button" class="menos" aria-label="Tirar um">−</button>
+    <input type="text" name="qtd_{{ a.apresentacao_id }}" value="{{ a.qtd }}" inputmode="numeric" placeholder="0" aria-label="Quantidade de {{ a.produto }} {{ a.nome }}">
+    <button type="button" class="mais" aria-label="Pôr um">+</button>
+  </div>
+  <p><label>Preço combinado (R$, vazio = tabela) <input name="preco_{{ a.apresentacao_id }}" value="{{ a.preco_digitado }}" inputmode="decimal"></label></p>
+</div>
+{% empty %}<p>Nenhuma apresentação cadastrada. <a href="{% url 'preco_novo' %}">Cadastrar preço</a></p>{% endfor %}
+<script>
+document.querySelectorAll('.qtd').forEach(function (d) {
+  var campo = d.querySelector('input');
+  function mexe(n) { campo.value = Math.max(0, (parseInt(campo.value, 10) || 0) + n) || ''; }
+  d.querySelector('.menos').addEventListener('click', function () { mexe(-1); });
+  d.querySelector('.mais').addEventListener('click', function () { mexe(1); });
+});
+</script>

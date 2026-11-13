@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Preço — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>{% if a %}{{ a.produto }} — {{ a.nome }}{% else %}Novo preço{% endif %}</h1>
+{% include "web/_mensagens.html" %}
+{% if a %}<p class="aviso">Depois de vendida, a apresentação não muda de produto, forma, conservação nem unidades. Para isso, crie outra e inative esta.</p>{% endif %}
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Salgado <select name="produto"><option value="">—</option>{% for i in produtos %}<option value="{{ i.id }}" {% if d.produto == i.id|stringformat:"s" %}selected{% endif %}>{{ i.nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Nome (unidade, caixa com 25, cento...) <input name="nome" value="{{ d.nome|default:'' }}"></label></p>
+  <p><label>Forma <select name="forma">{% for v, nome in formas %}<option value="{{ v }}" {% if d.forma == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Conservação <select name="estado">{% for v, nome in estados %}<option value="{{ v }}" {% if d.estado == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Unidades em cada <input name="unidades" value="{{ d.unidades|default:'1' }}" inputmode="numeric"></label></p>
+  <p><label>Preço de varejo (R$) <input name="preco_varejo" value="{{ d.preco_varejo|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Preço de atacado (R$, opcional) <input name="preco_atacado" value="{{ d.preco_atacado|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Embalagem (opcional) <select name="embalagem"><option value="">— nenhuma —</option>{% for i in embalagens %}<option value="{{ i.id }}" {% if d.embalagem == i.id|stringformat:"s" %}selected{% endif %}>{{ i.nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Quantas embalagens em cada <input name="embalagens" value="{{ d.embalagens|default:'' }}" inputmode="decimal"></label></p>
+  <p><label><input type="checkbox" name="ativo" value="1" {% if d.ativo %}checked{% endif %}> Ativa (aparece na venda)</label></p>
+  <button type="submit">Salvar</button>
+</form>
+<p><a href="{% url 'precos' %}">Voltar</a></p>
+{% endblock %}

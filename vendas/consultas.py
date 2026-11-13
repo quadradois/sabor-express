@@ -261,3 +261,14 @@ def lotes_para_fritar(*, produto_id, hoje=None) -> list[dict]:
         if livre > 0:
             saida.append({**p, "livre": livre, "custo_unitario": lote.custo_unitario})
     return saida
+
+
+# ---------- prévia ----------
+
+def total_dos_itens(*, itens, tabela="varejo") -> Decimal:
+    """Total que `registrar_venda`/`criar_encomenda` gravariam para estes itens (`[{apresentacao_id, quantidade,
+    preco?}]`), pela mesma leitura de preço do serviço. Não grava nem checa estoque; serve para a tela dividir
+    as parcelas de uma venda a prazo sem fazer conta. Recusa como o serviço (item inválido, sem preço de atacado)."""
+    from .servicos import _ler_itens
+
+    return sum((l["total"] for l in _ler_itens(itens, tabela)), ZERO)

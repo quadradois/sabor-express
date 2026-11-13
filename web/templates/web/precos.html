@@ -1,0 +1,15 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Preços — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Preços</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'preco_novo' %}">Novo preço</a> <a href="{% url 'vender' %}">Vender</a></p>
+{% for a in lista %}{% ifchanged a.produto %}<h2>{{ a.produto }}</h2>{% endifchanged %}
+<p class="bloco"><a href="{% url 'preco' a.apresentacao_id %}"><strong>{{ a.nome }}</strong></a> ({{ a.forma|forma_nome|lower }}, {{ a.estado|conservacao|lower }}, {{ a.unidades }} un)
+  {% if not a.ativo %}<strong class="falta">inativa</strong>{% endif %}<br>
+  Varejo {{ a.preco_varejo|dinheiro }} · {% if a.preco_atacado %}Atacado {{ a.preco_atacado|dinheiro }}{% else %}sem atacado{% endif %}
+  {% if a.embalagem %}· embalagem: {{ a.embalagem }}{% endif %}<br>
+  <span class="mudo">Dá para vender {{ a.livre_apresentacoes }}</span></p>
+{% empty %}<p>Nenhuma apresentação cadastrada.</p>{% endfor %}
+{% endblock %}

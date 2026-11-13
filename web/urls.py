@@ -1,7 +1,8 @@
 from django.contrib.auth import views as auth
 from django.urls import path
 
-from . import views, views_compras as vc, views_decisoes as vd
+from . import (views, views_compras as vc, views_decisoes as vd, views_fritura as vf, views_receber as vr,
+               views_vendas as vv)
 
 urlpatterns = [
     path("", vd.hoje, name="inicio"),
@@ -28,6 +29,25 @@ urlpatterns = [
     path("contas/estornar/", vc.estornar_pagamento, name="estornar_pagamento"),
     path("avisos/", vc.avisos, name="avisos"),
     path("consumos/", vc.consumos, name="consumos"),
+    path("vender/", vv.vender, name="vender"),
+    path("vendas/", vv.vendas, name="vendas"),
+    path("vendas/<int:id>/cancelar/", vv.cancelar_venda, name="cancelar_venda"),
+    path("encomendas/", vv.encomendas, name="encomendas"),
+    path("encomendas/nova/", vv.encomenda_nova, name="encomenda_nova"),
+    path("encomendas/<int:id>/", vv.encomenda, name="encomenda"),
+    path("necessidade/", vv.necessidade, name="necessidade"),
+    path("fritura/", vf.fritura, name="fritura"),
+    path("sobras/", vf.sobras, name="sobras"),
+    path("lotes/<int:id>/descartar/", vf.descartar, name="descartar"),
+    path("clientes/", vv.clientes, name="clientes"),
+    path("clientes/novo/", vv.cliente_form, name="cliente_novo"),
+    path("clientes/<int:id>/", vv.cliente_form, name="cliente"),
+    path("precos/", vv.precos, name="precos"),
+    path("precos/novo/", vv.preco_form, name="preco_novo"),
+    path("precos/<int:id>/", vv.preco_form, name="preco"),
+    path("receber/", vr.receber, name="receber"),
+    path("receber/anotar/", vr.anotar_recebimento, name="anotar_recebimento"),
+    path("receber/estornar/", vr.estornar_recebimento, name="estornar_recebimento_cliente"),
     path("entrar/", auth.LoginView.as_view(), name="login"),
     path("sair/", auth.LogoutView.as_view(), name="logout"),
 ]
