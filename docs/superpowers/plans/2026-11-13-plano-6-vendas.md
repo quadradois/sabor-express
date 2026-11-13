@@ -22,7 +22,7 @@
 |---|---|---|---|
 | **1 — Núcleo** | esta sessão | modelos, migrações, serviços sobre `executar()`, consultas, geradores, resumo do dia, admin, testes | **feita** (Tasks 1–8) |
 | **2a — Telas** | sessão paralela, só `web/` | vender, encomendas, necessidade de produção, fritura e sobras, clientes, preços, contas a receber, blocos novos em "Hoje" (Tasks 9–14) | a fazer |
-| **2b — Ferramentas MCP** | sessão paralela, só `agente/` e `docs/` do agente | ferramentas de leitura e de escrita com alçada, instruções do agente de voz (Tasks 15–18) | a fazer |
+| **2b — Ferramentas MCP** | sessão paralela, só `agente/` e `docs/` do agente | ferramentas de leitura e de escrita com alçada, instruções do agente de voz (Tasks 15–18) | **feita** (pendências em `2026-11-13-plano-6-pendencias-agente.md`) |
 
 As fases 2a e 2b não mexem em modelo nem em serviço; se precisarem de algo do núcleo, pedem à coordenação. O contrato estável está no fim deste documento.
 
@@ -143,23 +143,23 @@ Padrão das telas existentes: login obrigatório, `{% chave %}` em todo POST, `R
 Padrão de `agente/ferramentas.py` (nível 0 lê, 1 faz e repete, 2 cria `Proposta` e espera o "sim"). Quem fala é a equipe da cozinha. O agente nunca calcula preço, total ou falta: repete os números do retorno.
 
 ### Task 15: Leitura (nível 0)
-- [ ] `ver_precos(produto="")` → `apresentacoes`; `ver_estoque_para_venda` → `estoque_para_venda`.
-- [ ] `ver_vendas(periodo="hoje")` → `vendas` (fala os `totais`).
-- [ ] `ver_encomendas(dia="")`, `ver_encomenda(encomenda_id)` → `encomendas`/`encomendas_do_dia`/`detalhe_encomenda`.
-- [ ] `ver_necessidade_producao` → `necessidade_producao`.
-- [ ] `ver_a_receber(cliente="")` → `receber_vencidas`, `receber_a_vencer`, `devido_por_cliente`.
-- [ ] `ver_sobras` → `sobras_fritas`.
+- [x] `ver_precos(produto="")` → `apresentacoes`; `ver_estoque_para_venda` → `estoque_para_venda`.
+- [x] `ver_vendas(periodo="hoje")` → `vendas` (fala os `totais`).
+- [x] `ver_encomendas(dia="")`, `ver_encomenda(encomenda_id)` → `encomendas`/`encomendas_do_dia`/`detalhe_encomenda`.
+- [x] `ver_necessidade_producao` → `necessidade_producao`.
+- [x] `ver_a_receber(cliente="")` → `receber_vencidas`, `receber_a_vencer`, `devido_por_cliente`.
+- [x] `ver_sobras` → `sobras_fritas`.
 
 ### Task 16: Escrita
-- [ ] Ferramentas da tabela "Ferramentas MCP sugeridas" abaixo, com o nível proposto; registrar em `agente.propostas.OPERACOES` as de nível 2.
-- [ ] Cliente e apresentação por **nome falado**, sem acento e sem caixa (como `agente.compras` faz com fornecedor); ambíguo → pergunta (design §6.2).
+- [x] Ferramentas da tabela "Ferramentas MCP sugeridas" abaixo, com o nível proposto; registrar em `agente.propostas.OPERACOES` as de nível 2.
+- [x] Cliente e apresentação por **nome falado**, sem acento e sem caixa (como `agente.compras` faz com fornecedor); ambíguo → pergunta (design §6.2).
 
 ### Task 17: Ver e decidir a caixa nova
-- [ ] `agente.decisoes._efeito` ganha a frase de `completar_reserva` ("vou reservar para a encomenda N o que houver no estoque").
+- [x] `agente.decisoes._efeito` ganha a frase de `completar_reserva` ("vou reservar para a encomenda N o que houver no estoque").
 
 ### Task 18: Instruções
-- [ ] `docs/agente-instrucoes-vendas.md` (padrão de `docs/agente-instrucoes-compras.md`): "vendi…", "encomenda do…", "fritei…", "joga fora…", "o João pagou…", "quanto o João deve?", "o que tem de encomenda amanhã?", "o que falta produzir?". Sempre repetir apresentação, quantidade, preço e total do retorno; nunca dizer "vendido" antes do retorno do núcleo (RN-39).
-- [ ] `docs/agente-mcp.md`: tabela das ferramentas novas.
+- [x] `docs/agente-instrucoes-vendas.md` (padrão de `docs/agente-instrucoes-compras.md`): "vendi…", "encomenda do…", "fritei…", "joga fora…", "o João pagou…", "quanto o João deve?", "o que tem de encomenda amanhã?", "o que falta produzir?". Sempre repetir apresentação, quantidade, preço e total do retorno; nunca dizer "vendido" antes do retorno do núcleo (RN-39).
+- [x] `docs/agente-mcp.md`: tabela das ferramentas novas.
 
 ---
 

@@ -4,8 +4,8 @@ O agente (voz, Telegram, texto) conversa com o Sabor Express por um servidor
 [MCP](https://modelcontextprotocol.io) que roda **dentro** do projeto. As
 ferramentas ficam em `agente/ferramentas.py`; a lógica das consultas, em
 `agente/consultas.py` (a mesma que a API REST provisória `/api/agente/` usa);
-a das gravações, em `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`
-e `agente/propostas.py`.
+a das gravações, em `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`,
+`agente/vendas.py` e `agente/propostas.py`. São 70 ferramentas.
 O sistema faz todas as contas; o modelo só escolhe a ferramenta e fala o
 resultado.
 
@@ -174,7 +174,7 @@ aprovar: ..."), para o dono responder "aprova a doze", "ciente da quinze".
 | `ver_backup` | 0 | — | `situacao_backup()`: último backup (dia e hora), quantos há, se está atrasado (mais de 26 h) ou se não há nenhum. Não devolve o caminho da pasta |
 | `dar_ciencia` | 1 | `decisao_id` | `aprovar_decisao` num **aviso** ("Ciente do número 15: ... Saiu da caixa."); em decisão com operação → erro "precisa de aprovação" |
 | `recusar_decisao` | 1 | `decisao_id`, `motivo` | `recusar_decisao` com o motivo dito pelo dono ("Recusei o número 12 (...). Motivo: ..."); sem motivo → erro pedindo o porquê; aviso não se recusa |
-| `aprovar_decisao` | 2 | `decisao_id` | propõe aprovar: a aprovação (com a operação da decisão, hoje só `conciliar_consumo`) é **simulada** pelo núcleo e o `confirmar` repete o texto da decisão com os números ("Aprovar o número 12: ... Baixa do lote e custo de 5 reais; o custo da produção 3 fica fechado. Confirma?"); só `confirmar_proposta` grava. Aviso → erro "dê ciência" |
+| `aprovar_decisao` | 2 | `decisao_id` | propõe aprovar: a aprovação (com a operação da decisão, `conciliar_consumo` ou `completar_reserva`) é **simulada** pelo núcleo e o `confirmar` repete o texto da decisão com os números ("Aprovar o número 12: ... Baixa do lote e custo de 5 reais; o custo da produção 3 fica fechado. Confirma?"); só `confirmar_proposta` grava. Aviso → erro "dê ciência" |
 
 - **Aprovar executa uma vez só:** a proposta chama
   `decisoes.servicos.aprovar_decisao` com a chave da proposta, e o serviço roda
@@ -207,6 +207,90 @@ agente → dar_ciencia(decisao_id=9)
 
 O trecho para o prompt do agente e um roteiro de teste por voz estão em
 [`agente-instrucoes-decisoes.md`](agente-instrucoes-decisoes.md).
+
+### Vendas, encomendas, fritura e contas a receber
+
+Lógica em `agente/vendas.py` (Plano 6, fase 2b), sobre os serviços e as
+consultas de `vendas`, `producao.fritura`, `estoque` e `financeiro` — nenhuma
+regra nova. O agente fala em **nomes**, nunca em ids: cada item de venda ou
+encomenda é `{produto, quantidade, apresentacao?, forma?, conservacao?}` e o
+sistema acha a apresentação (o jeito de vender, com preço) casando as palavras
+ditas com "produto + apresentação + forma + conservação", ignorando acento,
+caixa e plural ("duas caixas de coxinha congelada" casa "Coxinha 150 g — caixa
+com 25 (cru, congelado)"; "crua", "frita", "geladeira", "freezer", "gramas"
+também valem). Mais de um jeito de vender → `erro` + `opcoes` para perguntar.
+Cliente, encomenda ("a encomenda do João"), venda, parcela e lote são achados
+do mesmo jeito; com mais de um candidato volta `opcoes` com o número para a
+próxima chamada (`encomenda_id`, `venda_id`, `parcela_id`, `pagamento_id`).
+
+- **Preço não muda por voz** (plano 6, Q10): a venda e a encomenda usam o
+  preço da tabela (`tabela` varejo ou atacado); não há desconto nem cadastro de
+  preço por voz.
+- **Venda, entrega, cancelamentos, fritura, perda e recebimento são nível 2**
+  (Q1, Q11): numa cozinha barulhenta "2" e "12", "caixa" e "unidade" se
+  confundem. O "Confirma?" repete quantidade, apresentação, produto, cliente,
+  preço, total e condição calculados pelo núcleo na simulação.
+- **O sistema nunca cobra nada:** `registrar_recebimento` só anota que o
+  cliente pagou. Venda a prazo ("fiado") exige o cliente e o prazo (`prazo_dias`
+  ou `vencimento`); as parcelas são divididas pelo sistema.
+- Dias falados: `hoje`, `amanhã`, `depois de amanhã`, dia da semana ("sábado" =
+  o próximo, hoje incluído) ou `AAAA-MM-DD`; hora `15:30` ou `15h`.
+- `ver_vendas` não devolve margem (o agente não opina sobre margem).
+
+| Ferramenta | Nível | Parâmetros | O que faz |
+|---|---|---|---|
+| `ver_precos` | 0 | `produto=""` | `apresentacoes()`: preço de varejo e atacado de cada jeito de vender e quantas dá para vender agora |
+| `ver_estoque_para_venda` | 0 | `produto=""` | `estoque_para_venda()`: por produto, forma e conservação, o livre, o reservado e o vencido |
+| `buscar_clientes` | 0 | `busca=""` | clientes (nome, contato, ativo) |
+| `ver_vendas` | 0 | `periodo="hoje"` (`ontem`, `semana`, `mes`, `AAAA-MM-DD`), `cliente=""` | `vendas()`: total, recebido na hora por forma de pagamento, a prazo, por produto, canceladas fora da conta; as 20 últimas vendas |
+| `ver_encomendas` | 0 | `dia=""` (`hoje`, `amanhã`, dia da semana, `semana`, `AAAA-MM-DD`), `cliente=""` | `encomendas()` em aberto: prontas (tudo reservado) ou com o que falta reservar; vazio = todas, inclusive as atrasadas |
+| `ver_encomenda` | 0 | `encomenda_id` | `detalhe_encomenda()`: itens, reservado e falta, total, sinal, saldo, situação, observação |
+| `ver_necessidade_producao` | 0 | `dias=3` | `necessidade_producao()`: o que falta, quanto já dá para reservar do estoque livre e quanto produzir; não cria produção |
+| `ver_a_receber` | 0 | `cliente=""`, `situacao="todas"` (`vencidas`, `a_vencer`), `dias=7` | com cliente: quanto deve, quanto venceu e a parcela mais antiga; sem: `devido_por_cliente()` com o total geral |
+| `ver_sobras` | 0 | — | `sobras_fritas()`: fritos ainda no estoque, de quando são |
+| `cadastrar_cliente` | 1 | `nome`, `contato=""` | `salvar_cliente` (recusa nome repetido, mesmo com outra caixa ou sem acento) |
+| `completar_reserva` | 1 | `encomenda_id?`, `cliente=""` | `completar_reserva`: reserva o que entrou no estoque e troca o lote que venceria antes da entrega ("Encomenda 5 de João: reserva completa, está pronta para amanhã.") |
+| `registrar_venda` | 2 | `itens=[{produto, quantidade, apresentacao?, forma?, conservacao?}]`, `cliente=""`, `condicao="a_vista"` (`a_prazo`/"fiado"), `forma_pagamento=""`, `tabela="varejo"`, `prazo_dias?`, `vencimento=""`, `parcelas=1`, `intervalo_dias=30` | `registrar_venda`: baixa pelo que vence primeiro; a prazo vira conta a receber |
+| `cancelar_venda` | 2 | `motivo`, `venda_id?`, `cliente=""`, `destino="perda"` (`estoque`) | `cancelar_venda` inteira; sem número, pelo cliente ou entre as de hoje; cancela o recebível |
+| `criar_encomenda` | 2 | `cliente`, `dia`, `itens`, `hora=""`, `modo="retirada"` (`entrega`), `observacao=""`, `sinal=0`, `sinal_forma=""`, `tabela="varejo"` | `criar_encomenda`: reserva o que há e diz o que falta produzir |
+| `entregar_encomenda` | 2 | `encomenda_id?`, `cliente=""`, `condicao="a_vista"`, `forma_pagamento=""`, `prazo_dias?`, `vencimento=""`, `parcelas=1`, `intervalo_dias=30` | `entregar_encomenda`: vira venda uma vez só; o saldo (total − sinal) entra na hora ou fica a prazo |
+| `cancelar_encomenda` | 2 | `motivo`, `encomenda_id?`, `cliente=""`, `devolver_sinal=true` | `cancelar_encomenda`: libera as reservas; o sinal fica anotado como devolvido ou retido |
+| `registrar_fritura` | 2 | `produto`, `quantidade`, `boas?` (vazio = todas), `motivo_perdas=""`, `conservacao=""` (do cru), `destino="fresco"`, `validade=""`, `justificativa=""` | `registrar_fritura` do lote cru que vence primeiro (`lotes_para_fritar`); cru em duas conservações → `opcoes`; diz o lote, o custo por unidade e a validade do frito |
+| `registrar_perda` | 2 | `produto`, `motivo`, `quantidade?` (vazio = o lote todo), `unidade=""`, `conservacao=""`, `forma=""`, `lote=""`, `vencido=false` | `registrar_perda` de salgado, ingrediente ou embalagem; mais de um lote → `opcoes`; descartar vencido libera a reserva |
+| `registrar_recebimento` | 2 | `cliente=""`, `valor?`, `data_pagamento=""`, `forma=""`, `venda_id?`, `parcela_id?`, `juros=0`, `multa=0`, `desconto=0`, `motivo_diferenca=""` | `registrar_recebimento`: anota que o cliente pagou (parcelas da mesma venda → a mais antiga; vendas diferentes → o `valor` igual ao saldo desfaz, senão `opcoes`) |
+| `estornar_recebimento_cliente` | 2 | `motivo`, `cliente=""`, `pagamento_id?` | `estornar_recebimento_cliente`: a parcela volta a ficar em aberto |
+
+`estornar_recebimento` (sem `_cliente`) continua sendo o de **mercadoria** de
+compra; `registrar_recebimento` é dinheiro de cliente, não `receber_compra`.
+
+```
+usuário: "vendi duas caixas de coxinha congelada pro João, fiado pra 30 dias"
+agente → registrar_venda(itens=[{"produto": "coxinha", "apresentacao": "caixa", "conservacao": "congelada",
+                                 "quantidade": 2}], cliente="João", condicao="fiado", prazo_dias=30)
+       ← {"confirmar": "Vender 2 caixas com 25 de Coxinha 150 g, cru congelado, a 45 reais cada, para João.
+                        Total 90 reais, a prazo, vence em 13 de dezembro. Confirma?", "proposta_id": 40, ...}
+usuário: "sim"
+agente → confirmar_proposta(proposta_id=40)
+       ← {"dito": "Feito: Vender 2 caixas ... É a venda 12.", ...}
+usuário: "o que tem de encomenda amanhã?"
+agente → ver_encomendas(dia="amanhã")
+       ← {"texto": "1 encomenda em aberto para amanhã. Encomenda 5 de Maria, para amanhã às 15h, retirada:
+                    3 caixas com 25 de Coxinha 150 g, frito fresco; falta reservar 75 unidades de ..."}
+```
+
+**Caixa de decisões e resumo do dia com o Plano 6:** `ver_decisoes` reconhece
+as origens novas (`origem`: "encomenda", "fiado"/"devendo", "sobra"); a
+decisão de completar a reserva de uma encomenda se aprova com
+`aprovar_decisao` ("Vou reservar para a encomenda 5 o que houver no estoque;
+ela fica pronta, com tudo reservado. Confirma?"). `ver_resumo_do_dia` ganha os
+assuntos encomendas atrasadas, encomendas de hoje (prontas e faltando),
+contas a receber vencidas, o que falta produzir, sobra de frito, encomendas
+dos próximos dias e vendas de hoje. O texto das decisões é falado sem
+"15/11", "R$ 100,00" nem "30 un" (`agente.decisoes.falavel`); o texto
+original continua em `texto_decisao` de `ver_decisao`.
+
+O trecho para o prompt do agente e um roteiro de teste por voz estão em
+[`agente-instrucoes-vendas.md`](agente-instrucoes-vendas.md).
 
 ### Fluxo de proposta (nível 2)
 

@@ -369,8 +369,9 @@ def _depois(p) -> str:
     if p.operacao == "iniciar_producao":
         prod = Producao.objects.get(id=p.resultado["producao_id"])
         return f" É a produção {prod.id}. {descrever_etapa(prod)} {_falta_pesar(prod)}"
-    from .compras import depois  # compras importa este módulo
-    return depois(p)
+    from .compras import depois  # compras e vendas importam este módulo
+    from .vendas import depois as depois_vendas
+    return depois(p) or depois_vendas(p)
 
 
 def confirmar(proposta_id, *, autor):
