@@ -318,7 +318,19 @@ def test_fornecedor_nome_unico_e_admin_pelo_nucleo(client, atacadao):
         salvar_fornecedor(nome="atacadão", autor="dono")
     salvar_fornecedor(fornecedor_id=atacadao.id, nome="Atacadão Centro", ativo=False, autor="dono")
     assert Fornecedor.objects.get().nome == "Atacadão Centro"
+    salvar_fornecedor(fornecedor_id=atacadao.id, nome="Atacadão", autor="dono")  # o próprio nome não conta
     client.force_login(get_user_model().objects.create_superuser("adm", password="x"))
     client.post("/admin/cadastros/fornecedor/add/", {"nome": "Assaí", "ativo": "on"})
     assert RegistroOperacao.objects.filter(nome="salvar_fornecedor", autor="adm").exists()
     assert client.get("/admin/compras/compra/add/").status_code == 403  # compra só pelos serviços
+
+
+def test_fornecedor_repetido_ignora_acento_e_caixa(atacadao):
+    for nome in ("ATACADÃO", "Atacadao", " atacadão "):
+        with pytest.raises(RegraViolada, match="Já existe o fornecedor 'Atacadão'"):
+            salvar_fornecedor(nome=nome, autor="dono")
+    assert Fornecedor.objects.count() == 1
+    salvar_fornecedor(nome="Atacadão Centro", autor="dono")  # nome diferente continua aceito
+    with pytest.raises(RegraViolada, match="Já existe o fornecedor 'Atacadão Centro'"):
+        salvar_fornecedor(fornecedor_id=atacadao.id, nome="ATACADAO CENTRO", autor="dono")
+    salvar_fornecedor(fornecedor_id=atacadao.id, nome="Atacadão Centro 2", ativo=False, autor="dono")
