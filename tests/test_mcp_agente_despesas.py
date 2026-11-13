@@ -149,7 +149,7 @@ def test_registro_e_alcada_das_ferramentas_de_despesas():
     assert nivel["informar_valor_despesa"] == 1
     assert {n: nivel[n] for n in NIVEL_2} == dict.fromkeys(NIVEL_2, 2)
     t = ferramentas()
-    assert len(t) == len(REGISTRO) == 92  # 77 até o Plano 7 + 11 do Plano 8 + 4 de lotes (Plano 9)
+    assert len(t) == len(REGISTRO) == 93  # 77 até o Plano 7 + 11 do Plano 8 + 4 de lotes (Plano 9)
     assert all(t[n].annotations.readOnlyHint for n in LEITURA)
     # por voz não se cria despesa mensal, categoria, canal, taxa, referência nem preço
     proibidas = ("despesa_mensal", "categoria", "canal", "taxa", "referencia", "mudar_preco", "salvar_preco",

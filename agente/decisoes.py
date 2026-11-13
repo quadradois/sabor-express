@@ -139,6 +139,7 @@ def _texto(d) -> str:
         lote = Lote.objects.filter(id=det["lote_id"]).first()
         if lote is not None:
             t = t.replace(f"no lote {det['codigo']}", f"no {nome(lote)}")
+            t = t.replace(f" ({nome(lote)})", "")  # o texto do último dia já traz o nome: sem dizer duas vezes
     return falavel(t)
 
 
@@ -380,6 +381,18 @@ def ver_resumo_do_dia():
         texto += f" Hoje já foram feitas {_n(feitas, 'operação', 'operações')} no sistema."
     return {"hoje": r["hoje"].isoformat(), "texto": texto, "assuntos": assuntos,
             "totais": {k: (float(v) if not isinstance(v, int) else v) for k, v in t.items()}}
+
+
+def ver_alerta_validade():
+    """O que o Chef diz ao cumprimentar, sem ninguém perguntar: só o que venceu e ainda consta no estoque e o que
+    vence hoje (as perguntas da caixa). Nada disso na caixa: `tem_alerta` falso e texto vazio, ele não fala nada."""
+    itens = _urgentes([d for d in dc.decisoes()
+                       if d["origem"] == "lotes_vencidos"
+                       or (d["origem"] == "lotes_vencendo" and (d.get("detalhes") or {}).get("ultimo_dia"))])
+    texto = ""
+    if itens:
+        texto = "Atenção à validade. " + _e_mais((_sem_ponto(_texto(d)) + "." for d in itens), resto="tem mais")
+    return {"tem_alerta": bool(itens), "total": len(itens), "itens": [_curta(d) for d in itens], "texto": texto}
 
 
 def ver_decisoes(tipo="", origem=""):

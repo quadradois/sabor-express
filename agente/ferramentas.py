@@ -242,6 +242,13 @@ def ver_resumo_do_dia() -> dict:
 
 
 @leitura
+def ver_alerta_validade() -> dict:
+    """Alerta de validade para o cumprimento: lotes que venceram e ainda constam no estoque e lotes que vencem
+    hoje. Se 'tem_alerta' for falso, não há nada a avisar; se for verdadeiro, fale o 'texto'."""
+    return decisoes.ver_alerta_validade()
+
+
+@leitura
 def ver_decisoes(tipo: str = "", origem: str = "") -> dict:
     """"O que tem para decidir?": itens pendentes da caixa, cada um com o número para o dono citar. Decisões para
     aprovar vêm antes dos avisos. 'tipo': decisao, aviso ou vazio (todos). 'origem' filtra pelo assunto falado

@@ -388,6 +388,24 @@ def test_conferencia_nao_sei_conta_e_ajusta(coxinha, unidade):
     assert "no lote do dia" in chamar("ver_decisao", decisao_id=outra.id)["texto"]
 
 
+
+def test_alerta_de_validade_so_fala_vencido_e_o_que_vence_hoje(coxinha, unidade):
+    assert chamar("ver_alerta_validade") == {"tem_alerta": False, "total": 0, "itens": [], "texto": ""}
+    lote(coxinha, 5, validade=dia(2), feito=dia(-1))  # vence depois de amanhã: não entra no alerta
+    rodar_rotina()
+    assert chamar("ver_alerta_validade")["tem_alerta"] is False
+    hoje_ = lote(coxinha, 7, validade=dia(0), feito=dia(-3))
+    venc = lote(coxinha, 18, validade=dia(-1), feito=dia(-5))
+    rodar_rotina()
+    r = chamar("ver_alerta_validade")
+    assert (r["tem_alerta"], r["total"]) == (True, 2) and r["texto"].startswith("Atenção à validade. ")
+    assert [i["origem"] for i in r["itens"]] == ["lotes_vencidos", "lotes_vencendo"]
+    assert nome_lote(venc) in r["texto"] and "vence hoje" in r["texto"] and nome_lote(hoje_) in r["texto"]
+    assert r["texto"].endswith(f"Coxinha 150 g vence hoje: 7 unidades no {nome_lote(hoje_)}, congelado. É o último dia: "
+                               "o que vai fazer com isso? Ainda dá para vender hoje; a partir de amanhã só sai com "
+                               "motivo.")
+
+
 # --- resumo do dia ----------------------------------------------------------------------
 
 def test_resumo_fala_os_lotes_deixados(coxinha, unidade):
