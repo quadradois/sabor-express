@@ -13,7 +13,9 @@ from django.utils import timezone
 from cadastros.models import Item
 from compras.consultas import compras_em_aberto
 from estoque.servicos import alocar_porcoes, consumos_pendentes, itens_abaixo_do_minimo, porcoes, validade_porcao
-from financeiro.consultas import avisos_de_ajuste, contas_a_vencer, contas_vencidas, receber_vencidas
+from financeiro.consultas import (avisos_de_ajuste, contas_a_vencer, contas_vencidas, despesas_sem_valor,
+                                  receber_vencidas)
+from financeiro.despesas import gerar_despesas_do_mes
 from producao.models import LinhaPreparo, Producao
 from vendas.consultas import encomendas, sobras_fritas
 from vendas.models import Reserva
@@ -86,6 +88,23 @@ def contas_a_vencer_(hoje):
     return [{"assunto": f"conta_a_vencer:{p['parcela_id']}",
              "texto": f"Conta a pagar {_quando(p['dias'])} ({_data(p['vencimento'])}): {_conta(p)}.", "detalhes": p}
             for p in contas_a_vencer(dias=DIAS_CONTAS, hoje=hoje)]
+
+
+def despesas_sem_valor_(hoje):
+    """Despesa mensal ainda sem valor perto do vencimento ou vencida. Com valor, a despesa já é conta a pagar e
+    entra em `contas_a_vencer`/`contas_vencidas` (assunto da parcela), então não há aviso em dobro."""
+    saida = []
+    for d in despesas_sem_valor(ate=hoje + timedelta(days=DIAS_CONTAS), hoje=hoje):
+        mes = f"{d['competencia']:%m/%Y}"
+        if d["vencida"]:
+            texto = (f"{d['despesa']} de {mes} venceu em {_data(d['vencimento'])} e ainda não tem valor nem "
+                     f"pagamento. Se já pagou, anote o pagamento com o valor.")
+        else:
+            texto = (f"{d['despesa']} de {mes} vence {_quando(d['dias'])} ({_data(d['vencimento'])}) e ainda não "
+                     f"tem valor. Informe o valor quando a conta chegar.")
+        saida.append({"assunto": f"despesa_sem_valor:{d['despesa_do_mes_id']}:{'vencida' if d['vencida'] else 'a_vencer'}",
+                      "texto": texto, "detalhes": d})
+    return saida
 
 
 def recebimento_atrasado(hoje):
@@ -249,6 +268,7 @@ GERADORES = {
     "estoque_baixo": estoque_baixo,
     "contas_vencidas": contas_vencidas_,
     "contas_a_vencer": contas_a_vencer_,
+    "despesas_sem_valor": despesas_sem_valor_,
     "recebimento_atrasado": recebimento_atrasado,
     "consumo_pendente": consumo_pendente,
     "avisos_ajuste": avisos_ajuste,
@@ -260,10 +280,14 @@ GERADORES = {
 
 
 def rodar_rotina(*, hoje=None, autor="rotina", canal="sistema") -> dict:
-    """Expira o que passou do prazo e roda cada gerador como uma operação própria: a falha de um
+    """Expira o que passou do prazo, gera as despesas mensais do mês (uma vez só) e roda cada gerador como uma operação própria: a falha de um
     não impede os outros (vai para o relatório e, se aconteceu ao gravar, para a trilha com status "erro")."""
     hoje = hoje or timezone.localdate()
     saida = {"hoje": hoje, "expiradas": expirar_decisoes(autor=autor, canal=canal)["expiradas"], "geradores": {}}
+    try:  # antes dos geradores: a despesa do mês recém-gerada já entra nos lembretes desta rodada
+        saida["despesas_do_mes"] = gerar_despesas_do_mes(hoje=hoje, autor=autor, canal=canal)
+    except Exception as e:  # noqa: BLE001 — como os geradores, a falha vai para o relatório
+        saida["despesas_do_mes"] = {"erro": str(e)}
     for origem, gerar in GERADORES.items():
         try:
             saida["geradores"][origem] = sincronizar(origem=origem, itens=gerar(hoje), autor=autor, canal=canal)

@@ -7,8 +7,13 @@ from .models import Item
 
 
 def criar_tamanho(*, ficha_id: int, peso_g: Decimal, oleo_ref_un: Decimal | None = None,
+                  indireto_ref_un: Decimal | None = None,
                   autor: str, canal: str = "web", chave: str | None = None) -> dict:
-    """Cada tamanho de um salgado é um Item de tipo produto que compartilha a ficha."""
+    """Cada tamanho de um salgado é um Item de tipo produto que compartilha a ficha.
+
+    Sem `indireto_ref_un`, herda o do tamanho cadastrado mais recentemente que tenha valor (de qualquer
+    salgado: mão de obra, energia e gás por unidade não dependem do recheio — Plano 8); `indireto_herdado_de`
+    no retorno diz de qual. Sem nenhum, fica vazio ("não inclui indiretos")."""
     from fichas.models import Ficha
     from web.templatetags.formato import quantidade
 
@@ -21,12 +26,47 @@ def criar_tamanho(*, ficha_id: int, peso_g: Decimal, oleo_ref_un: Decimal | None
         nome = f"{ficha.nome} {quantidade(peso_g, 'un').removesuffix(' un')} g"
         if Item.objects.filter(nome=nome).exists():
             raise RegraViolada(f"Esse tamanho já existe: {nome}.")
+        indireto, herdado = indireto_ref_un, None
+        if indireto is None:
+            modelo = (Item.objects.filter(tipo="produto", indireto_ref_un__isnull=False).order_by("-id").first())
+            if modelo:
+                indireto, herdado = modelo.indireto_ref_un, {"item_id": modelo.id, "nome": modelo.nome}
         i = Item.objects.create(nome=nome, tipo="produto", unidade_base="un", controla_validade=True,
-                                ficha=ficha, peso_g=peso_g, oleo_ref_un=oleo_ref_un)
-        return {"item_id": i.id, "nome": nome}
+                                ficha=ficha, peso_g=peso_g, oleo_ref_un=oleo_ref_un, indireto_ref_un=indireto)
+        return {"item_id": i.id, "nome": nome, "indireto_ref_un": indireto, "indireto_herdado_de": herdado}
 
     return executar("criar_tamanho", func, autor=autor, canal=canal, chave=chave,
-                    parametros={"ficha_id": ficha_id, "peso_g": peso_g, "oleo_ref_un": oleo_ref_un})
+                    parametros={"ficha_id": ficha_id, "peso_g": peso_g, "oleo_ref_un": oleo_ref_un,
+                                "indireto_ref_un": indireto_ref_un})
+
+
+def salvar_referencias(*, produto_id, oleo_ref_un=None, indireto_ref_un=None, autor, canal="web",
+                       chave=None) -> dict:
+    """Muda o óleo e os indiretos de referência por unidade de um tamanho (R$; vazio = sem referência).
+    Só pela tela (como o preço): o agente de voz não chama este serviço."""
+    from nucleo.valores import decimal
+
+    def ler(v, campo):
+        if v in (None, ""):
+            return None
+        d = decimal(v, campo).quantize(Decimal("0.0001"))
+        if d < 0:
+            raise RegraViolada("A referência não pode ser negativa.")
+        return d
+
+    def func(op):
+        p = Item.objects.filter(id=produto_id, tipo="produto").first()
+        if p is None:
+            raise RegraViolada("Produto não encontrado.")
+        antes = {"oleo_ref_un": p.oleo_ref_un, "indireto_ref_un": p.indireto_ref_un}
+        p.oleo_ref_un, p.indireto_ref_un = ler(oleo_ref_un, "oleo_ref_un"), ler(indireto_ref_un, "indireto_ref_un")
+        p.save(update_fields=["oleo_ref_un", "indireto_ref_un"])
+        return {"produto_id": p.id, "antes": antes,
+                "depois": {"oleo_ref_un": p.oleo_ref_un, "indireto_ref_un": p.indireto_ref_un}}
+
+    return executar("salvar_referencias", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"produto_id": produto_id, "oleo_ref_un": oleo_ref_un,
+                                "indireto_ref_un": indireto_ref_un})
 
 
 def _normal(s: str) -> str:

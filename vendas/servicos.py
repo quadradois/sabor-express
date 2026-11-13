@@ -22,7 +22,7 @@ from nucleo.valores import CENTAVO, data, decimal, reais
 from web.templatetags.formato import dinheiro
 from web.templatetags.formato import quantidade as fmt_qtd
 
-from .models import CONDICOES, DESTINOS, MODOS, TABELAS, Apresentacao, Encomenda, ItemEncomenda, LinhaVenda, Reserva, Venda
+from .models import CONDICOES, DESTINOS, MODOS, TABELAS, Apresentacao, CanalVenda, Encomenda, ItemEncomenda, LinhaVenda, Reserva, Venda
 
 
 def _inteiro(v, campo) -> int:
@@ -39,6 +39,35 @@ def _rs(v) -> Decimal:
 
 def _un(q) -> str:
     return fmt_qtd(q, "un")
+
+
+# ---------- canais de venda (taxas do estudo de preço, Plano 8) ----------
+
+def salvar_canal_venda(*, nome, taxa_pct=None, ativo=True, canal_id=None, autor, canal="web", chave=None) -> dict:
+    """Cria ou altera um canal de venda e a taxa que ele cobra (% do preço; vazio = não informada).
+    Só pela tela, como o preço."""
+
+    def func(op):
+        n = (nome or "").strip()
+        if not n:
+            raise RegraViolada("Informe o nome do canal.")
+        taxa = None if taxa_pct in (None, "") else decimal(taxa_pct, "taxa_pct").quantize(CENTAVO, ROUND_HALF_UP)
+        if taxa is not None and not 0 <= taxa < 100:
+            raise RegraViolada("A taxa vai de 0% a menos de 100%.")
+        if any(_normal(c.nome) == _normal(n) for c in CanalVenda.objects.exclude(id=canal_id)):
+            raise RegraViolada(f"Já existe o canal '{n}'.")
+        if canal_id is None:
+            c = CanalVenda(ordem=CanalVenda.objects.count() + 1)
+        else:
+            c = CanalVenda.objects.filter(id=canal_id).first()
+            if c is None:
+                raise RegraViolada("Canal não encontrado.")
+        c.nome, c.taxa_pct, c.ativo = n, taxa, bool(ativo)
+        c.save()
+        return {"canal_id": c.id, "nome": c.nome, "taxa_pct": c.taxa_pct}
+
+    return executar("salvar_canal_venda", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"canal_id": canal_id, "nome": nome, "taxa_pct": taxa_pct, "ativo": ativo})
 
 
 # ---------- apresentações (preços) ----------
