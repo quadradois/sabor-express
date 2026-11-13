@@ -12,8 +12,8 @@ from django.utils import timezone
 
 from compras.consultas import compras_em_aberto
 from estoque.servicos import consumos_pendentes, itens_abaixo_do_minimo, porcoes
-from financeiro.consultas import (avisos_de_ajuste, contas_a_vencer, contas_vencidas, parcelas_em_aberto,
-                                  receber_a_vencer, receber_em_aberto, receber_vencidas)
+from financeiro.consultas import (avisos_de_ajuste, contas_a_vencer, contas_vencidas, despesas_sem_valor,
+                                  parcelas_em_aberto, receber_a_vencer, receber_em_aberto, receber_vencidas)
 from nucleo.models import RegistroOperacao
 from producao.models import Producao
 from vendas.consultas import encomendas, necessidade_producao, sobras_fritas, vendas_do_dia
@@ -94,7 +94,8 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
     """O retrato do dia, para a tela Hoje e para "como está o dia?". Não grava nada.
 
     `totais.operacoes_hoje` conta as operações feitas hoje pela cozinha (tela, agente), sem a rotina da caixa
-    (canal "sistema"), que fica em `operacoes_rotina_hoje`. `contas` são as a pagar; `receber`, as a receber. `encomendas.proximas` vai de hoje até hoje +
+    (canal "sistema"), que fica em `operacoes_rotina_hoje`. `contas` são as a pagar (compras e despesas: `origem`
+    diz qual); `despesas.sem_valor`, as despesas mensais ainda sem valor; `receber`, as a receber. `encomendas.proximas` vai de hoje até hoje +
     `dias_encomendas` (as de hoje também estão em `encomendas.hoje`); `sem_estoque` são as próximas com
     algo ainda sem reserva, e `necessidade` diz o que falta produzir para elas.
     """
@@ -121,6 +122,7 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
     sem_estoque = [e["encomenda_id"] for e in atrasadas + proximas if e["falta"] > 0]
     r_vencidas, r_a_vencer = receber_vencidas(hoje=hoje), receber_a_vencer(dias=dias_contas, hoje=hoje)
     sobras = sobras_fritas(hoje=hoje)
+    sem_valor = despesas_sem_valor(ate=hoje + timedelta(days=dias_contas), hoje=hoje)
     return {
         "hoje": hoje,
         "validade": {"dias": dias_validade, "vencidos": vencidos, "vencendo": vencendo,
@@ -143,6 +145,8 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
                     "total_vencido": _soma(r_vencidas, "saldo"), "total_a_vencer": _soma(r_a_vencer, "saldo"),
                     "total_a_receber": _soma(receber_em_aberto(hoje=hoje), "saldo")},
         "sobras_fritas": sobras,
+        # despesa mensal sem valor (vencida ou vencendo na semana); com valor, já está em `contas`
+        "despesas": {"sem_valor": sem_valor, "sem_valor_vencidas": [d for d in sem_valor if d["vencida"]]},
         "totais": {
             "lotes_vencidos": len(vencidos), "lotes_vencendo": len(vencendo),
             "itens_abaixo_do_minimo": len(baixo),
@@ -162,6 +166,7 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
             "receber_vencidas": len(r_vencidas), "valor_receber_vencidas": _soma(r_vencidas, "saldo"),
             "receber_a_vencer": len(r_a_vencer), "valor_receber_a_vencer": _soma(r_a_vencer, "saldo"),
             "sobras_fritas": len(sobras),
+            "despesas_sem_valor": len(sem_valor),
         },
     }
 
@@ -190,6 +195,11 @@ ROTULOS = {
     "registrar_fritura": "Fritura registrada", "registrar_perda": "Perda registrada",
     "registrar_recebimento": "Recebimento de cliente anotado",
     "estornar_recebimento_cliente": "Recebimento de cliente estornado",
+    "salvar_categoria_despesa": "Categoria de despesa salva", "salvar_despesa_mensal": "Despesa mensal salva",
+    "gerar_despesas_do_mes": "Despesas do mês geradas", "lancar_despesa": "Despesa lançada",
+    "cancelar_despesa": "Despesa cancelada", "informar_valor_despesa": "Valor de despesa informado",
+    "pagar_despesa_do_mes": "Despesa do mês paga", "salvar_referencias": "Referências do salgado salvas",
+    "salvar_canal_venda": "Canal de venda salvo",
 }
 
 

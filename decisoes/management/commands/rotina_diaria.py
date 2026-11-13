@@ -1,7 +1,7 @@
 """Rotina da caixa de decisões: `uv run python manage.py rotina_diaria`.
 
 Expira o que passou do prazo e roda os geradores (validade, estoque baixo, contas, recebimento atrasado,
-consumo pendente, avisos de ajuste, sugestão de ficha). Pode rodar quantas vezes quiser: não duplica.
+consumo pendente, avisos de ajuste, sugestão de ficha) e gera as despesas mensais do mês. Pode rodar quantas vezes quiser: não duplica.
 O agendamento (cron/systemd) é da coordenação.
 """
 
@@ -26,6 +26,12 @@ class Command(BaseCommand):
         r = rodar_rotina(hoje=hoje)
         self.stdout.write(f"Rotina de {r['hoje']:%d/%m/%Y}: {r['expiradas']} expiradas.")
         falhou = False
+        dm = r["despesas_do_mes"]
+        if "erro" in dm:
+            falhou = True
+            self.stderr.write(f"  despesas do mês: ERRO {dm['erro']}")
+        else:
+            self.stdout.write(f"  despesas do mês: {len(dm['criadas'])} geradas")
         for origem, g in r["geradores"].items():
             if "erro" in g:
                 falhou = True

@@ -30,6 +30,9 @@ INCLUI_MARGEM = ["preço praticado (já com desconto)",
                  "custo gravado na venda: lotes de salgado baixados e embalagem da apresentação"]
 NAO_INCLUI_MARGEM = ["tributos sobre a venda", "despesas comerciais e operacionais",
                      "indiretos de fabricação (mão de obra, gás, energia)", "ajuste de óleo"]
+# a "margem com indiretos" (Plano 8) desconta, além do custo gravado, o indireto de referência por unidade
+# (`Item.indireto_ref_un`); é referência, não a despesa real do período (essa fica no relatório)
+ROTULO_INDIRETOS = "com indiretos de referência por unidade (mão de obra, energia, gás)"
 
 
 def _rs(v):
@@ -272,6 +275,10 @@ def _linhas_venda(de, ate, *, cliente_id=None, produto_id=None, venda_id=None) -
                     elif quando and quando > v.operacao.criado_em and not motivo:
                         motivo = "custo gravado antes da conciliação do consumo pendente"
         salgado = sum((Decimal(b["custo"]) for b in l.baixas if int(b["item_id"]) == a.produto_id), ZERO)
+        unidades = l.quantidade * l.unidades_por
+        ref = a.produto.indireto_ref_un
+        indiretos = None if ref is None else _rs(unidades * ref)
+        margem = None if motivo else l.total - l.custo
         saida.append({
             "linha_id": l.id, "venda_id": v.id, "data": v.data, "cliente_id": v.cliente_id,
             "cliente": v.cliente.nome if v.cliente else "", "tabela": v.tabela, "apresentacao_id": a.id,
@@ -280,7 +287,11 @@ def _linhas_venda(de, ate, *, cliente_id=None, produto_id=None, venda_id=None) -
             "preco_tabela": l.preco_tabela, "preco": l.preco, "receita": l.total,
             "receita_tabela": _rs(l.preco_tabela * l.quantidade), "custo": l.custo, "custo_salgado": salgado,
             "custo_embalagem": l.custo - salgado, "margem": None if motivo else l.total - l.custo,
-            "margem_pct": None if motivo else _pct(l.total - l.custo, l.total), "fora_motivo": motivo})
+            "margem_pct": None if motivo else _pct(l.total - l.custo, l.total), "fora_motivo": motivo,
+            "indiretos": indiretos,
+            "margem_com_indiretos": None if margem is None or indiretos is None else margem - indiretos,
+            "margem_com_indiretos_pct": (None if margem is None or indiretos is None
+                                         else _pct(margem - indiretos, l.total))})
     return saida
 
 
@@ -303,11 +314,17 @@ def _somar(linhas) -> dict:
     motivos = defaultdict(int)
     for l in fora:
         motivos[l["fora_motivo"]] += 1
+    sem_ref = [l for l in boas if l["indiretos"] is None]
+    indiretos = sum((l["indiretos"] for l in boas if l["indiretos"] is not None), ZERO)
+    com_ind = None if not boas or sem_ref else rc - custo - indiretos
     return {"vendas": len({l["venda_id"] for l in linhas}), "linhas": len(linhas),
             "quantidade": sum(l["quantidade"] for l in linhas), "unidades": sum(l["unidades"] for l in linhas),
             "receita": receita, "receita_tabela": tabela, "desconto": tabela - receita,
             "receita_com_custo": rc, "custo": custo, "margem": rc - custo if boas else None,
             "margem_pct": _pct(rc - custo, rc),
+            # Plano 8: margem cheia = margem − indiretos de referência; None se alguma linha não tem referência
+            "indiretos": indiretos, "margem_com_indiretos": com_ind, "margem_com_indiretos_pct": _pct(com_ind, rc),
+            "linhas_sem_indireto": len(sem_ref),
             "fora": {"linhas": len(fora), "receita": sum((l["receita"] for l in fora), ZERO),
                      "motivos": dict(motivos), "linha_ids": [l["linha_id"] for l in fora]}}
 
@@ -317,12 +334,15 @@ def margens(*, de=None, ate=None, agrupar="produto", cliente_id=None, produto_id
     "apresentacao", "cliente", "tabela", "dia"). Margem = receita (preço praticado) − custo gravado na linha
     (RN-30); `margem_pct` = margem ÷ receita. Linhas com custo duvidoso (zero, ou de lote com consumo pendente
     não conciliado na hora da venda) ficam **fora da margem**, mas dentro da receita: `fora` diz quantas,
-    quanto e por quê. `desconto` = preço de tabela − praticado."""
+    quanto e por quê. `desconto` = preço de tabela − praticado. `margem_com_indiretos` (Plano 8) desconta
+    também unidades × `indireto_ref_un` do produto; `None` se alguma linha com custo não tem a referência
+    (`linhas_sem_indireto`)."""
     if agrupar not in AGRUPAMENTOS:
         raise RegraViolada(f"Agrupamento desconhecido: {agrupar}.")
     linhas = _linhas_venda(de, ate, cliente_id=cliente_id, produto_id=produto_id)
     return {"de": de, "ate": ate, "agrupar": agrupar, "rotulo": "estimada", "inclui": INCLUI_MARGEM,
-            "nao_inclui": NAO_INCLUI_MARGEM, "totais": _somar(linhas), "grupos": _agrupar(linhas, agrupar)}
+            "nao_inclui": NAO_INCLUI_MARGEM, "rotulo_com_indiretos": ROTULO_INDIRETOS,
+            "totais": _somar(linhas), "grupos": _agrupar(linhas, agrupar)}
 
 
 def _agrupar(linhas, agrupar) -> list[dict]:
@@ -379,7 +399,8 @@ def margem_apresentacoes(*, ativas=True, produto_id=None, em=None) -> list[dict]
     """Para cada apresentação: custo estimado = unidades × custo da ficha por unidade (ingredientes, mais óleo
     de referência se frita) + embalagens × última compra da embalagem; margem estimada no varejo e no atacado
     pelo preço de tabela atual. Sem referência de algum item, `completo=False`, custo e margens `None` e o que
-    falta em `faltando`. `custo_un_ultimo_lote` é o custo real por unidade do lote mais recente do produto
+    falta em `faltando`. `*_com_indiretos` (Plano 8) somam ao custo unidades × `indireto_ref_un` (`None` sem a
+    referência). `custo_un_ultimo_lote` é o custo real por unidade do lote mais recente do produto
     nessa forma (só informação; a margem usa a ficha)."""
     qs = Apresentacao.objects.select_related("produto", "embalagem").order_by("produto__nome", "unidades", "nome")
     if ativas:
@@ -415,8 +436,12 @@ def margem_apresentacoes(*, ativas=True, produto_id=None, em=None) -> list[dict]
         custo = None if salgado is None or embalagem is None else _rs(salgado + embalagem)
         ultimo = Lote.objects.filter(item_id=a.produto_id, forma=a.forma).order_by("-criado_em", "-id").first()
 
-        def margem(preco):
-            return None if preco is None or custo is None else preco - custo
+        ref = f.get("indiretos")
+        indiretos = None if ref is None else _rs(ref * a.unidades)
+        cheio = None if custo is None or indiretos is None else custo + indiretos
+
+        def margem(preco, base=custo):
+            return None if preco is None or base is None else preco - base
 
         saida.append({
             "apresentacao_id": a.id, "produto_id": a.produto_id, "produto": a.produto.nome, "nome": a.nome,
@@ -427,6 +452,12 @@ def margem_apresentacoes(*, ativas=True, produto_id=None, em=None) -> list[dict]
             "margem_varejo": margem(a.preco_varejo), "margem_varejo_pct": _pct(margem(a.preco_varejo), a.preco_varejo),
             "margem_atacado": margem(a.preco_atacado),
             "margem_atacado_pct": _pct(margem(a.preco_atacado), a.preco_atacado),
+            # Plano 8: custo cheio = CMV + indiretos de referência (unidades × indireto_ref_un)
+            "indiretos": indiretos, "custo_com_indiretos": cheio,
+            "margem_varejo_com_indiretos": margem(a.preco_varejo, cheio),
+            "margem_varejo_com_indiretos_pct": _pct(margem(a.preco_varejo, cheio), a.preco_varejo),
+            "margem_atacado_com_indiretos": margem(a.preco_atacado, cheio),
+            "margem_atacado_com_indiretos_pct": _pct(margem(a.preco_atacado, cheio), a.preco_atacado),
             "custo_un_ultimo_lote": ultimo.custo_unitario if ultimo else None,
             "ultimo_lote_id": ultimo.id if ultimo else None,
             "rotulo": "estimada", "nao_inclui": ["indiretos", "perdas da produção", "tributos e despesas comerciais"]})

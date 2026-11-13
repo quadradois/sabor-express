@@ -41,6 +41,24 @@ class Apresentacao(models.Model):
         return f"{self.produto} — {self.nome} ({self.forma}, {self.estado})"
 
 
+class CanalVenda(models.Model):
+    """Por onde a venda entra e a taxa que fica no caminho (Plano 8, estudo de preço): balcão em dinheiro ou
+    pix sem taxa, cartão com a taxa da maquininha, plataformas no futuro. `taxa_pct` vazia = não informada."""
+
+    nome = models.CharField(max_length=60, unique=True)
+    taxa_pct = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)  # % do preço
+    ativo = models.BooleanField(default=True)
+    ordem = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["ordem", "nome"]
+        verbose_name = "canal de venda"
+        verbose_name_plural = "canais de venda"
+
+    def __str__(self):
+        return self.nome
+
+
 class Venda(models.Model):
     """Venda concluída (balcão, atacado ou encomenda entregue). Situação: concluida | cancelada."""
 

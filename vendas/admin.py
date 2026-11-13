@@ -1,14 +1,21 @@
 from django.contrib import admin
 
 from estoque.admin import SomenteLeitura
+from nucleo.admin_executar import AdminViaExecutar
 
-from .models import Apresentacao, Encomenda, ItemEncomenda, LinhaVenda, Reserva, Venda
+from .models import Apresentacao, CanalVenda, Encomenda, ItemEncomenda, LinhaVenda, Reserva, Venda
 
 
 @admin.register(Apresentacao)
 class ApresentacaoAdmin(SomenteLeitura):
     """Apresentações e preços se gravam por `vendas.servicos.salvar_apresentacao` (regras de mudança)."""
     list_display = ("produto", "nome", "forma", "estado", "unidades", "preco_varejo", "preco_atacado", "ativo")
+
+
+@admin.register(CanalVenda)
+class CanalVendaAdmin(AdminViaExecutar, admin.ModelAdmin):
+    """Canais e taxas do estudo de preço (Plano 8); taxa vazia = não informada."""
+    list_display = ("nome", "taxa_pct", "ativo", "ordem")
 
 
 @admin.register(Venda)

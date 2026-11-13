@@ -1,8 +1,9 @@
 """Relatório do período (RF-REL-02, PRD §16) — só leitura, sem contabilidade formal.
 
 Cada número tem a definição no plano (`docs/superpowers/plans/2026-11-13-plano-7-custos.md`, "Definições").
-O que o sistema não registra (despesas, indiretos, tributos, ajuste de óleo) fica em `nao_inclui`; o que tem
-dado duvidoso fica em `ressalvas`. Nada é contado como zero por falta de dado.
+O que o resultado não inclui (tributos, ajuste de óleo...) fica em `nao_inclui`; o que tem dado duvidoso fica
+em `ressalvas`. Nada é contado como zero por falta de dado. As despesas (Plano 8) entram à parte, em `despesas`
+e `depois_das_despesas` (regra de competência em `financeiro.consultas.despesas_periodo`).
 """
 
 from collections import defaultdict
@@ -13,7 +14,7 @@ from django.utils import timezone
 
 from compras.models import Compra
 from estoque.models import Movimento
-from financeiro.consultas import contas_vencidas, pagamentos, parcelas_em_aberto, recebimentos
+from financeiro.consultas import contas_vencidas, despesas_periodo, pagamentos, parcelas_em_aberto, recebimentos
 from nucleo.operacoes import RegraViolada
 from producao.models import Producao
 from vendas.consultas import frituras, vendas
@@ -168,7 +169,11 @@ def relatorio_periodo(*, de, ate, hoje=None) -> dict:
     do período `de`..`ate` (dias, inclusive). A posição das contas é a de hoje (o que está em aberto agora).
 
     `resultado.resultado` = receita das vendas concluídas − custo gravado nessas vendas − perdas com valor.
-    Não é lucro: não inclui despesas, indiretos, tributos nem ajuste de óleo (`resultado.nao_inclui`)."""
+    Não é lucro: é "antes das despesas" (`resultado.nao_inclui`).
+
+    `depois_das_despesas.resultado` (Plano 8) = esse resultado − despesas do período por competência (a mensal
+    rateada pelos dias quando o período pega só parte do mês; a avulsa no dia dela). Despesa mensal sem valor
+    não vira zero: `completo=False`, `faltando` e a frase em `depois_das_despesas.ressalvas`."""
     if ate < de:
         raise RegraViolada("O fim do período vem antes do início.")
     hoje = hoje or timezone.localdate()
@@ -185,18 +190,30 @@ def relatorio_periodo(*, de, ate, hoje=None) -> dict:
                          f"({', '.join(sorted(fora['motivos']))}): o custo gravado pode estar baixo.")
     if producao["custo_pendente"]:
         ressalvas.append(f"{len(producao['custo_pendente'])} produção(ões) com custo pendente de conciliação.")
+    resultado = receita - custo - perdas["valor_total"]
+    despesas = despesas_periodo(de=de, ate=ate, hoje=hoje)
+    depois = resultado - despesas["total"]
     return {
         "de": de, "ate": ate, "dias": (ate - de).days + 1,
         "vendas": bloco_vendas, "encomendas": _encomendas(de, ate), "producao": producao, "perdas": perdas,
         "compras": _compras(de, ate), "dinheiro": _dinheiro(de, ate), "posicao": _posicao(hoje),
         "resultado": {
             "receita": receita, "custo_vendido": custo, "perdas": perdas["valor_total"],
-            "resultado": receita - custo - perdas["valor_total"],
-            "resultado_pct": ((receita - custo - perdas["valor_total"]) * 100 / receita).quantize(
-                Decimal("0.1"), ROUND_HALF_UP) if receita else None,
+            "resultado": resultado,
+            "resultado_pct": (resultado * 100 / receita).quantize(Decimal("0.1"), ROUND_HALF_UP) if receita else None,
             "rotulo": "estimado",
-            "nao_inclui": ["despesas (aluguel, gás, energia, salários): o sistema ainda não registra despesas",
+            "nao_inclui": ["despesas (aluguel, gás, energia, salários): veja o resultado depois das despesas",
                            "indiretos de fabricação rateados", "tributos sobre a venda", "ajuste de óleo"],
+        },
+        "despesas": despesas,
+        "depois_das_despesas": {
+            "resultado_antes": resultado, "despesas": despesas["total"], "resultado": depois,
+            "resultado_pct": (depois * 100 / receita).quantize(Decimal("0.1"), ROUND_HALF_UP) if receita else None,
+            "completo": despesas["completo"], "faltando": despesas["faltando"], "rateado": despesas["rateado"],
+            "rotulo": "estimado" if despesas["completo"] else "estimado, faltando despesa sem valor",
+            "nao_inclui": ["tributos sobre a venda (o DAS entra só se lançado como despesa)", "ajuste de óleo",
+                           "despesas ainda não lançadas"],
+            "ressalvas": despesas["ressalvas"],
         },
         "ressalvas": ressalvas,
     }
