@@ -30,12 +30,13 @@ MAX_FALADOS = 3  # itens lidos no `texto`; o resto vira "e mais N"
 
 # origem da decisão em português falado, com palavras que o dono pode usar para filtrar
 ORIGENS = {
-    "lotes_vencidos": ("produto vencido", "vencido validade"),
+    "lotes_vencidos": ("conferência do vencido", "vencido validade produto conferencia"),
     "encomenda_sem_estoque": ("encomenda sem estoque", "encomendas reserva reservar produzir falta"),
     "contas_vencidas": ("conta vencida", "contas vencida pagar"),
     "despesas_sem_valor": ("despesa sem valor", "despesa despesas sem valor mensal luz energia internet gas"),
     "receber_vencidas": ("cliente devendo", "receber recebimento fiado devendo cliente"),
     "lotes_vencendo": ("validade perto de vencer", "vencendo vence validade"),
+    "lotes_deixados": ("lote deixado para trás", "deixado deixados tras venda primeiro"),
     "sobras_fritas": ("sobra de frito", "sobras frito fritos fritura"),
     "consumo_pendente": ("consumo pendente", "conciliar conciliacao"),
     "contas_a_vencer": ("conta a vencer", "contas vencer pagar"),
@@ -121,9 +122,29 @@ def _numero(d) -> str:
     return f"Número {d['decisao_id']}"
 
 
+def _texto(d) -> str:
+    """O texto da decisão como se fala: a conferência do vencido vira pergunta (Plano 9) e o lote é dito pelo
+    nome da cozinha ("lote do dia 8"), não pelo código."""
+    from .lotes import nome, pergunta_conferencia
+
+    if d["origem"] == "lotes_vencidos":
+        pergunta = pergunta_conferencia(d)
+        if pergunta:
+            return pergunta
+    t = d["texto"]
+    det = d.get("detalhes") or {}
+    if det.get("lote_id") and det.get("codigo"):
+        from estoque.models import Lote
+
+        lote = Lote.objects.filter(id=det["lote_id"]).first()
+        if lote is not None:
+            t = t.replace(f"no lote {det['codigo']}", f"no {nome(lote)}")
+    return falavel(t)
+
+
 def _item_caixa(d) -> str:
     tipo = "para aprovar" if d["tipo"] == "decisao" else "aviso"
-    t = f"{_numero(d)}, {tipo}: {_sem_ponto(falavel(d['texto']))}."
+    t = f"{_numero(d)}, {tipo}: {_sem_ponto(_texto(d))}."
     if d.get("ultimo_erro"):
         t += f" Da última vez não deu para aprovar: {_sem_ponto(_erro_limpo(d['ultimo_erro']['erro']))}."
     return t
@@ -140,7 +161,7 @@ def _urgentes(itens) -> list[dict]:
 def _curta(d) -> dict:
     return {"decisao_id": d["decisao_id"], "tipo": d["tipo"], "origem": d["origem"],
             "origem_texto": ORIGENS.get(d["origem"], (d["origem"].replace("_", " "),))[0],
-            "texto": falavel(d["texto"]),
+            "texto": _texto(d),
             "criada_em": d["criada_em"].isoformat(timespec="seconds"),
             "ultimo_erro": _erro_limpo(d["ultimo_erro"]["erro"]) if d["ultimo_erro"] else None}
 
@@ -215,7 +236,8 @@ def _assuntos(r, backup) -> list[dict]:
         nomes = _juntar(sorted({p["item"] for p in venc}))
         add("vencidos", "produto vencido",
             f"Atenção: {_n(len(venc), 'lote vencido', 'lotes vencidos')} em estoque, "
-            f"{reais(r['validade']['valor_vencido'])} em mercadoria: {nomes}. Vencido não pode ser usado.")
+            f"{reais(r['validade']['valor_vencido'])} em mercadoria: {nomes}. Vencido só sai com motivo; a caixa "
+            "pergunta se ainda estão aí.")
     if backup:
         add("backup", "backup", backup)
     enc = r.get("encomendas") or {}
@@ -253,6 +275,16 @@ def _assuntos(r, backup) -> list[dict]:
         verbo = "vence" if len(vencendo) == 1 else "vencem"
         add("vencendo", "validade perto de vencer",
             f"{_n(len(vencendo), 'lote')} {verbo} até daqui a {_n(r['validade']['dias'], 'dia')}: {nomes}.")
+    deixados = r["validade"].get("deixados") or []
+    if deixados:
+        from .lotes import _un
+
+        add("lotes_deixados", "lote deixado para trás",
+            "Venda primeiro: " + _juntar([f"{_un(x['saldo'])} de {x['item']} do {x['nome']}"
+                                         + (f", {x['estado']}" if x["estado"] else "")
+                                         + f", que vence {quando(x['validade'])}"
+                                         for x in deixados[:MAX_FALADOS]])
+            + (f" e mais {len(deixados) - MAX_FALADOS}" if len(deixados) > MAX_FALADOS else "") + ".")
     a_produzir = [x for x in enc.get("necessidade") or [] if x["a_produzir"] > 0]
     if a_produzir:
         from .vendas import _un
@@ -378,7 +410,7 @@ def ver_decisao(decisao_id):
     d = _decisao(decisao_id)
     origem = ORIGENS.get(d["origem"], (d["origem"].replace("_", " "),))[0]
     tipo = "decisão para aprovar" if d["tipo"] == "decisao" else "aviso"
-    t = f"{_numero(d)}, {tipo}, {origem}: {_sem_ponto(falavel(d['texto']))}."
+    t = f"{_numero(d)}, {tipo}, {origem}: {_sem_ponto(_texto(d))}."
     s = d["situacao"]
     if s == "pendente":
         t += f" Está na caixa desde {quando(_dia_local(d['criada_em']))}."
@@ -492,7 +524,7 @@ def dar_ciencia(*, decisao_id, autor, canal):
         return _aprovar(decisao_id=d["decisao_id"], autor=autor, canal=canal, chave=chave)
 
     r, rep = _uma_vez("dar_ciencia", {"decisao": d["decisao_id"]}, fazer)
-    return _feito(f"Ciente do número {d['decisao_id']}: {_sem_ponto(falavel(d['texto']))}. Saiu da caixa.", r, rep,
+    return _feito(f"Ciente do número {d['decisao_id']}: {_sem_ponto(_texto(d))}. Saiu da caixa.", r, rep,
                   decisao_id=d["decisao_id"])
 
 
@@ -510,7 +542,7 @@ def recusar_decisao(*, decisao_id, motivo, autor, canal):
         return _recusar(decisao_id=d["decisao_id"], motivo=motivo, autor=autor, canal=canal, chave=chave)
 
     r, rep = _uma_vez("recusar_decisao", {"decisao": d["decisao_id"], "motivo": motivo}, fazer)
-    return _feito(f"Recusei o número {d['decisao_id']} ({_sem_ponto(falavel(d['texto']))}). Motivo: {_sem_ponto(motivo)}.",
+    return _feito(f"Recusei o número {d['decisao_id']} ({_sem_ponto(_texto(d))}). Motivo: {_sem_ponto(motivo)}.",
                   r, rep, decisao_id=d["decisao_id"])
 
 
@@ -546,7 +578,7 @@ def propor_aprovar_decisao(*, decisao_id, autor, canal):
 
     def resumir(r):
         efeito = _efeito(r)
-        return (f"Aprovar o número {d['decisao_id']}: {_sem_ponto(falavel(d['texto']))}"
+        return (f"Aprovar o número {d['decisao_id']}: {_sem_ponto(_texto(d))}"
                 + (f". {efeito}" if efeito else ""))
 
     return {**_proposta("aprovar_decisao", {"decisao_id": d["decisao_id"]}, resumir, autor, canal),

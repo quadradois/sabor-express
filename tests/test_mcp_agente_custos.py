@@ -187,7 +187,7 @@ def test_ferramentas_de_custos_sao_so_leitura():
     nivel = {f.nome: f.nivel for f in REGISTRO}
     assert {n: nivel[n] for n in CUSTOS} == dict.fromkeys(CUSTOS, 0)
     t = ferramentas()
-    assert len(t) == 88  # + 11 do Plano 8 (despesas e estudo de preço)
+    assert len(t) == 92  # + 11 do Plano 8, + 4 do Plano 9 (lotes)
     assert all(t[n].annotations.readOnlyHint for n in CUSTOS)
     # preço, óleo e indiretos não mudam por voz; o sistema não sugere preço (ver_indireto_real só lê)
     assert not {n for n in nivel if any(p in n for p in ("sugerir", "mudar_preco", "oleo"))}

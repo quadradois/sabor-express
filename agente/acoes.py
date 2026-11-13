@@ -121,16 +121,20 @@ def resolver_porcao(produto, estado="", codigo=""):
         qs = qs.filter(estado=estado)
     lotes = Lote.objects.select_related("item").in_bulk({p["lote"] for p in qs})
     porcoes = [(lotes[p["lote"]], p["estado"], p["s"]) for p in qs]
-    if codigo:
-        porcoes = [x for x in porcoes if _normal(codigo) in _normal(x[0].codigo)]
+    onde = f" em {estado}" if estado else ""
+    if codigo and porcoes:  # o lote dito: "lote do dia 8" (ou o código, se pedirem)
+        from .lotes import resolver_lote
+
+        escolhido = resolver_lote(codigo, {l.id: l for l, _, _ in porcoes}.values(), oque=f"'{produto}'{onde}")
+        porcoes = [x for x in porcoes if x[0].id == escolhido.id]
     if len(porcoes) == 1:
         return porcoes[0]
-    onde = f" em {estado}" if estado else ""
     if not porcoes:
         raise ConsultaInvalida(f"Nenhum lote de '{produto}' com saldo{onde}.", 404)
-    raise ConsultaInvalida(f"Mais de um lote de '{produto}' com saldo{onde}; diga o código ou a conservação.", 409,
-                           opcoes=[f"{l.item.nome} lote {l.codigo or 'sem código'}, {e or '-'}, "
-                                   f"{fmt_qtd(s, l.item.unidade_base)}" for l, e, s in porcoes])
+    from .lotes import nome
+    raise ConsultaInvalida(f"Mais de um lote de '{produto}' com saldo{onde}; diga o dia do lote ou a conservação.",
+                           409, opcoes=[f"{l.item.nome}, {nome(l)}, {e or '-'}, {fmt_qtd(s, l.item.unidade_base)}"
+                                        for l, e, s in porcoes])
 
 
 # --- nível 1: faz e repete -------------------------------------------------
@@ -182,15 +186,20 @@ def registrar_peso(*, item, quantidade, unidade="", lote="", producao_id=None, a
     if unidade:
         usado = (usado * fator(l.item, unidade)[1]).quantize(Decimal("0.001"), ROUND_HALF_UP)
     lote_obj = None
-    if lote:
-        lote_obj = escolher(Lote.objects.filter(item=l.item), lote, oque=f"lote de '{l.item.nome}'",
-                            rotulo=lambda x: x.codigo or "sem código")
+    if lote:  # "do lote do dia 8" (ou o código): entre os lotes do ingrediente com saldo
+        from estoque.servicos import porcoes as _porcoes
+
+        from .lotes import resolver_lote
+        com_saldo = {p["lote_id"] for p in _porcoes(item=l.item)}
+        lote_obj = resolver_lote(lote, Lote.objects.select_related("item").filter(id__in=com_saldo)
+                                 .order_by("criado_em", "id"), oque=l.item.nome)
     lote_id = lote_obj.id if lote_obj else None
     r, rep = _uma_vez("registrar_peso", {"linha": l.id, "usado": usado, "lote": lote_id}, lambda chave: producao.registrar_peso(
         linha_id=l.id, usado=usado, lote_id=lote_id, autor=autor, canal=canal, chave=chave))
     dito = f"{l.item.nome}: {fmt_qtd(Decimal(r['usado']), l.item.unidade_base)} registrado"
     if lote_obj:
-        dito += f", lote {lote_obj.codigo or 'sem código'}"
+        from .lotes import nome
+        dito += f", {nome(lote_obj)}"
     return _feito(f"{dito}. {_falta_pesar(p)}", r, rep, producao_id=p.id)
 
 
@@ -265,8 +274,9 @@ def registrar_etiqueta(*, produto, conservacao="", copias=None, lote="", autor, 
                       lambda chave: registrar_impressao(lote_id=l.id, estado=estado, copias=copias,
                                                         autor=autor, canal=canal, chave=chave))
     tipo = "Reimpressão" if r["reimpressao"] else "Impressão"
+    from .lotes import nome
     dito = (f"{tipo} de {copias} etiqueta{'s' if copias > 1 else ''} registrada: {l.item.nome}, "
-            f"lote {l.codigo or 'sem código'}, {estado}.")
+            f"{nome(l)}, {estado}.")
     return _feito(dito, r, rep, lote_id=l.id)
 
 
@@ -292,8 +302,17 @@ def propor_iniciar_producao(*, produto, unidades, forma="cru", justificativa_fal
 
 
 def propor_concluir_producao(*, quantidade_boa, conservacao, perdas=0, motivo_perdas="", anotacao="",
-                             validade="", justificativa="", justificativa_falta="", producao_id=None, autor, canal):
+                             validade="", justificativa="", justificativa_falta="", motivo_vencido="",
+                             producao_id=None, autor, canal):
+    from .lotes import pedir_motivo, porcao_vencida, vencidos_txt
+
     p = producao_alvo(producao_id)
+    vencidos = []  # ingrediente vencido só sai do lote escolhido na pesagem (e com o motivo)
+    for linha in p.linhas.select_related("lote__item").filter(lote__isnull=False):
+        x = porcao_vencida(linha.lote, "")
+        if x and x not in vencidos:
+            vencidos.append(x)
+    mv = (motivo_vencido or "").strip() if vencidos else ""
     boa, perdas = _inteiro(quantidade_boa, "quantidade_boa"), _inteiro(perdas or 0, "perdas")
     estado = _estado(conservacao)
     parametros = {"producao_id": p.id, "quantidade_boa": boa, "perdas": perdas, "perda_motivo": motivo_perdas,
@@ -301,8 +320,13 @@ def propor_concluir_producao(*, quantidade_boa, conservacao, perdas=0, motivo_pe
                   "anotacao": anotacao, "confirmar_perda_total": boa == 0}
     if (justificativa_falta or "").strip():
         parametros["pendente_justificativa"] = justificativa_falta.strip()
+    if mv:
+        parametros["motivo_vencido"] = mv
 
     def resumir(r):
+        return _resumo_conclusao(r) + (vencidos_txt(vencidos, mv) if mv else "")
+
+    def _resumo_conclusao(r):
         from .compras import pendentes_txt
 
         t = f"Concluir a produção {p.id} de {p.unidades} {p.produto.nome}: "
@@ -315,7 +339,7 @@ def propor_concluir_producao(*, quantidade_boa, conservacao, perdas=0, motivo_pe
         return (t + f"{boa} boa{'s' if boa > 1 else ''}" + (f", {perda}" if perda else "")
                 + f", {estado}, validade {_data_br(lote.validade)}" + pendente)
 
-    return _proposta("concluir_producao", parametros, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("concluir_producao", parametros, resumir, autor, canal))
 
 
 def propor_cancelar_producao(*, motivo, producao_id=None, autor, canal):
@@ -326,19 +350,26 @@ def propor_cancelar_producao(*, motivo, producao_id=None, autor, canal):
 
 
 def propor_mudar_conservacao(*, produto, para, quantidade=None, de="", lote="", validade="", justificativa="",
-                             autor, canal):
+                             motivo_vencido="", autor, canal):
+    from .lotes import nome, pedir_motivo, porcao_vencida, vencidos_txt
+
     para = _estado(para, "para")
     l, de, saldo = resolver_porcao(produto, _estado(de, "de") if de else "", lote)
     q = _inteiro(quantidade, "quantidade") if quantidade else int(saldo)
+    vencido = porcao_vencida(l, de)
+    mv = (motivo_vencido or "").strip() if vencido else ""
     parametros = {"lote_id": l.id, "quantidade": q, "de": de, "para": para,
                   "validade_manual": _data(validade, "validade"), "justificativa": justificativa}
+    if mv:
+        parametros["motivo_vencido"] = mv
 
     def resumir(r):
         manual = " (informada)" if r["validade_manual"] else ""
-        return (f"Passar {fmt_qtd(Decimal(q), l.item.unidade_base)} de {l.item.nome}, lote {l.codigo or 'sem código'}, "
-                f"de {de} para {para}, validade {_data_br(r['validade'])}{manual}")
+        t = (f"Passar {fmt_qtd(Decimal(q), l.item.unidade_base)} de {l.item.nome}, {nome(l)}, "
+             f"de {de} para {para}, validade {_data_br(r['validade'])}{manual}")
+        return t + (vencidos_txt([vencido], mv) + " (continua vencido)" if mv else "")
 
-    return _proposta("transferir_estado", parametros, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("transferir_estado", parametros, resumir, autor, canal))
 
 
 def propor_entrada_estoque(*, item, quantidade, unidade, custo_total, motivo, validade="", lote="", autor, canal):

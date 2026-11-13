@@ -25,7 +25,7 @@ from django.db import close_old_connections
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from . import acoes, compras, consultas, custos, decisoes, despesas, vendas
+from . import acoes, compras, consultas, custos, decisoes, despesas, lotes, vendas
 from .consultas import ConsultaInvalida
 from nucleo.operacoes import RegraViolada
 
@@ -51,7 +51,10 @@ INSTRUCOES = (
     "dado. Preço: nunca escolha a margem nem diga que preço cobrar por opinião; simular_preco só calcula com o "
     "preço ou a sobra que o dono disser, é sempre simulação, e o preço só muda pela tela. "
     "Despesas: o sistema só anota o pagamento; despesa \"sem valor\" nunca é zero; o resultado depois das despesas "
-    "só está completo quando não falta valor (diga o que falta)."
+    "só está completo quando não falta valor (diga o que falta). "
+    "Lotes: diga o lote pelo nome (\"lote do dia 8\"), nunca pelo código, salvo se pedirem; de qual lote pegar, quanto "
+    "sobra e o que vence vêm de ver_separacao (nunca calcule). Lote vencido só sai com o motivo DITO pelo dono: se vier "
+    "'precisa_motivo', pergunte o motivo e repita lote, dia em que venceu e motivo antes de confirmar."
 )
 
 AUTOR = "agente-mcp"
@@ -452,7 +455,7 @@ def ver_ponto_equilibrio(produto: str, apresentacao: str = "", canal: str = "", 
 def registrar_peso(item: str, quantidade: float, unidade: str = "", lote: str = "",
                    producao_id: int | None = None) -> dict:
     """Registra quanto foi usado de um ingrediente no preparo (ex.: item "requeijão", quantidade 355).
-    'unidade' (g, kg, mL, L, un) é opcional; sem ela vale a unidade do ingrediente. 'lote' é o código, se citado."""
+    'unidade' (g, kg, mL, L, un) é opcional; sem ela vale a unidade do ingrediente. 'lote', se citado: "lote do dia 8"."""
     return acoes.registrar_peso(item=item, quantidade=quantidade, unidade=unidade, lote=lote,
                                 producao_id=producao_id, autor=AUTOR, canal=CANAL)
 
@@ -490,7 +493,7 @@ def parar_cronometro(nome: str = "", producao_id: int | None = None) -> dict:
 @escrita(1)
 def registrar_etiqueta(produto: str, conservacao: str = "", copias: int | None = None, lote: str = "") -> dict:
     """Registra a impressão de etiquetas de um lote com estoque. 'conservacao': fresco, resfriado ou congelado.
-    Sem 'copias', uma por unidade. 'lote' é o código, se houver mais de um."""
+    Sem 'copias', uma por unidade. 'lote' ("lote do dia 8"), se houver mais de um."""
     return acoes.registrar_etiqueta(produto=produto, conservacao=conservacao, copias=copias, lote=lote,
                                     autor=AUTOR, canal=CANAL)
 
@@ -560,14 +563,16 @@ def iniciar_producao(produto: str, unidades: int, forma: str = "cru", justificat
 @escrita(2)
 def concluir_producao(quantidade_boa: int, conservacao: str, perdas: int = 0, motivo_perdas: str = "",
                       anotacao: str = "", validade: str = "", justificativa: str = "",
-                      justificativa_falta: str = "", producao_id: int | None = None) -> dict:
+                      justificativa_falta: str = "", motivo_vencido: str = "", producao_id: int | None = None) -> dict:
     """Propõe concluir a produção: unidades boas, perdas com motivo e conservação (fresco, resfriado, congelado).
     'validade' (AAAA-MM-DD) e 'justificativa' só se o sistema pedir. 'justificativa_falta': motivo para concluir
-    sem estoque do que foi usado (vira consumo pendente). Não grava: pede confirmação."""
+    sem estoque do que foi usado (vira consumo pendente). 'motivo_vencido': só o dito pelo dono, se um ingrediente
+    pesado de lote vencido pedir. Não grava: pede confirmação."""
     return acoes.propor_concluir_producao(quantidade_boa=quantidade_boa, conservacao=conservacao, perdas=perdas,
                                           motivo_perdas=motivo_perdas, anotacao=anotacao, validade=validade,
                                           justificativa=justificativa, justificativa_falta=justificativa_falta,
-                                          producao_id=producao_id, autor=AUTOR, canal=CANAL)
+                                          motivo_vencido=motivo_vencido, producao_id=producao_id,
+                                          autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)
@@ -578,11 +583,13 @@ def cancelar_producao(motivo: str, producao_id: int | None = None) -> dict:
 
 @escrita(2)
 def mudar_conservacao(produto: str, para: str, quantidade: int | None = None, de: str = "", lote: str = "",
-                      validade: str = "", justificativa: str = "") -> dict:
+                      validade: str = "", justificativa: str = "", motivo_vencido: str = "") -> dict:
     """Propõe mudar a conservação de um lote (ex.: de resfriado 'para' congelado). Sem 'quantidade', o lote todo.
-    'validade' (AAAA-MM-DD) e 'justificativa' só se o sistema pedir. Não grava: pede confirmação."""
+    'lote': "lote do dia 8". 'validade' (AAAA-MM-DD) e 'justificativa' só se o sistema pedir. 'motivo_vencido': só
+    o dito pelo dono (o vencido continua vencido). Não grava: pede confirmação."""
     return acoes.propor_mudar_conservacao(produto=produto, para=para, quantidade=quantidade, de=de, lote=lote,
-                                          validade=validade, justificativa=justificativa, autor=AUTOR, canal=CANAL)
+                                          validade=validade, justificativa=justificativa,
+                                          motivo_vencido=motivo_vencido, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)
@@ -717,11 +724,12 @@ def receber_bonificacao(item: str, quantidade: float, unidade: str, motivo: str,
 
 
 @escrita(2)
-def conciliar_consumo(item: str = "", pendente_id: int | None = None, lote_id: int | None = None) -> dict:
+def conciliar_consumo(item: str = "", pendente_id: int | None = None, lote_id: int | None = None,
+                      motivo_vencido: str = "") -> dict:
     """Propõe ligar um consumo pendente (usado sem estoque) a um lote, fechando o custo. Sem 'lote_id', usa o lote
-    que vence primeiro com saldo suficiente. Não grava: pede confirmação."""
+    que vence primeiro com saldo suficiente. 'motivo_vencido': só o dito pelo dono. Não grava: pede confirmação."""
     return compras.propor_conciliar_consumo(item=item, pendente_id=pendente_id, lote_id=lote_id,
-                                            autor=AUTOR, canal=CANAL)
+                                            motivo_vencido=motivo_vencido, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)
@@ -733,36 +741,71 @@ def aprovar_decisao(decisao_id: int) -> dict:
 
 # vendas, encomendas, fritura, perda e contas a receber
 
+class LoteIndicado(TypedDict, total=False):
+    unidades: Required[int]  # quantas unidades saíram deste lote (o resto do item o sistema completa)
+    lote: str  # o lote como foi falado: "lote do dia 10", "dia 10", "segundo lote do dia 8"
+    lote_id: int  # ou o lote_id que veio de ver_separacao
+
+
 class ItemVenda(TypedDict, total=False):
     produto: Required[str]  # o salgado como foi falado (ex.: "coxinha", "coxinha 150 g")
     quantidade: Required[int]  # quantas apresentações (duas caixas = 2)
     apresentacao: str  # unidade, caixa com 25, cento...
     forma: str  # cru ou frito
     conservacao: str  # fresco, resfriado ou congelado
+    lotes: list[LoteIndicado]  # só se o atendente disse de qual lote pegou ("peguei do lote do dia 10")
+
+
+class LoteEntrega(TypedDict, total=False):
+    unidades: Required[int]
+    lote: str  # "lote do dia 10"
+    lote_id: int  # ou o lote_id de ver_separacao_encomenda
+    produto: str  # só se a encomenda tiver mais de um item do mesmo salgado
+
+
+@leitura
+def ver_separacao(itens: list[ItemVenda], data: str = "") -> dict:
+    """"30 coxinhas, de onde eu pego?": ANTES de registrar a venda, de quais lotes pegar cada item (o que vence
+    primeiro), quantas unidades de cada lote, quanto sobra em cada um e o que vence hoje ou amanhã — exatamente o
+    que a venda vai baixar. Fale o 'texto'. Com 'lotes' num item ("peguei do lote do dia 10"), mostra a separação
+    indicada e o lote que ficou para trás. 'data': hoje (vazio), ontem, dia 12 ou AAAA-MM-DD (venda lançada depois).
+    Os lote_id das 'linhas' servem para registrar_venda."""
+    return vendas.ver_separacao(itens=itens, data=data)
+
+
+@leitura
+def ver_separacao_encomenda(encomenda_id: int | None = None, cliente: str = "", data: str = "",
+                            lotes: list[LoteEntrega] | None = None) -> dict:
+    """"A encomenda do João, de quais lotes?": antes de entregar, de quais lotes pegar cada item (pelas reservas)
+    e quanto sobra; avisa reserva vencida e o que falta reservar. Com 'lotes', a separação indicada. Fale o 'texto'."""
+    return vendas.ver_separacao_encomenda(encomenda_id=encomenda_id, cliente=cliente, data=data, lotes=lotes)
 
 
 @escrita(2)
 def registrar_venda(itens: list[ItemVenda], cliente: str = "", condicao: str = "a_vista", forma_pagamento: str = "",
                     tabela: str = "varejo", prazo_dias: int | None = None, vencimento: str = "", parcelas: int = 1,
-                    intervalo_dias: int = 30) -> dict:
+                    intervalo_dias: int = 30, data: str = "", motivo_vencido: str = "") -> dict:
     """Propõe registrar uma venda ("vendi duas caixas de coxinha congelada pro João, fiado"). 'itens': cada um com
     o produto falado, a quantidade e, se houver mais de um jeito de vender, a apresentação, a forma e a conservação.
     Preço: sempre o da tabela ('tabela' varejo ou atacado). Balcão não precisa de cliente; a prazo (fiado) precisa
-    do cliente e de 'prazo_dias' ou 'vencimento' (AAAA-MM-DD). O estoque baixa pelo que vence primeiro.
-    Não grava: pede confirmação."""
+    do cliente e de 'prazo_dias' ou 'vencimento' (AAAA-MM-DD). O estoque baixa pelo que vence primeiro, salvo os
+    'lotes' que o atendente disse ter pego (o resto o sistema completa). 'data': venda que aconteceu antes (ontem,
+    dia 12). 'motivo_vencido': só o motivo DITO pelo dono para sair de lote vencido. A proposta repete de quais
+    lotes sai. Não grava: pede confirmação."""
     return vendas.propor_registrar_venda(itens=itens, cliente=cliente, condicao=condicao,
                                          forma_pagamento=forma_pagamento, tabela=tabela, prazo_dias=prazo_dias,
                                          vencimento=vencimento, parcelas=parcelas, intervalo_dias=intervalo_dias,
-                                         autor=AUTOR, canal=CANAL)
+                                         data=data, motivo_vencido=motivo_vencido, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)
-def cancelar_venda(motivo: str, venda_id: int | None = None, cliente: str = "", destino: str = "perda") -> dict:
+def cancelar_venda(motivo: str, venda_id: int | None = None, cliente: str = "", destino: str = "perda",
+                   motivo_vencido: str = "") -> dict:
     """Propõe cancelar uma venda inteira, com o motivo. Sem 'venda_id', acha pelo cliente (ou entre as de hoje).
-    'destino' das unidades: perda (padrão) ou estoque (voltam ao estoque, se o lote não venceu). Cancela a conta a
-    receber junto. Não grava: pede confirmação."""
+    'destino' das unidades: perda (padrão) ou estoque (voltam ao estoque). Lote vencido só volta ao estoque com
+    'motivo_vencido' dito pelo dono. Cancela a conta a receber junto. Não grava: pede confirmação."""
     return vendas.propor_cancelar_venda(motivo=motivo, venda_id=venda_id, cliente=cliente, destino=destino,
-                                        autor=AUTOR, canal=CANAL)
+                                        motivo_vencido=motivo_vencido, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)
@@ -779,14 +822,17 @@ def criar_encomenda(cliente: str, dia: str, itens: list[ItemVenda], hora: str = 
 @escrita(2)
 def entregar_encomenda(encomenda_id: int | None = None, cliente: str = "", condicao: str = "a_vista",
                        forma_pagamento: str = "", prazo_dias: int | None = None, vencimento: str = "",
-                       parcelas: int = 1, intervalo_dias: int = 30) -> dict:
+                       parcelas: int = 1, intervalo_dias: int = 30, lotes: list[LoteEntrega] | None = None,
+                       data: str = "", motivo_vencido: str = "") -> dict:
     """Propõe entregar uma encomenda ("o João veio buscar a encomenda"): vira venda e baixa o estoque reservado.
     Acha a encomenda em aberto pelo cliente ou pelo número. O resto (total menos o sinal) é recebido à vista
-    ('forma_pagamento') ou fica a prazo (com 'prazo_dias' ou 'vencimento'). Só com tudo reservado.
-    Não grava: pede confirmação."""
+    ('forma_pagamento') ou fica a prazo (com 'prazo_dias' ou 'vencimento'). Só com tudo reservado, salvo os 'lotes'
+    que o atendente disse ter pego. 'data': entrega que aconteceu antes. 'motivo_vencido': só o dito pelo dono.
+    A proposta repete de quais lotes sai. Não grava: pede confirmação."""
     return vendas.propor_entregar_encomenda(encomenda_id=encomenda_id, cliente=cliente, condicao=condicao,
                                             forma_pagamento=forma_pagamento, prazo_dias=prazo_dias,
                                             vencimento=vencimento, parcelas=parcelas, intervalo_dias=intervalo_dias,
+                                            lotes=lotes, data=data, motivo_vencido=motivo_vencido,
                                             autor=AUTOR, canal=CANAL)
 
 
@@ -803,25 +849,50 @@ def cancelar_encomenda(motivo: str, encomenda_id: int | None = None, cliente: st
 @escrita(2)
 def registrar_fritura(produto: str, quantidade: int, boas: int | None = None, motivo_perdas: str = "",
                       conservacao: str = "", destino: str = "fresco", validade: str = "",
-                      justificativa: str = "") -> dict:
+                      justificativa: str = "", lote: str = "", motivo_vencido: str = "") -> dict:
     """Propõe registrar uma fritura do balcão ("fritei 40 coxinhas, 38 boas, 2 estouraram"): o cru sai do lote que
-    vence primeiro e vira um lote frito. Sem 'boas', todas ficaram boas; perdas pedem 'motivo_perdas'.
-    'conservacao' do cru (se houver em mais de uma); 'destino' do frito (fresco). 'validade' (AAAA-MM-DD) e
-    'justificativa' só se o sistema pedir. Não grava: pede confirmação."""
+    vence primeiro (ou do 'lote' dito: "lote do dia 8") e vira um lote frito. Sem 'boas', todas ficaram boas; perdas
+    pedem 'motivo_perdas'. 'conservacao' do cru (se houver em mais de uma); 'destino' do frito (fresco). 'validade'
+    (AAAA-MM-DD) e 'justificativa' só se o sistema pedir. 'motivo_vencido': só o dito pelo dono. Não grava: pede
+    confirmação."""
     return vendas.propor_registrar_fritura(produto=produto, quantidade=quantidade, boas=boas,
                                            motivo_perdas=motivo_perdas, conservacao=conservacao, destino=destino,
-                                           validade=validade, justificativa=justificativa, autor=AUTOR, canal=CANAL)
+                                           validade=validade, justificativa=justificativa, lote=lote,
+                                           motivo_vencido=motivo_vencido, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)
 def registrar_perda(produto: str, motivo: str, quantidade: float | None = None, unidade: str = "",
-                    conservacao: str = "", forma: str = "", lote: str = "", vencido: bool = False) -> dict:
+                    conservacao: str = "", forma: str = "", lote: str = "", vencido: bool = False,
+                    destino: str = "perda") -> dict:
     """Propõe dar perda ou descartar ("joga fora 10 coxinhas fritas que caíram", "descarta o leite vencido"). Vale
     para salgado, ingrediente ou embalagem. Motivo obrigatório. Sem 'quantidade', o lote todo. 'conservacao',
-    'forma' (cru/frito), 'lote' (código) e 'vencido' ajudam a achar o lote certo. Não grava: pede confirmação."""
+    'forma' (cru/frito), 'lote' ("lote do dia 8") e 'vencido' ajudam a achar o lote certo. 'destino': perda (padrão),
+    descarte, consumo da equipe ou doação. Não grava: pede confirmação."""
     return vendas.propor_registrar_perda(produto=produto, motivo=motivo, quantidade=quantidade, unidade=unidade,
                                          conservacao=conservacao, forma=forma, lote=lote, vencido=vencido,
-                                         autor=AUTOR, canal=CANAL)
+                                         destino=destino, autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def contar_lote(contado: float, motivo: str, produto: str = "", lote: str = "", conservacao: str = "",
+                forma: str = "", lote_id: int | None = None) -> dict:
+    """Propõe acertar o estoque de um lote pela contagem ("contei, o lote do dia 8 tem 15", "no freezer só tinha
+    15"): 'contado' é o que há de fato; o sistema lança a diferença. 'motivo' dito (ex.: contei o freezer).
+    Não grava: pede confirmação."""
+    return lotes.propor_contar_lote(contado=contado, motivo=motivo, produto=produto, lote=lote,
+                                    conservacao=conservacao, forma=forma, lote_id=lote_id, autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def conferir_vencido(decisao_id: int, resposta: str, destino: str = "", motivo: str = "",
+                     contado: float | None = None) -> dict:
+    """Responde a conferência do vencido da caixa ("o lote do dia 8 venceu com 18; ainda estão aí?") pelo número.
+    'resposta': "já foram vendidas" (devolve o lote_id para registrar_venda com a data em que aconteceu), "estão
+    aqui" (com 'destino' — descarte, consumo da equipe, doação ou perda — e o 'motivo' dito; propõe a saída) ou
+    "não sei" (com 'contado' depois de contar; propõe o acerto). Não grava: pede confirmação."""
+    return lotes.conferir_vencido(decisao_id=decisao_id, resposta=resposta, destino=destino, motivo=motivo,
+                                  contado=contado, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)

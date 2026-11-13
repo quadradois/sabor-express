@@ -112,11 +112,11 @@ def test_preparo_completo_por_ferramentas(bolinha):
     assert (p.status, p.quantidade_boa, p.perdas) == ("concluida", 9, 1)
 
     r = chamar("registrar_etiqueta", produto="bolinha", conservacao="resfriado")
-    assert r["dito"] == f"Impressão de 9 etiquetas registrada: Bolinha 100 g, lote {p.lote.codigo}, resfriado."
+    assert r["dito"] == f"Impressão de 9 etiquetas registrada: Bolinha 100 g, lote do dia {hoje.day}, resfriado."
 
     r = chamar("mudar_conservacao", produto="bolinha", para="freezer")
     validade = (hoje + timedelta(days=30)).strftime("%d/%m/%Y")
-    assert r["confirmar"] == (f"Passar 9 un de Bolinha 100 g, lote {p.lote.codigo}, de resfriado para congelado, "
+    assert r["confirmar"] == (f"Passar 9 un de Bolinha 100 g, lote do dia {hoje.day}, de resfriado para congelado, "
                               f"validade {validade}. Confirma?")
     confirmar(r)
     assert (saldo_lote(p.lote, "resfriado"), saldo_lote(p.lote, "congelado")) == (0, 9)
@@ -291,4 +291,5 @@ def test_nada_de_apagar_e_dinheiro_so_com_o_sim():
     assert {n: v for n, v in nomes.items() if "despesa" in n and v} == {
         "pagar_despesa": 2, "lancar_despesa": 2, "cancelar_despesa": 2, "informar_valor_despesa": 1}
     # 50 até o Plano 4 + 20 de vendas (Plano 6) + 7 de custos (Plano 7) + 11 de despesas e estudo de preço (Plano 8)
-    assert len(nomes) == 88
+    # + 4 de lotes (Plano 9: separação, separação da encomenda, contagem, conferência do vencido)
+    assert len(nomes) == 92

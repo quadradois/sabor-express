@@ -142,7 +142,7 @@ def test_caixa_fala_os_tres_mais_urgentes_com_o_numero(conciliacao):
     assert [i["decisao_id"] for i in contas["itens"]] == [vencida]
     assert chamar("ver_decisoes", origem="conciliar")["itens"][0]["decisao_id"] == conciliacao["decisao_id"]
     errado = chamar("ver_decisoes", origem="dinossauro")
-    assert "Não conheço o assunto" in errado["erro"] and "produto vencido" in errado["opcoes"]
+    assert "Não conheço o assunto" in errado["erro"] and "conferência do vencido" in errado["opcoes"]
 
 
 def test_ver_decisao_em_detalhe(conciliacao):
@@ -258,7 +258,8 @@ def test_resumo_fala_os_totais_e_os_tres_mais_urgentes(bolinha, farinha, pasta_b
     r = chamar("ver_resumo_do_dia")
     t = r["texto"]
     assert t.startswith("Na caixa, ")
-    assert "Atenção: 1 lote vencido em estoque, 10 reais em mercadoria: Leite. Vencido não pode ser usado." in t
+    assert ("Atenção: 1 lote vencido em estoque, 10 reais em mercadoria: Leite. Vencido só sai com motivo; a caixa "
+            "pergunta se ainda estão aí.") in t
     assert "1 conta vencida, somando 100 reais." in t
     chaves = [a["assunto"] for a in r["assuntos"]]
     assert chaves[:2] == ["vencidos", "contas_vencidas"] and "backup" not in chaves  # backup em dia: não fala

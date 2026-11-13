@@ -5,9 +5,9 @@ O agente (voz, Telegram, texto) conversa com o Sabor Express por um servidor
 ferramentas ficam em `agente/ferramentas.py`; a lógica das consultas, em
 `agente/consultas.py` (a mesma que a API REST provisória `/api/agente/` usa);
 a das gravações, em `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`,
-`agente/vendas.py`, `agente/despesas.py` e `agente/propostas.py`; as de custos,
+`agente/vendas.py`, `agente/despesas.py`, `agente/lotes.py` e `agente/propostas.py`; as de custos,
 margens, relatórios e estudo de preço (só leitura), em `agente/custos.py`.
-São 88 ferramentas.
+São 92 ferramentas.
 O sistema faz todas as contas; o modelo só escolhe a ferramenta e fala o
 resultado.
 
@@ -425,6 +425,24 @@ agente → simular_preco(produto="coxinha", sobra_pct=30)
 O trecho para o prompt do agente (com as frases antigas a substituir) e um
 roteiro de teste por voz estão em
 [`agente-instrucoes-despesas.md`](agente-instrucoes-despesas.md).
+
+### Lotes na operação (Plano 9)
+
+O lote é falado pelo nome da cozinha ("lote do dia 8", `estoque.lotes.nome_lote`), nunca pelo código, em
+todas as ferramentas; o lote dito é resolvido em `agente/lotes.py` (nome, "dia 8", "segundo lote do dia 8",
+código ou `lote_id` da separação; ambíguo → `opcoes`). Vencido sem motivo devolve `precisa_motivo: true` com a
+pergunta pronta no `erro`; o motivo só vai ao núcleo quando há vencido, e a confirmação repete lote, dia em que
+venceu e motivo. Prompt e roteiro de teste: [`agente-instrucoes-lotes.md`](agente-instrucoes-lotes.md).
+
+| Ferramenta | Nível | Núcleo | Observação |
+|---|---|---|---|
+| `ver_separacao` | 0 | `vendas.lotes.separacao_venda` | `itens` como em `registrar_venda` (com `lotes` opcionais), `data` falada; `texto` + `linhas[].lotes[]` (`lote_id`, `lote`, `unidades`, `sobra`, `validade`, `vencido`) e `deixados` |
+| `ver_separacao_encomenda` | 0 | `separacao_encomenda` | pela encomenda ou cliente; `lotes` como em `entregar_encomenda` |
+| `contar_lote` | 2 | `estoque.servicos.ajustar_contagem` | altera saldo e valor: espera o "sim" como perda e entrada manual |
+| `conferir_vencido` | 2 | `registrar_perda` / `ajustar_contagem` | resposta da decisão `lotes_vencidos`; "já foram vendidas" só devolve o `lote_id` para `registrar_venda` |
+| `registrar_venda`, `entregar_encomenda` | 2 | `registrar_venda`, `entregar_encomenda` | + `lotes`, `data`, `motivo_vencido`; confirmação com "De onde sai: ..."; `dito` com os `avisos` |
+| `registrar_fritura`, `mudar_conservacao`, `cancelar_venda`, `concluir_producao`, `conciliar_consumo` | 2 | os serviços de mesmo nome | + `motivo_vencido` (fritura e conservação também `lote` pelo nome) |
+| `registrar_perda` | 2 | `registrar_perda` | + `destino` (perda, descarte, consumo da equipe, doação) |
 
 ### Fluxo de proposta (nível 2)
 
