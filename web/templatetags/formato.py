@@ -135,3 +135,15 @@ def ref4(v):
         return v or ""
     txt = _virgula(v, 4).replace(".", "")
     return txt.rstrip("0").rstrip(",") if "," in txt else txt
+
+
+# ---------- lotes (Plano 9): o nome falável junto do código ----------
+
+@register.filter
+def nome_do_lote(lote):
+    """"lote do dia 8": aceita o lote ou o id dele; desconhecido volta vazio."""
+    from estoque.lotes import nome_lote
+    from estoque.models import Lote
+    if not isinstance(lote, Lote):
+        lote = Lote.objects.filter(id=lote).first() if str(lote).isdigit() else None
+    return nome_lote(lote) if lote else ""

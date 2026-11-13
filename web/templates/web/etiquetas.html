@@ -4,6 +4,8 @@
 {% for m in messages %}<p class="erro">{{ m }}</p>{% endfor %}
 <div class="etiquetas">
 {% for _ in range %}<div class="etiqueta">
+  <div class="dia" aria-label="Dia da produção">{{ e.dia_producao }}</div>
+  <div class="dia-nome">{{ e.nome_lote }}</div>
   <strong>{{ e.produto }}</strong>
   <div>Lote: {{ e.lote }}</div>
   <div>Fabricação: {{ e.fabricacao|date:"d/m/Y" }}</div>

@@ -18,15 +18,17 @@
 {% for x in v %}<section class="bloco">
   <p><strong>Venda {{ x.venda_id }}</strong> · {{ x.data|date:"d/m/Y" }} · {{ x.cliente|default:"balcão" }} · <strong>{{ x.total|dinheiro }}</strong>
     {% if x.situacao == "cancelada" %}<span class="falta">cancelada</span>{% endif %}</p>
-  <ul class="linhas">{% for l in x.linhas %}<li>{{ l.quantidade }} × {{ l.apresentacao }} · {{ l.preco|dinheiro }}{% if l.preco != l.preco_tabela %} <span class="mudo">(tabela {{ l.preco_tabela|dinheiro }})</span>{% endif %}</li>{% endfor %}</ul>
+  <ul class="linhas">{% for l in x.linhas %}<li>{{ l.quantidade }} × {{ l.apresentacao }} · {{ l.preco|dinheiro }}{% if l.preco != l.preco_tabela %} <span class="mudo">(tabela {{ l.preco_tabela|dinheiro }})</span>{% endif %}
+    {% for lo in l.lotes %}<span class="mudo">· {{ lo.unidades|numero }} un do {{ lo.nome }} (código {{ lo.codigo }}){% if lo.motivo_vencido %}, vencido, motivo: {{ lo.motivo_vencido }}{% endif %}</span>{% endfor %}</li>{% endfor %}</ul>
   <p class="mudo">{% if x.condicao == "a_prazo" %}A prazo{% else %}À vista{% if x.forma_pagamento %} ({{ x.forma_pagamento }}){% endif %}{% endif %}{% if x.encomenda_id %} · da <a href="{% url 'encomenda' x.encomenda_id %}">encomenda {{ x.encomenda_id }}</a>{% endif %}</p>
   {% if x.situacao == "cancelada" %}<p>Motivo: {{ x.motivo_cancelamento }} · {% if x.destino == "estoque" %}voltou ao estoque{% else %}foi para perda{% endif %}{% if x.valor_devolvido %} · devolvido {{ x.valor_devolvido|dinheiro }}{% endif %}</p>
-  {% else %}<details class="cancelar"><summary>Cancelar venda</summary>
+  {% else %}<details class="cancelar" {% if x.reabrir %}open{% endif %}><summary>Cancelar venda</summary>
     <form method="post" action="{% url 'cancelar_venda' x.venda_id %}" class="form">{% csrf_token %}{% chave %}
       <input type="hidden" name="next" value="{{ next }}">
       <p><label>Motivo <input name="motivo"></label></p>
       <p><label><input type="radio" name="destino" value="perda" checked> O salgado vai para perda</label>
-         <label><input type="radio" name="destino" value="estoque"> Volta ao estoque (só se não venceu)</label></p>
+         <label><input type="radio" name="destino" value="estoque" {% if x.reabrir %}checked{% endif %}> Volta ao estoque</label></p>
+      {% include "web/_motivo_vencido.html" with aberto=x.reabrir ajuda="Se o lote venceu e vai voltar ao estoque, o sistema pede um motivo." %}
       <button type="submit">Cancelar esta venda</button>
     </form></details>{% endif %}
 </section>{% empty %}<p>Nenhuma venda neste período.</p>{% endfor %}

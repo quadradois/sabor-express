@@ -1,0 +1,5 @@
+{# Campo do motivo do vencido. Abre sozinho quando o sistema recusou pedindo o motivo; nunca vem preenchido sozinho. #}
+<details class="cancelar" {% if aberto or valor %}open{% endif %}><summary>Lote vencido? Informe o motivo para seguir</summary>
+  <p class="mudo">{{ ajuda|default:"O sistema só deixa usar lote vencido com um motivo, que fica registrado." }}</p>
+  <p><label>Motivo do vencido <input name="motivo_vencido" value="{{ valor|default:'' }}" maxlength="200" autocomplete="off"></label></p>
+</details>

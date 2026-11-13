@@ -3,7 +3,9 @@
 <form method="post" action="{% url 'descartar' lote_id %}" class="form">{% csrf_token %}{% chave %}
   <input type="hidden" name="estado" value="{{ estado }}">
   <input type="hidden" name="next" value="{{ next }}">
-  <p><label>Quantidade a descartar <input name="quantidade" value="{{ saldo|numero }}" inputmode="decimal"></label></p>
+  <p><label>Quantidade a dar destino <input name="quantidade" value="{{ saldo|numero }}" inputmode="decimal"></label></p>
+  <p><label>Destino <select name="destino"><option value="perda">Perda</option><option value="descarte" selected>Descarte</option><option value="consumo_equipe">Consumo da equipe</option><option value="doacao">Doação</option></select></label></p>
   <p><label>Motivo <input name="motivo" value="vencido"></label></p>
-  <button type="submit">Descartar</button>
+  <button type="submit">Registrar</button>
 </form></details>
+<p><a href="{% url 'contar_lote' lote_id %}?estado={{ estado }}&amp;next={{ next|urlencode }}">Contar o que há de fato</a></p>

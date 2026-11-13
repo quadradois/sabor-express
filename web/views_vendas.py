@@ -9,16 +9,21 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from cadastros.models import Item
 from cadastros.servicos import salvar_cliente
-from estoque.models import ESTADOS, FORMAS
+from estoque.lotes import nome_lote
+from estoque.models import ESTADOS, FORMAS, Lote
+from estoque.servicos import saldo_lote
 from financeiro import servicos as fs
 from nucleo.operacoes import RegraViolada
 from vendas import consultas as vc
+from vendas import lotes as vl
 from vendas import servicos as vs
-from vendas.models import MODOS, TABELAS
+from vendas.models import MODOS, TABELAS, Apresentacao, Encomenda, LinhaVenda
 
+from . import separacao as sp
 from .templatetags.formato import dinheiro, quantidade
 from .views_compras import _dec, _id, _kw, _volta
 
@@ -42,7 +47,9 @@ def _grade(apres, post):
             for a in apres]
 
 
-def _itens_post(post, apres):
+def _itens_post(post, apres, com_lotes=False):
+    """Itens digitados. `com_lotes` (venda de balcão): junta o que o atendente disse ter pego de outro lote
+    (`lote_{apresentacao}_{lote}`) ou "tudo saiu deste lote" (`todo_{apresentacao}`, da conferência do vencido)."""
     itens = []
     for a in apres:
         i = a["apresentacao_id"]
@@ -55,6 +62,12 @@ def _itens_post(post, apres):
         preco = _dec(post.get(f"preco_{i}"), f"Preço de {a['produto']} ({a['nome']})")
         if preco is not None:
             item["preco"] = preco
+        if com_lotes:
+            lotes = sp.lotes_post(post, i)
+            if not lotes and (post.get(f"todo_{i}") or "").isdigit():
+                lotes = [{"lote_id": int(post[f"todo_{i}"]), "unidades": int(q) * a["unidades"]}]
+            if lotes:
+                item["lotes"] = lotes
         itens.append(item)
     return itens
 
@@ -76,27 +89,101 @@ def _cliente_id(post):
 
 # ---------- vender (balcão) ----------
 
+def _inicial_da_conferencia(g, apres):
+    """Venda atrasada aberta pela conferência do vencido: data e lote já preenchidos (`?lote=&estado=&data_venda=`).
+    Só preenche; quanto foi vendido quem diz é o atendente."""
+    lote = Lote.objects.select_related("item").filter(id=g.get("lote")).first() if (g.get("lote") or "").isdigit() else None
+    if lote is None:
+        return {}, None
+    estado = g.get("estado", "")
+    iniciais = {f"todo_{a['apresentacao_id']}": str(lote.id) for a in apres
+                if a["produto_id"] == lote.item_id and a["forma"] == lote.forma and (not estado or a["estado"] == estado)}
+    data = g.get("data_venda") or (lote.validade.isoformat() if lote.validade else "")
+    return {"data_venda": data, **iniciais}, {"nome": nome_lote(lote), "item": lote.item.nome, "estado": estado,
+                                                "saldo": saldo_lote(lote, estado), "tem_apresentacao": bool(iniciais)}
+
+
+def _separar(post, apres, itens=None):
+    """A separação dos itens digitados (consulta, não grava) ou None se não há como montar."""
+    try:
+        itens = _itens_post(post, apres, com_lotes=True) if itens is None else itens
+        if not itens:
+            return None
+        return vl.separacao_venda(itens=itens, data_venda=_dia(post.get("data_venda"), "Data da venda"),
+                                  motivo_vencido=(post.get("motivo_vencido") or "").strip())
+    except RegraViolada:
+        return None
+
+
+def _contexto_separacao(sep, post, apres):
+    quando = sep["data_venda"]
+    por_id = {a.id: a for a in Apresentacao.objects.select_related("produto").filter(
+        id__in={l["apresentacao_id"] for l in sep["linhas"]})}
+    return {"sep": sep, "painel": sp.painel(sep, post, quando, por_id, chave_da_linha=lambda l: l["apresentacao_id"]),
+            "visto": sp.assinatura(post), "passada": quando < timezone.localdate()}
+
+
 @login_required
 def vender(request):
     apres = vc.apresentacoes()
     post = request.POST if request.method == "POST" else {}
-    if request.method == "POST":
+    ctx, confere = {}, None
+    if request.method != "POST":
+        post, confere = _inicial_da_conferencia(request.GET, apres)
+    else:
+        acao, erro = post.get("acao", "confirmar"), ""
+        sep = None
         try:
             kw = _kw(request)
-            itens = _itens_post(post, apres)
-            tabela, condicao = post.get("tabela", "varejo"), post.get("condicao", "a_vista")
-            parcelas = _parcelas(post, vc.total_dos_itens(itens=itens, tabela=tabela)) if condicao == "a_prazo" else None
-            r = vs.registrar_venda(itens=itens, tabela=tabela, cliente_id=_cliente_id(post), condicao=condicao,
-                                   forma_pagamento=post.get("forma_pagamento", ""), parcelas=parcelas, **kw)
+            itens = _itens_post(post, apres, com_lotes=True)
+            quando = _dia(post.get("data_venda"), "Data da venda")
+            motivo = (post.get("motivo_vencido") or "").strip()
+            if acao != "separar" and post.get("visto") not in (None, "", sp.assinatura(post)):
+                messages.warning(request, "Você mudou os itens ou os lotes: confira a separação de novo e confirme.")
+                acao = "separar"
+            if acao == "separar":
+                sep = vl.separacao_venda(itens=itens, data_venda=quando, motivo_vencido=motivo)
+            else:
+                tabela, condicao = post.get("tabela", "varejo"), post.get("condicao", "a_vista")
+                parcelas = (_parcelas(post, vc.total_dos_itens(itens=itens, tabela=tabela))
+                            if condicao == "a_prazo" else None)
+                r = vs.registrar_venda(itens=itens, tabela=tabela, cliente_id=_cliente_id(post), condicao=condicao,
+                                       forma_pagamento=post.get("forma_pagamento", ""), parcelas=parcelas,
+                                       data_venda=quando, motivo_vencido=motivo, **kw)
         except RegraViolada as e:
-            messages.error(request, str(e))
+            erro = str(e)
+            messages.error(request, erro)
+            sep = _separar(post, apres)  # mostra de onde pegar junto da recusa
         else:
-            a_prazo = " (a prazo, virou conta a receber)" if r["condicao"] == "a_prazo" else ""
-            messages.success(request, f"Venda {r['venda_id']} registrada: {dinheiro(r['total'])}{a_prazo}.")
-            return redirect("vendas")
+            if acao != "separar":
+                a_prazo = " (a prazo, virou conta a receber)" if r["condicao"] == "a_prazo" else ""
+                feita = date.fromisoformat(r["data"])  # o serviço devolve a data como texto
+                dia_txt = f" do dia {feita:%d/%m/%Y}" if feita != timezone.localdate() else ""
+                messages.success(request, f"Venda {r['venda_id']}{dia_txt} registrada: {dinheiro(r['total'])}{a_prazo}.")
+                for aviso in r.get("avisos", []):
+                    messages.warning(request, aviso)
+                return redirect("vendas")
+        if sep is not None:
+            ctx = _contexto_separacao(sep, post, apres)
+        ctx["pede_motivo"] = "motivo" in erro.lower()
+    ctx["todos"] = [(k, v) for k, v in post.items() if k.startswith("todo_")]
     return render(request, "web/vender.html", {
         "grade": _grade(apres, post), "clientes": vc.clientes(), "p": post, "tabelas": TABELAS,
-        "vendas_hoje": vc.vendas_do_dia()["totais"]})
+        "vendas_hoje": vc.vendas_do_dia()["totais"], "hoje": timezone.localdate(), "confere": confere, **ctx})
+
+
+def _lotes_das_vendas(ids) -> dict:
+    """{venda_id: [lotes de cada linha]}: nome falável, código, conservação, unidades e motivo do vencido,
+    lidos das baixas gravadas na linha (na mesma ordem das linhas da consulta)."""
+    linhas = list(LinhaVenda.objects.filter(venda_id__in=ids).select_related("apresentacao").order_by("venda_id", "id"))
+    lotes = Lote.objects.in_bulk({b["lote_id"] for l in linhas for b in l.baixas})
+    saida = {}
+    for l in linhas:
+        saida.setdefault(l.venda_id, []).append([
+            {"nome": nome_lote(lotes[b["lote_id"]]), "codigo": lotes[b["lote_id"]].codigo or "sem lote",
+             "estado": b["estado"], "unidades": b["quantidade"], "motivo_vencido": b.get("motivo_vencido", "")}
+            for b in l.baixas if b["lote_id"] in lotes and b["item_id"] == l.apresentacao.produto_id])
+    return saida
 
 
 @login_required
@@ -112,6 +199,11 @@ def vendas(request):
         if "de" not in g and "ate" not in g:
             de = ate = hoje
     r = vc.vendas(de=de, ate=ate, incluir_canceladas=True)
+    lotes = _lotes_das_vendas([x["venda_id"] for x in r["vendas"]])
+    for x in r["vendas"]:  # de qual lote saiu cada linha (nome falável + código)
+        x["reabrir"] = g.get("cancelar", "") == str(x["venda_id"])  # recusa pediu motivo: abre o cancelamento
+        for l, ls in zip(x["linhas"], lotes.get(x["venda_id"], [])):
+            l["lotes"] = ls
     return render(request, "web/vendas.html", {"v": r["vendas"], "t": r["totais"], "de": de, "ate": ate,
                                                "next": request.get_full_path()})
 
@@ -122,9 +214,15 @@ def cancelar_venda(request, id):
         return redirect("vendas")
     try:
         r = vs.cancelar_venda(venda_id=id, motivo=request.POST.get("motivo", ""),
-                              destino=request.POST.get("destino", "perda"), **_kw(request))
+                              destino=request.POST.get("destino", "perda"),
+                              motivo_vencido=(request.POST.get("motivo_vencido") or "").strip(), **_kw(request))
     except RegraViolada as e:
         messages.error(request, str(e))
+        if "motivo" in str(e).lower():  # volta com o cancelamento aberto e o campo do motivo à mostra
+            destino = request.POST.get("next", "")
+            if not (destino and url_has_allowed_host_and_scheme(destino, allowed_hosts=None)):
+                destino = reverse("vendas")
+            return redirect(f"{destino}{'&' if '?' in destino else '?'}cancelar={id}")
     else:
         txt = f"Venda {id} cancelada."
         if r["destino"] == "estoque":
@@ -185,6 +283,26 @@ def encomenda_nova(request):
         "hoje": timezone.localdate()})
 
 
+def _lotes_entrega(post, e):
+    """O que o atendente disse ter pego de outro lote em cada item da encomenda (`lote_{item}_{lote}`)."""
+    lotes = [{"item_encomenda_id": i["item_encomenda_id"], "lotes": ls}
+             for i in e["itens"] if (ls := sp.lotes_post(post, i["item_encomenda_id"]))]
+    return lotes or None
+
+
+def _separacao_entrega(post, e):
+    """A separação da entrega (consulta): as reservas, ou o que o atendente indicou. Contexto da tela."""
+    quando = _dia(post.get("data_entrega"), "Data da entrega")
+    sep = vl.separacao_encomenda(encomenda_id=e["encomenda_id"], data_entrega=quando, lotes=_lotes_entrega(post, e),
+                                 motivo_vencido=(post.get("motivo_vencido") or "").strip())
+    enc = Encomenda.objects.get(id=e["encomenda_id"])
+    por_id = {a.id: a for a in Apresentacao.objects.select_related("produto").filter(
+        id__in={l["apresentacao_id"] for l in sep["linhas"]})}
+    return {"sep": sep, "visto": sp.assinatura(post), "passada": sep["data_venda"] < timezone.localdate(),
+            "painel": sp.painel(sep, post, sep["data_venda"], por_id, extra=vl.reservas_da_encomenda(enc),
+                                chave_da_linha=lambda l: l["item_encomenda_id"])}
+
+
 def _acao_encomenda(request, e):
     kw = _kw(request)
     post, acao = request.POST, request.POST.get("acao")
@@ -198,8 +316,13 @@ def _acao_encomenda(request, e):
         condicao = post.get("condicao", "a_vista")
         parcelas = _parcelas(post, e["saldo"]) if condicao == "a_prazo" and e["saldo"] > 0 else None
         r = vs.entregar_encomenda(encomenda_id=e["encomenda_id"], condicao=condicao,
-                                  forma_pagamento=post.get("forma_pagamento", ""), parcelas=parcelas, **kw)
+                                  forma_pagamento=post.get("forma_pagamento", ""), parcelas=parcelas,
+                                  data_entrega=_dia(post.get("data_entrega"), "Data da entrega"),
+                                  lotes=_lotes_entrega(post, e),
+                                  motivo_vencido=(post.get("motivo_vencido") or "").strip(), **kw)
         messages.success(request, f"Encomenda entregue (venda {r['venda_id']}). Saldo: {dinheiro(r['saldo'])}.")
+        for aviso in r.get("avisos", []):
+            messages.warning(request, aviso)
     elif acao == "cancelar":
         r = vs.cancelar_encomenda(encomenda_id=e["encomenda_id"], motivo=post.get("motivo", ""),
                                   devolver_sinal=bool(post.get("devolver_sinal")), **kw)
@@ -214,17 +337,30 @@ def encomenda(request, id):
     e = vc.detalhe_encomenda(id)
     if e is None:
         raise Http404
-    post = {}
+    post, ctx, erro = {}, {}, ""
     if request.method == "POST":
+        post = request.POST
+        acao = post.get("acao")
         try:
-            _acao_encomenda(request, e)
-        except RegraViolada as erro:
-            messages.error(request, str(erro))
-            post = request.POST
-        else:
-            return redirect("encomenda", id=id)
+            if acao == "entregar" and post.get("visto") not in (None, "", sp.assinatura(post)):
+                messages.warning(request, "Você mudou os lotes: confira a separação de novo e confirme a entrega.")
+            elif acao == "separar":
+                pass  # só mostra a separação (abaixo)
+            else:
+                _acao_encomenda(request, e)
+                return redirect("encomenda", id=id)
+        except RegraViolada as erro_regra:
+            erro = str(erro_regra)
+            messages.error(request, erro)
         e = vc.detalhe_encomenda(id)
-    return render(request, "web/encomenda.html", {"e": e, "p": post})
+    if e["situacao"] == "pronta":
+        try:
+            ctx = _separacao_entrega(post, e)
+        except RegraViolada as erro_regra:
+            if not erro:
+                messages.error(request, str(erro_regra))
+    ctx["pede_motivo"] = "motivo" in erro.lower()
+    return render(request, "web/encomenda.html", {"e": e, "p": post, "hoje": timezone.localdate(), **ctx})
 
 
 # ---------- necessidade de produção ----------

@@ -2,7 +2,7 @@ from django.contrib.auth import views as auth
 from django.urls import path
 
 from . import (views, views_compras as vc, views_decisoes as vd, views_fritura as vf, views_receber as vr,
-               views_vendas as vv, views_custos as vcu, views_despesas as vde)
+               views_vendas as vv, views_lotes as vlo, views_custos as vcu, views_despesas as vde)
 
 urlpatterns = [
     path("", vd.hoje, name="inicio"),
@@ -14,6 +14,7 @@ urlpatterns = [
     path("producao/tamanho/", views.tamanho_novo, name="tamanho_novo"),
     path("producao/<int:id>/", views.producao, name="producao"),
     path("lotes/<int:id>/", views.lote, name="lote"),
+    path("lotes/<int:id>/contar/", vlo.contar, name="contar_lote"),
     path("lotes/<int:id>/etiquetas/", views.etiquetas, name="etiquetas"),
     path("estoque/entrada/", views.entrada, name="entrada"),
     path("fornecedores/", vc.fornecedores, name="fornecedores"),

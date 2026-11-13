@@ -10,9 +10,17 @@
   <p><label>Tabela <select name="tabela">{% for v, nome in tabelas %}<option value="{{ v }}" {% if p.tabela == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
   <p><label>Cliente (obrigatório se for a prazo) <select name="cliente"><option value="">— balcão, sem cliente —</option>{% for c in clientes %}<option value="{{ c.cliente_id }}" {% if p.cliente == c.cliente_id|stringformat:"s" %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></label>
      <a href="{% url 'cliente_novo' %}">cadastrar cliente</a></p>
+  <p><label>Dia da venda <input type="date" name="data_venda" value="{% if p.data_venda %}{{ p.data_venda }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}" max="{{ hoje|date:'Y-m-d' }}"></label>
+     <span class="mudo">Se a venda foi em outro dia, mude aqui: o lote é julgado pela validade daquele dia.</span></p>
+  {% if confere %}<p class="aviso">Venda atrasada do {{ confere.nome }} de {{ confere.item }}{% if confere.estado %} ({{ confere.estado|conservacao|lower }}){% endif %}: o sistema ainda mostra {{ confere.saldo|numero }} un nele.
+    {% if confere.tem_apresentacao %}Confira o dia e digite quantas foram vendidas; elas saem desse lote.{% else %}Não há preço cadastrado para este salgado nessa forma: <a href="{% url 'preco_novo' %}">cadastre o preço</a> primeiro.{% endif %}</p>{% endif %}
+  {% for nome, valor in todos %}<input type="hidden" name="{{ nome }}" value="{{ valor }}">{% endfor %}
   <h2>O que saiu</h2>
   {% include "web/_grade_itens.html" %}
+  {% if sep %}{% include "web/_separacao.html" %}{% endif %}
   {% include "web/_pagamento.html" %}
-  <button type="submit">Registrar venda</button>
+  {% if not sep %}<button type="submit" name="acao" value="separar" class="principal">Ver de onde pegar</button>
+  {% elif sep.completo %}<button type="submit" name="acao" value="confirmar" class="principal">Confirmar e registrar venda</button>
+  {% else %}<p class="erro">Não dá para fechar: falta salgado para o que foi pedido. Mude as quantidades ou diga de qual lote você pegou.</p>{% endif %}
 </form>
 {% endblock %}

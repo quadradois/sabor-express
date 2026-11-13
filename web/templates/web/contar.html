@@ -1,0 +1,21 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Contar lote — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Contar lote <small>{{ l.item.nome }} · {{ l|nome_do_lote }}</small></h1>
+{% include "web/_mensagens.html" %}
+<p>Conte o que há de fato na prateleira. O sistema lança só a diferença, com o motivo, e mostra o antes e o depois.</p>
+<table>
+  <tr><th>Conservação</th><th>O sistema diz</th><th>Validade</th></tr>
+  {% for e in porcoes %}<tr><td>{{ e.conservacao }}</td><td>{{ e.saldo|quantidade:l.item.unidade_base }}{% if e.reservado %} ({{ e.reservado|numero }} reservado para encomenda){% endif %}</td>
+    <td>{{ e.validade|date:"d/m/Y"|default:"—" }}{% if e.vencido %} <span class="falta">vencido</span>{% endif %}</td></tr>{% endfor %}
+</table>
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <p><label>Conservação <select name="estado">{% for e in porcoes %}<option value="{{ e.estado }}" {% if e.estado == estado %}selected{% endif %}>{{ e.conservacao }} (sistema: {{ e.saldo|numero }})</option>{% endfor %}</select></label></p>
+  <p><label>Quanto há de fato ({{ l.item.unidade_base }}) <input name="contado" value="{{ p.contado|default:'' }}" inputmode="decimal" autocomplete="off"></label></p>
+  <p><label>Motivo da contagem <input name="motivo" value="{{ p.motivo|default:'' }}" placeholder="ex.: contagem do vencido"></label></p>
+  <button type="submit" class="principal">Lançar a contagem</button>
+</form>
+<p><a href="{{ next|default:voltar }}">Voltar</a></p>
+{% endblock %}

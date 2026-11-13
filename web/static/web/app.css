@@ -51,3 +51,8 @@ table { display: block; overflow-x: auto; }
 .rotulo { background: #e0e7ff; color: #312e81; padding: 2px 6px; border-radius: 4px; }
 .bloco table th, .bloco table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
 .bloco table td.num, .bloco table th.num { text-align: right; white-space: nowrap; }
+.botao { display: inline-block; min-height: 44px; padding: 10px 14px; background: #eee; border-radius: 6px; text-decoration: none; color: inherit; }
+.principal { background: #1d4ed8; color: #fff; border: 0; border-radius: 6px; padding: 10px 16px; }
+.separar { padding-left: 1.2em; }
+.etiqueta .dia { font-size: 4.5em; font-weight: bold; line-height: 1; text-align: center; }
+.etiqueta .dia-nome { text-align: center; font-size: 1.1em; margin-bottom: 4px; }

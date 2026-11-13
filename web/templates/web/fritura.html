@@ -14,14 +14,17 @@
   <input type="hidden" name="produto" value="{{ produto }}">
   <h2>De qual lote</h2>
   {% for s in porcoes %}<p class="bloco"><label><input type="radio" name="porcao" value="{{ s.lote_id }}|{{ s.estado }}" {% if p.porcao == s.lote_id|stringformat:"s"|add:"|"|add:s.estado %}checked{% elif not p.porcao and forloop.first %}checked{% endif %}>
-    lote {{ s.codigo }} · {{ s.estado|conservacao|lower }} · {{ s.livre|numero }} un livres · vence {{ s.validade|date:"d/m/Y"|default:"sem validade" }} · custo {{ s.custo_unitario|dinheiro }}/un{% if forloop.first %} <span class="mudo">(vence primeiro)</span>{% endif %}</label></p>
-  {% empty %}<p>Nenhum lote cru livre deste salgado.</p>{% endfor %}
-  {% if porcoes %}
+    {{ s.lote_id|nome_do_lote }} (código {{ s.codigo }}) · {{ s.estado|conservacao|lower }} · {{ s.livre|numero }} un livres · vence {{ s.validade|date:"d/m/Y"|default:"sem validade" }} · custo {{ s.custo_unitario|dinheiro }}/un{% if forloop.first %} <span class="mudo">(vence primeiro)</span>{% endif %}</label></p>
+  {% empty %}<p>Nenhum lote cru livre e dentro da validade deste salgado.</p>{% endfor %}
+  {% for s in vencidas %}<p class="bloco"><label><input type="radio" name="porcao" value="{{ s.lote_id }}|{{ s.estado }}" {% if p.porcao == s.lote_id|stringformat:"s"|add:"|"|add:s.estado %}checked{% endif %}>
+    {{ s.lote_id|nome_do_lote }} (código {{ s.codigo }}) · {{ s.estado|conservacao|lower }} · {{ s.livre|numero }} un livres · <span class="falta">venceu em {{ s.validade|date:"d/m/Y" }}</span> · só com motivo</label></p>{% endfor %}
+  {% if porcoes or vencidas %}
   <p><label>Quantas foram fritas <input name="quantidade" value="{{ p.quantidade|default:'' }}" inputmode="numeric"></label></p>
   <p><label>Quantas saíram boas <input name="boas" value="{{ p.boas|default:'' }}" inputmode="numeric"></label></p>
   <p><label>Motivo das perdas (se alguma se perdeu) <input name="perda_motivo" value="{{ p.perda_motivo|default:'' }}"></label></p>
   <p><label>Guardar o frito como <select name="estado_destino">{% for v, nome in estados %}<option value="{{ v }}" {% if p.estado_destino == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
   <p><label><input type="checkbox" name="confirmar_perda_total" value="1" {% if p.confirmar_perda_total %}checked{% endif %}> Nenhuma saiu boa: confirmo a perda total</label></p>
+  {% include "web/_motivo_vencido.html" with aberto=pede_motivo valor=p.motivo_vencido ajuda="Para fritar um lote vencido, escolha o lote acima e diga o motivo. Fica registrado." %}
   <details class="cancelar"><summary>Validade manual (só se o salgado não tem validade cadastrada)</summary>
     <p><label>Validade <input type="date" name="validade_manual" value="{{ p.validade_manual|default:'' }}"></label></p>
     <p><label>Justificativa <input name="justificativa" value="{{ p.justificativa|default:'' }}"></label></p></details>

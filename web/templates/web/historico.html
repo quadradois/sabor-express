@@ -17,6 +17,7 @@
 {% for o in pagina %}<section class="bloco">
   <p><strong>{{ o.rotulo }}</strong>{% if o.status == "erro" %} <span class="falta">recusada</span>{% endif %}<br><small>{{ o.criado_em|date:"d/m/Y H:i" }} · {{ o.autor }} · {{ o.canal }}</small></p>
   {% if o.erro %}<p class="erro">{{ o.erro }}</p>{% endif %}
+  {% if o.motivo_vencido %}<p class="aviso">Lote vencido, seguiu com o motivo: {{ o.motivo_vencido }}</p>{% endif %}
   <details><summary>Detalhes</summary><pre>{{ o.parametros|bonito }}</pre>{% if o.resultado %}<pre>{{ o.resultado|bonito }}</pre>{% endif %}</details>
 </section>{% empty %}<p>Nenhuma operação com esses filtros.</p>{% endfor %}
 {% if pagina.has_other_pages %}<p class="navegar">
