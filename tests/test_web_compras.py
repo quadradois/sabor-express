@@ -216,3 +216,14 @@ def test_consumos_pendentes_concilia(client, dono, bolinha):
     t = texto(client.post(reverse("consumos"), {"pendente": pend.id, "lote": rec["recebimentos"][0]["lote_id"], "chave": "k1"}, follow=True))
     pend.refresh_from_db()
     assert "Consumo conciliado" in t and pend.lote_id
+
+
+def test_reabrir_pendencia_encerrada(client, dono, compra10kg):
+    linha = compra10kg.linhas.get()
+    url = reverse("compra", args=[compra10kg.id])
+    client.post(url, {"acao": "receber", f"quantidade_{linha.id}": "4", "chave": "r1"})
+    assert "Reabrir pendência" not in texto(client.get(url))
+    client.post(url, {"acao": "encerrar", "motivo": "faltou no fornecedor", "chave": "e1"})
+    assert "Reabrir pendência" in texto(client.get(url))
+    t = texto(client.post(url, {"acao": "reabrir", "motivo": "entregou depois", "chave": "x1"}, follow=True))
+    assert "Pendência reaberta." in t and "Registrar recebimento" in t

@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from cadastros.servicos import criar_tamanho
 from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento,
-                              receber_bonificacao, receber_compra, registrar_compra)
+                              reabrir_pendencia, receber_bonificacao, receber_compra, registrar_compra)
 from decisoes.servicos import aprovar_decisao
 from estoque.servicos import ajustar_contagem, entrada_manual, registrar_perda, transferir_estado
 from nucleo.models import RegistroOperacao
@@ -60,6 +60,15 @@ def registrar_e_receber_compra(*, recebimento, autor, canal, chave=None, **compr
     return {**r, "recebimento": rec}
 
 
+def reabrir_e_receber_compra(*, compra_id, motivo, linha_ids, linhas, autor, canal, chave=None) -> dict:
+    """"Chegou o que tinha sido encerrado": reabre a pendência e recebe, cada passo uma operação do núcleo."""
+    r = reabrir_pendencia(compra_id=compra_id, motivo=motivo, linha_ids=linha_ids, autor=autor, canal=canal,
+                          chave=chave)
+    rec = receber_compra(compra_id=compra_id, linhas=linhas, autor=autor, canal=canal,
+                         chave=f"{chave}:receber" if chave else None)
+    return {**r, "recebimento": rec}
+
+
 OPERACOES = {
     "iniciar_producao": Operacao(iniciar_producao),
     "concluir_producao": Operacao(concluir_producao, datas=("validade_manual",)),
@@ -72,6 +81,7 @@ OPERACOES = {
     "registrar_e_receber_compra": Operacao(registrar_e_receber_compra),
     "receber_compra": Operacao(receber_compra),
     "encerrar_pendencia": Operacao(encerrar_pendencia),
+    "reabrir_e_receber_compra": Operacao(reabrir_e_receber_compra),
     "cancelar_compra": Operacao(cancelar_compra),
     "estornar_recebimento": Operacao(estornar_recebimento),
     "devolver_ao_fornecedor": Operacao(devolver_ao_fornecedor),

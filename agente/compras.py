@@ -578,11 +578,34 @@ def _restante_txt(cid) -> str:
     return f"Fica faltando {_falta_txt(falta)}" if falta else "Com isso a compra fica completa"
 
 
+def _encerradas(fornecedor="", item="", compra_id=None):
+    f = _fornecedor(fornecedor, ativos=False) if fornecedor else None
+    linhas = cc.pendencias_encerradas(compra_id=_inteiro(compra_id, "compra_id") if compra_id else None)
+    if f:
+        linhas = [l for l in linhas if l["fornecedor"] == f.nome]
+    if (item or "").strip():
+        linhas = _casados(item, linhas)
+    return linhas
+
+
+def _encerrada_txt(l) -> str:
+    return (f"{qtd(l['encerrado'], l['unidade_base'])} de {l['item']} da compra {l['compra_id']}, "
+            f"fornecedor {l['fornecedor']}")
+
+
 def propor_receber_compra(*, fornecedor="", item="", quantidade=None, unidade="", validade="", lote="",
                           compra_id=None, itens=None, autor, canal):
     pedidos = _dicts(itens) or ([{"item": item, "quantidade": quantidade, "unidade": unidade, "validade": validade,
                                   "lote": lote}] if (item or "").strip() else [])
-    cid, linhas = _achar_compra(fornecedor, compra_id, [p.get("item") for p in pedidos])
+    try:
+        cid, linhas = _achar_compra(fornecedor, compra_id, [p.get("item") for p in pedidos])
+    except ConsultaInvalida as e:
+        fechadas = _encerradas(fornecedor, item, compra_id) if e.status == 404 else []
+        if not fechadas:
+            raise
+        raise ConsultaInvalida(f"{e} Mas há pendência encerrada como não entregue: "
+                               f"{_juntar(_encerrada_txt(l) for l in fechadas[:3])}. Se o fornecedor entregou depois, "
+                               "pergunte e use reabrir_pendencia: entra pelo custo da compra, sem conta nova.", 409)
     if not pedidos:
         if not _sem_valor(quantidade):
             if len(linhas) > 1:
@@ -633,6 +656,43 @@ def propor_encerrar_pendencia(*, motivo, fornecedor="", item="", compra_id=None,
                 "no pagamento")
 
     return _proposta("encerrar_pendencia", parametros, resumir, autor, canal)
+
+
+def propor_reabrir_pendencia(*, fornecedor="", item="", quantidade=None, unidade="", validade="", lote="",
+                             compra_id=None, autor, canal):
+    linhas = _encerradas(fornecedor, item, compra_id)
+    if not linhas:
+        raise ConsultaInvalida("Nenhuma pendência encerrada para reabrir.", 404)
+    if len({l["compra_id"] for l in linhas}) > 1:
+        raise ConsultaInvalida("Há pendência encerrada em mais de uma compra; diga qual (compra_id).", 409,
+                               opcoes=[_encerrada_txt(l) for l in linhas])
+    cid, fornecedor_nome = linhas[0]["compra_id"], linhas[0]["fornecedor"]
+    if not _sem_valor(quantidade) and len(linhas) > 1:
+        raise ConsultaInvalida("Diga qual item chegou: esta compra tem mais de uma pendência encerrada.", 409,
+                               opcoes=[l["item"] for l in linhas])
+    receber = []
+    for l in linhas:
+        i = Item.objects.get(id=l["item_id"])
+        if _sem_valor(quantidade):
+            q, un = l["encerrado"], l["unidade_base"]
+        else:
+            q, un = _decimal(quantidade, "quantidade"), _unidade(i, unidade) or l["unidade"]
+        receber.append({"linha_id": l["linha_id"], "quantidade": q, "unidade": un, "lote_codigo": (lote or "").strip(),
+                        "validade": _data(validade, "validade") if i.controla_validade or len(linhas) == 1 else None})
+    nomes = {l["linha_id"]: (l["item"], l["unidade_base"]) for l in linhas}
+
+    def resumir(r):
+        partes = []
+        for rec, pedido in zip(r["recebimento"]["recebimentos"], receber):
+            nome, un = nomes[rec["linha_id"]]
+            partes.append(f"{qtd(rec['quantidade_base'], un)} de {nome}"
+                          + (f", validade {quando(pedido['validade'])}" if pedido["validade"] else ""))
+        return (f"Reabrir a pendência da compra {cid}, fornecedor {fornecedor_nome}, e receber {_juntar(partes)}, "
+                f"pelo custo da compra e sem conta nova. {_restante_txt(cid)}")
+
+    parametros = {"compra_id": cid, "motivo": "o fornecedor entregou depois",
+                  "linha_ids": [l["linha_id"] for l in linhas], "linhas": receber}
+    return _proposta("reabrir_e_receber_compra", parametros, resumir, autor, canal)
 
 
 def propor_cancelar_compra(*, motivo, compra_id=None, fornecedor="", autor, canal):
@@ -883,6 +943,8 @@ def depois(p) -> str:
         return f" É a compra {r['compra_id']}."
     if p.operacao == "registrar_e_receber_compra":
         return f" É a compra {r['compra_id']}.{_conciliaveis_txt(r['recebimento']['conciliaveis'])}"
+    if p.operacao == "reabrir_e_receber_compra":
+        return _conciliaveis_txt(r["recebimento"]["conciliaveis"])
     if p.operacao in ("receber_compra", "receber_bonificacao"):
         return _conciliaveis_txt(r["conciliaveis"])
     return ""

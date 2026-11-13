@@ -265,6 +265,42 @@ def encerrar_pendencia(*, compra_id, motivo, linha_ids=None, autor, canal="web",
                     parametros={"compra_id": compra_id, "motivo": motivo, "linha_ids": linha_ids})
 
 
+def reabrir_pendencia(*, compra_id, motivo, linha_ids=None, autor, canal="web", chave=None) -> dict:
+    """O fornecedor entregou depois o que tinha sido encerrado como não entregue: a pendência volta.
+
+    Sem `linha_ids`, reabre todas as linhas encerradas. O recebimento continua sendo `receber_compra`, com o
+    custo da própria compra; a conta não muda e fica um aviso para conferir se já houve abatimento.
+    """
+
+    def func(op):
+        compra = _compra(compra_id)
+        if compra.status == "cancelada":
+            raise RegraViolada("Esta compra foi cancelada.")
+        texto = (motivo or "").strip()
+        if not texto:
+            raise RegraViolada("Informe o motivo.")
+        qs = compra.linhas.select_related("item", "compra").filter(encerrado__gt=0)
+        if linha_ids:
+            qs = qs.filter(id__in=linha_ids)
+        reabertas = []
+        for l in qs:
+            reabertas.append((l, l.encerrado))
+            l.encerrado = Decimal("0")
+            l.motivo_encerramento = ""
+            l.save(update_fields=["encerrado", "motivo_encerramento"])
+        if not reabertas:
+            raise RegraViolada("Não há pendência encerrada para reabrir.")
+        _atualizar_status(compra)
+        lista = ", ".join(f"{fmt_qtd(q, l.item.unidade_base)} de {l.item.nome}" for l, q in reabertas)
+        aviso = avisar_ajuste(op, compra.conta, f"Compra {compra.id}: pendência reaberta de {lista} ({texto}). "
+                                                "Se já houve abatimento na conta por essa falta, confira o valor.")
+        return {"compra_id": compra.id, "status": compra.status, "aviso_id": aviso.id,
+                "linhas": [{"linha_id": l.id, "reaberto": q} for l, q in reabertas]}
+
+    return executar("reabrir_pendencia", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"compra_id": compra_id, "motivo": motivo, "linha_ids": linha_ids})
+
+
 def estornar_recebimento(*, recebimento_id, motivo, autor, canal="web", chave=None) -> dict:
     """Desfaz um recebimento lançado errado (RF-REC-06), só se nada do lote foi usado. A pendência volta."""
 

@@ -135,7 +135,7 @@ def test_alcada_das_ferramentas_de_vendas():
                                                   "ver_estudo_preco", "simular_preco"}  # os dois do Plano 8 só leem
     assert nivel["ver_estudo_preco"] == nivel["simular_preco"] == 0
     t = ferramentas()
-    assert len(t) == 93  # + 4 do Plano 9 (separação, separação da encomenda, contagem, conferência)
+    assert len(t) == 94  # + 4 do Plano 9 (separação, separação da encomenda, contagem, conferência)
     assert {n for n in LEITURA if t[n].annotations.readOnlyHint} == LEITURA
     assert "$ref" not in json.dumps(t["registrar_venda"].inputSchema)
     assert t["registrar_venda"].inputSchema["properties"]["itens"]["items"]["required"] == ["produto", "quantidade"]
