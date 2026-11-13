@@ -285,5 +285,7 @@ def test_nada_de_apagar_e_dinheiro_so_com_o_sim():
     nomes = {f.nome: f.nivel for f in REGISTRO}
     assert not {n for n in nomes if any(p in n for p in ("apagar", "excluir"))}
     # pagamento é só anotação, e como estorno, espera o "sim" (nível 2)
-    assert {n: v for n, v in nomes.items() if "pagamento" in n or "estornar" in n} == {
-        "registrar_pagamento": 2, "estornar_pagamento": 2, "estornar_recebimento": 2}
+    assert {n: v for n, v in nomes.items() if "pagamento" in n or "estornar" in n or "recebimento" in n} == {
+        "registrar_pagamento": 2, "estornar_pagamento": 2, "estornar_recebimento": 2,
+        "registrar_recebimento": 2, "estornar_recebimento_cliente": 2}
+    assert len(nomes) == 70  # 50 até o Plano 4 + 20 de vendas, encomendas, fritura e contas a receber

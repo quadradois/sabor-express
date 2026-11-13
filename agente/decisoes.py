@@ -11,7 +11,9 @@ pelo núcleo, e só grava com `confirmar_proposta`. Nenhuma regra aqui: os núme
 `decisoes.consultas` e `backup.situacao`, e as gravações são os serviços de `decisoes.servicos`.
 """
 
+import re
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.utils import timezone
 
@@ -29,8 +31,11 @@ MAX_FALADOS = 3  # itens lidos no `texto`; o resto vira "e mais N"
 # origem da decisão em português falado, com palavras que o dono pode usar para filtrar
 ORIGENS = {
     "lotes_vencidos": ("produto vencido", "vencido validade"),
+    "encomenda_sem_estoque": ("encomenda sem estoque", "encomendas reserva reservar produzir falta"),
     "contas_vencidas": ("conta vencida", "contas vencida pagar"),
+    "receber_vencidas": ("cliente devendo", "receber recebimento fiado devendo cliente"),
     "lotes_vencendo": ("validade perto de vencer", "vencendo vence validade"),
+    "sobras_fritas": ("sobra de frito", "sobras frito fritos fritura"),
     "consumo_pendente": ("consumo pendente", "conciliar conciliacao"),
     "contas_a_vencer": ("conta a vencer", "contas vencer pagar"),
     "estoque_baixo": ("estoque baixo", "minimo falta acabando"),
@@ -75,13 +80,47 @@ def _erro_limpo(erro) -> str:
     return erro.split("] ", 1)[1] if erro.startswith("[chave=") and "] " in erro else erro
 
 
+_DATA = re.compile(r"\b(em |de |para |desde )?(\d{1,2})/(\d{1,2})(?:/(\d{4}))?\b")
+_DATA_ENTRE_PARENTESES = re.compile(r" \(\d{1,2}/\d{1,2}(?:/\d{4})?\)")
+_DINHEIRO = re.compile(r"-?R\$ ?(\d{1,3}(?:\.\d{3})*,\d{2})")
+_UN = re.compile(r"\b(\d+(?:,\d+)?) un\b")
+
+
+def _data_falada(m) -> str:
+    prefixo, dia, mes, ano = m.group(1) or "", int(m.group(2)), int(m.group(3)), m.group(4)
+    hoje = timezone.localdate()
+    try:
+        if ano:
+            d = date(int(ano), mes, dia)
+        else:  # sem ano: o mais perto de hoje (a caixa fala de dias próximos)
+            d = min((date(hoje.year + k, mes, dia) for k in (-1, 0, 1)), key=lambda x: abs((x - hoje).days))
+    except ValueError:
+        return m.group(0)
+    q = quando(d)
+    nucleo = q[3:] if q.startswith("em ") else q
+    if prefixo == "em ":
+        return q
+    return prefixo + nucleo
+
+
+def falavel(texto) -> str:
+    """O texto das decisões com datas e dinheiro como se fala ("venceu ontem", "100 reais", "30 unidades").
+
+    Os geradores do núcleo escrevem "15/11" e "R$ 100,00" (pendência do Plano 4); a voz não lê isso bem."""
+    t = _DATA_ENTRE_PARENTESES.sub("", texto or "")
+    t = _DATA.sub(_data_falada, t)
+    t = _DINHEIRO.sub(lambda m: reais(Decimal(m.group(1).replace(".", "").replace(",", "."))), t)
+    t = _UN.sub(lambda m: m.group(1) + (" unidade" if m.group(1) == "1" else " unidades"), t)
+    return t.replace(" (lote sem lote)", "").replace("lote sem lote", "lote sem código")
+
+
 def _numero(d) -> str:
     return f"Número {d['decisao_id']}"
 
 
 def _item_caixa(d) -> str:
     tipo = "para aprovar" if d["tipo"] == "decisao" else "aviso"
-    t = f"{_numero(d)}, {tipo}: {_sem_ponto(d['texto'])}."
+    t = f"{_numero(d)}, {tipo}: {_sem_ponto(falavel(d['texto']))}."
     if d.get("ultimo_erro"):
         t += f" Da última vez não deu para aprovar: {_sem_ponto(_erro_limpo(d['ultimo_erro']['erro']))}."
     return t
@@ -97,7 +136,8 @@ def _urgentes(itens) -> list[dict]:
 
 def _curta(d) -> dict:
     return {"decisao_id": d["decisao_id"], "tipo": d["tipo"], "origem": d["origem"],
-            "origem_texto": ORIGENS.get(d["origem"], (d["origem"].replace("_", " "),))[0], "texto": d["texto"],
+            "origem_texto": ORIGENS.get(d["origem"], (d["origem"].replace("_", " "),))[0],
+            "texto": falavel(d["texto"]),
             "criada_em": d["criada_em"].isoformat(timespec="seconds"),
             "ultimo_erro": _erro_limpo(d["ultimo_erro"]["erro"]) if d["ultimo_erro"] else None}
 
@@ -175,16 +215,42 @@ def _assuntos(r, backup) -> list[dict]:
             f"{reais(r['validade']['valor_vencido'])} em mercadoria: {nomes}. Vencido não pode ser usado.")
     if backup:
         add("backup", "backup", backup)
+    enc = r.get("encomendas") or {}
+    if enc.get("atrasadas"):
+        atrasadas = enc["atrasadas"]
+        add("encomendas_atrasadas", "encomenda atrasada",
+            f"{_n(len(atrasadas), 'encomenda atrasada', 'encomendas atrasadas')}, com o dia já passado e sem "
+            f"entrega: {_juntar([f'a {e['encomenda_id']} de {e['cliente']}' for e in atrasadas[:MAX_FALADOS]])}.")
+    if enc.get("hoje"):
+        de_hoje = enc["hoje"]
+        prontas = sum(e["situacao"] == "pronta" for e in de_hoje)
+        faltando = len(de_hoje) - prontas
+        partes = ([_n(prontas, "pronta", "prontas")] if prontas else []) + \
+            ([f"{faltando} faltando reservar"] if faltando else [])
+        add("encomendas_hoje", "encomendas de hoje",
+            f"{_n(len(de_hoje), 'encomenda')} para hoje: {_juntar(partes)}.")
     if t["contas_vencidas"]:
         add("contas_vencidas", "conta vencida",
             f"{_n(t['contas_vencidas'], 'conta vencida', 'contas vencidas')}, somando "
             f"{reais(t['valor_contas_vencidas'])}.")
+    if t.get("receber_vencidas"):
+        add("receber_vencidas", "cliente devendo",
+            f"{_n(t['receber_vencidas'], 'conta a receber vencida', 'contas a receber vencidas')} de clientes, "
+            f"somando {reais(t['valor_receber_vencidas'])}.")
     vencendo = r["validade"]["vencendo"]
     if vencendo:
         nomes = _juntar(sorted({p["item"] for p in vencendo}))
         verbo = "vence" if len(vencendo) == 1 else "vencem"
         add("vencendo", "validade perto de vencer",
             f"{_n(len(vencendo), 'lote')} {verbo} até daqui a {_n(r['validade']['dias'], 'dia')}: {nomes}.")
+    a_produzir = [x for x in enc.get("necessidade") or [] if x["a_produzir"] > 0]
+    if a_produzir:
+        from .vendas import _un
+
+        add("falta_produzir", "falta produzir para encomendas",
+            f"Para as encomendas dos próximos {_n(enc['dias'], 'dia')}, falta produzir "
+            + _juntar([f"{_un(x['a_produzir'])} de {x['produto']} {x['forma']} {x['estado']}"
+                       for x in a_produzir[:MAX_FALADOS]]) + ".")
     if t["itens_abaixo_do_minimo"]:
         baixo = r["estoque_baixo"]
         nomes = _juntar([i["item"] for i in baixo[:MAX_FALADOS]]
@@ -196,6 +262,13 @@ def _assuntos(r, backup) -> list[dict]:
         add("contas_a_vencer", "contas a vencer",
             f"{_n(t['contas_a_vencer'], 'conta')} {verbo} nos próximos {r['contas']['dias']} dias, somando "
             f"{reais(t['valor_contas_a_vencer'])}.")
+    if r.get("sobras_fritas"):
+        from .vendas import _un
+
+        sobras = r["sobras_fritas"]
+        nomes = _juntar(sorted({x["item"] for x in sobras}))
+        add("sobras_fritas", "sobra de frito",
+            f"Sobra de frito no estoque: {_un(sum(x['saldo'] for x in sobras))} de {nomes}.")
     if t["compras_atrasadas"]:
         add("compras_atrasadas", "compra atrasada",
             f"{_n(t['compras_atrasadas'], 'compra atrasada', 'compras atrasadas')}: sete dias ou mais sem chegar tudo.")
@@ -215,6 +288,13 @@ def _assuntos(r, backup) -> list[dict]:
     a_chegar = t["compras_a_chegar"] - t["compras_atrasadas"]
     if a_chegar > 0:
         add("a_chegar", "compras a chegar", f"{_n(a_chegar, 'compra')} esperando entrega.")
+    proximas = [e for e in enc.get("proximas") or [] if e["dias"] > 0]
+    if proximas:
+        add("encomendas_proximas", "encomendas dos próximos dias",
+            f"{_n(len(proximas), 'encomenda')} para os próximos {_n(enc['dias'], 'dia')}.")
+    if t.get("vendas_hoje"):
+        add("vendas", "vendas de hoje",
+            f"Hoje, {_n(t['vendas_hoje'], 'venda')}, somando {reais(t['valor_vendas_hoje'])}.")
     return a
 
 
@@ -282,7 +362,7 @@ def ver_decisao(decisao_id):
     d = _decisao(decisao_id)
     origem = ORIGENS.get(d["origem"], (d["origem"].replace("_", " "),))[0]
     tipo = "decisão para aprovar" if d["tipo"] == "decisao" else "aviso"
-    t = f"{_numero(d)}, {tipo}, {origem}: {_sem_ponto(d['texto'])}."
+    t = f"{_numero(d)}, {tipo}, {origem}: {_sem_ponto(falavel(d['texto']))}."
     s = d["situacao"]
     if s == "pendente":
         t += f" Está na caixa desde {quando(_dia_local(d['criada_em']))}."
@@ -396,7 +476,7 @@ def dar_ciencia(*, decisao_id, autor, canal):
         return _aprovar(decisao_id=d["decisao_id"], autor=autor, canal=canal, chave=chave)
 
     r, rep = _uma_vez("dar_ciencia", {"decisao": d["decisao_id"]}, fazer)
-    return _feito(f"Ciente do número {d['decisao_id']}: {_sem_ponto(d['texto'])}. Saiu da caixa.", r, rep,
+    return _feito(f"Ciente do número {d['decisao_id']}: {_sem_ponto(falavel(d['texto']))}. Saiu da caixa.", r, rep,
                   decisao_id=d["decisao_id"])
 
 
@@ -414,7 +494,7 @@ def recusar_decisao(*, decisao_id, motivo, autor, canal):
         return _recusar(decisao_id=d["decisao_id"], motivo=motivo, autor=autor, canal=canal, chave=chave)
 
     r, rep = _uma_vez("recusar_decisao", {"decisao": d["decisao_id"], "motivo": motivo}, fazer)
-    return _feito(f"Recusei o número {d['decisao_id']} ({_sem_ponto(d['texto'])}). Motivo: {_sem_ponto(motivo)}.",
+    return _feito(f"Recusei o número {d['decisao_id']} ({_sem_ponto(falavel(d['texto']))}). Motivo: {_sem_ponto(motivo)}.",
                   r, rep, decisao_id=d["decisao_id"])
 
 
@@ -427,6 +507,15 @@ def _efeito(r) -> str:
         t = f"Baixa do lote e custo de {reais(res['custo'])}"
         if res.get("producao_id") and not res.get("custo_pendente"):
             t += f"; o custo da produção {res['producao_id']} fica fechado"
+        return t
+    if r.get("operacao") == "completar_reserva":
+        from .vendas import _un
+
+        t = f"Vou reservar para a encomenda {res['encomenda_id']} o que houver no estoque"
+        falta = Decimal(str(res.get("falta") or 0))
+        t += f"; ainda vai faltar {_un(falta)}" if falta > 0 else "; ela fica pronta, com tudo reservado"
+        if res.get("reservas_liberadas"):
+            t += ", trocando a reserva do lote que venceria antes da entrega"
         return t
     return ""
 
@@ -441,7 +530,8 @@ def propor_aprovar_decisao(*, decisao_id, autor, canal):
 
     def resumir(r):
         efeito = _efeito(r)
-        return f"Aprovar o número {d['decisao_id']}: {_sem_ponto(d['texto'])}" + (f". {efeito}" if efeito else "")
+        return (f"Aprovar o número {d['decisao_id']}: {_sem_ponto(falavel(d['texto']))}"
+                + (f". {efeito}" if efeito else ""))
 
     return {**_proposta("aprovar_decisao", {"decisao_id": d["decisao_id"]}, resumir, autor, canal),
             "decisao_id": d["decisao_id"]}

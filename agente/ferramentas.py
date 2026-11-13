@@ -11,7 +11,8 @@ nível 1 grava direto e devolve `dito` (o que foi feito); nível 2 não grava,
 devolve `confirmar` + `proposta_id` e só `confirmar_proposta` executa; o nível
 3 ("nunca") não tem ferramenta e o núcleo recusa. Toda gravação passa por
 `nucleo.operacoes.executar` com canal="agente". A lógica está em
-`agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py` e `agente/propostas.py`.
+`agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`, `agente/vendas.py` e
+`agente/propostas.py`.
 """
 
 import functools
@@ -24,7 +25,7 @@ from django.db import close_old_connections
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from . import acoes, compras, consultas, decisoes
+from . import acoes, compras, consultas, decisoes, vendas
 from .consultas import ConsultaInvalida
 from nucleo.operacoes import RegraViolada
 
@@ -41,7 +42,9 @@ INSTRUCOES = (
     "Dinheiro: o sistema nunca paga nada; registrar_pagamento só anota que o dono pagou. "
     "Valores falados chegam em reais (ex.: 90 ou 12.5). "
     "Caixa de decisões: cada item tem um número (decisao_id), que é o que o dono diz (\"aprova a doze\"); "
-    "aprovar uma decisão sempre passa pelo 'confirmar'; recusar exige o motivo dito pelo dono."
+    "aprovar uma decisão sempre passa pelo 'confirmar'; recusar exige o motivo dito pelo dono. "
+    "Vendas e encomendas: passe produto, apresentação e cliente pelo nome falado; o preço é sempre o da tabela "
+    "(nunca diga um preço que não veio do sistema). registrar_recebimento só anota que o cliente pagou."
 )
 
 AUTOR = "agente-mcp"
@@ -256,6 +259,69 @@ def ver_backup() -> dict:
     """"Quando foi o último backup?": data e hora do último backup, quantos há guardados e se está atrasado."""
     return decisoes.ver_backup()
 
+# vendas, encomendas, fritura e contas a receber (Plano 6)
+
+@leitura
+def ver_precos(produto: str = "") -> dict:
+    """"Quanto custa a caixa de coxinha?": tabela de preços (varejo e atacado) de cada jeito de vender — unidade,
+    caixa com 25... em cada forma (cru/frito) e conservação — e quantas dá para vender agora. 'produto' filtra."""
+    return vendas.ver_precos(produto)
+
+
+@leitura
+def ver_estoque_para_venda(produto: str = "") -> dict:
+    """"Quanta coxinha tem para vender?": salgados prontos por forma e conservação, com o livre para vender, o
+    reservado para encomendas e o vencido. 'produto' filtra pelo nome."""
+    return vendas.ver_estoque_para_venda(produto)
+
+
+@leitura
+def buscar_clientes(busca: str = "") -> dict:
+    """Clientes cadastrados (nome, contato, se está ativo). 'busca' com parte do nome; vazio lista todos."""
+    return vendas.buscar_clientes(busca)
+
+
+@leitura
+def ver_vendas(periodo: str = "hoje", cliente: str = "") -> dict:
+    """"Quanto vendi hoje?": vendas do período com os totais já somados (total, recebido na hora por forma de
+    pagamento, a prazo, por produto). 'periodo': hoje, ontem, semana, mes ou AAAA-MM-DD. 'cliente' filtra."""
+    return vendas.ver_vendas(periodo, cliente)
+
+
+@leitura
+def ver_encomendas(dia: str = "", cliente: str = "") -> dict:
+    """"O que tem de encomenda amanhã?": encomendas em aberto (prontas ou faltando reservar), por dia de entrega.
+    'dia': hoje, amanhã, um dia da semana, semana (próximos 7 dias) ou AAAA-MM-DD; vazio = todas as em aberto,
+    inclusive as atrasadas. 'cliente' filtra pelo nome."""
+    return vendas.ver_encomendas(dia, cliente)
+
+
+@leitura
+def ver_encomenda(encomenda_id: int) -> dict:
+    """Uma encomenda em detalhe, pelo número: itens, o que está reservado e o que falta, total, sinal e situação."""
+    return vendas.ver_encomenda(encomenda_id)
+
+
+@leitura
+def ver_necessidade_producao(dias: int = 3) -> dict:
+    """"O que falta produzir?": para as encomendas em aberto até daqui a 'dias' dias, o que falta por produto,
+    quanto já está no estoque livre (dá para reservar) e quanto produzir. Não cria produção."""
+    return vendas.ver_necessidade_producao(dias)
+
+
+@leitura
+def ver_a_receber(cliente: str = "", situacao: str = "todas", dias: int = 7) -> dict:
+    """"Quanto o João deve?", "quem está devendo?": contas a receber de clientes (fiado, venda a prazo, saldo de
+    encomenda), com totais já somados. Com 'cliente', só ele e a parcela mais antiga. 'situacao': todas, vencidas
+    ou a_vencer (nos próximos 'dias' dias)."""
+    return vendas.ver_a_receber(cliente, situacao, dias)
+
+
+@leitura
+def ver_sobras() -> dict:
+    """"Sobrou frito?": salgados fritos ainda no estoque (sobras do balcão), de quando são e quanto de cada."""
+    return vendas.ver_sobras()
+
 
 # --- nível 1: faz e repete -------------------------------------------------
 # Sem producao_id, valem para a única produção em andamento.
@@ -332,6 +398,21 @@ def recusar_decisao(decisao_id: int, motivo: str) -> dict:
     """Recusa uma decisão da caixa com o motivo dito pelo dono (ex.: "vou comprar amanhã"). Motivo obrigatório:
     sem ele, pergunte por quê. Aviso não se recusa (use dar_ciencia)."""
     return decisoes.recusar_decisao(decisao_id=decisao_id, motivo=motivo, autor=AUTOR, canal=CANAL)
+
+
+@escrita(1)
+def cadastrar_cliente(nome: str, contato: str = "") -> dict:
+    """Cadastra um cliente novo (quem compra fiado ou encomenda). Só o nome é obrigatório; 'contato' (telefone,
+    endereço) se dito. Nome repetido, mesmo com outra caixa ou sem acento, é recusado."""
+    return vendas.cadastrar_cliente(nome=nome, contato=contato, autor=AUTOR, canal=CANAL)
+
+
+@escrita(1)
+def completar_reserva(encomenda_id: int | None = None, cliente: str = "") -> dict:
+    """Reserva para uma encomenda o que entrou no estoque ("reserva a encomenda do João"): separa o que houver,
+    sem tirar nada do estoque, e troca a reserva de lote que venceria antes da entrega. Acha a encomenda em
+    aberto pelo cliente ou pelo número."""
+    return vendas.completar_reserva(encomenda_id=encomenda_id, cliente=cliente, autor=AUTOR, canal=CANAL)
 
 
 # --- nível 2: repete e espera o sim ----------------------------------------
@@ -518,6 +599,121 @@ def aprovar_decisao(decisao_id: int) -> dict:
     """Propõe aprovar uma decisão da caixa pelo número ("aprova a doze"): a operação dela é simulada e o texto
     volta em 'confirmar' com os números. Não grava: só confirmar_proposta, depois do sim, executa (uma vez só)."""
     return decisoes.propor_aprovar_decisao(decisao_id=decisao_id, autor=AUTOR, canal=CANAL)
+
+
+# vendas, encomendas, fritura, perda e contas a receber
+
+class ItemVenda(TypedDict, total=False):
+    produto: Required[str]  # o salgado como foi falado (ex.: "coxinha", "coxinha 150 g")
+    quantidade: Required[int]  # quantas apresentações (duas caixas = 2)
+    apresentacao: str  # unidade, caixa com 25, cento...
+    forma: str  # cru ou frito
+    conservacao: str  # fresco, resfriado ou congelado
+
+
+@escrita(2)
+def registrar_venda(itens: list[ItemVenda], cliente: str = "", condicao: str = "a_vista", forma_pagamento: str = "",
+                    tabela: str = "varejo", prazo_dias: int | None = None, vencimento: str = "", parcelas: int = 1,
+                    intervalo_dias: int = 30) -> dict:
+    """Propõe registrar uma venda ("vendi duas caixas de coxinha congelada pro João, fiado"). 'itens': cada um com
+    o produto falado, a quantidade e, se houver mais de um jeito de vender, a apresentação, a forma e a conservação.
+    Preço: sempre o da tabela ('tabela' varejo ou atacado). Balcão não precisa de cliente; a prazo (fiado) precisa
+    do cliente e de 'prazo_dias' ou 'vencimento' (AAAA-MM-DD). O estoque baixa pelo que vence primeiro.
+    Não grava: pede confirmação."""
+    return vendas.propor_registrar_venda(itens=itens, cliente=cliente, condicao=condicao,
+                                         forma_pagamento=forma_pagamento, tabela=tabela, prazo_dias=prazo_dias,
+                                         vencimento=vencimento, parcelas=parcelas, intervalo_dias=intervalo_dias,
+                                         autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def cancelar_venda(motivo: str, venda_id: int | None = None, cliente: str = "", destino: str = "perda") -> dict:
+    """Propõe cancelar uma venda inteira, com o motivo. Sem 'venda_id', acha pelo cliente (ou entre as de hoje).
+    'destino' das unidades: perda (padrão) ou estoque (voltam ao estoque, se o lote não venceu). Cancela a conta a
+    receber junto. Não grava: pede confirmação."""
+    return vendas.propor_cancelar_venda(motivo=motivo, venda_id=venda_id, cliente=cliente, destino=destino,
+                                        autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def criar_encomenda(cliente: str, dia: str, itens: list[ItemVenda], hora: str = "", modo: str = "retirada",
+                    observacao: str = "", sinal: float = 0, sinal_forma: str = "", tabela: str = "varejo") -> dict:
+    """Propõe uma encomenda ("encomenda do João pra sábado, três caixas de coxinha frita"). 'dia': hoje, amanhã,
+    um dia da semana ou AAAA-MM-DD; 'hora' como 15:30, se combinada. 'modo': retirada ou entrega. 'sinal' em reais,
+    se o cliente adiantou. Reserva o que já há no estoque e diz o que falta produzir. Não grava: pede confirmação."""
+    return vendas.propor_criar_encomenda(cliente=cliente, dia=dia, itens=itens, hora=hora, modo=modo,
+                                         observacao=observacao, sinal=sinal, sinal_forma=sinal_forma, tabela=tabela,
+                                         autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def entregar_encomenda(encomenda_id: int | None = None, cliente: str = "", condicao: str = "a_vista",
+                       forma_pagamento: str = "", prazo_dias: int | None = None, vencimento: str = "",
+                       parcelas: int = 1, intervalo_dias: int = 30) -> dict:
+    """Propõe entregar uma encomenda ("o João veio buscar a encomenda"): vira venda e baixa o estoque reservado.
+    Acha a encomenda em aberto pelo cliente ou pelo número. O resto (total menos o sinal) é recebido à vista
+    ('forma_pagamento') ou fica a prazo (com 'prazo_dias' ou 'vencimento'). Só com tudo reservado.
+    Não grava: pede confirmação."""
+    return vendas.propor_entregar_encomenda(encomenda_id=encomenda_id, cliente=cliente, condicao=condicao,
+                                            forma_pagamento=forma_pagamento, prazo_dias=prazo_dias,
+                                            vencimento=vencimento, parcelas=parcelas, intervalo_dias=intervalo_dias,
+                                            autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def cancelar_encomenda(motivo: str, encomenda_id: int | None = None, cliente: str = "",
+                       devolver_sinal: bool = True) -> dict:
+    """Propõe cancelar uma encomenda antes da entrega, com o motivo: as reservas são liberadas. O sinal fica
+    anotado como devolvido, salvo se o dono disser que fica com ele ('devolver_sinal' falso). Depois de entregue,
+    cancela-se a venda. Não grava: pede confirmação."""
+    return vendas.propor_cancelar_encomenda(motivo=motivo, encomenda_id=encomenda_id, cliente=cliente,
+                                            devolver_sinal=devolver_sinal, autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def registrar_fritura(produto: str, quantidade: int, boas: int | None = None, motivo_perdas: str = "",
+                      conservacao: str = "", destino: str = "fresco", validade: str = "",
+                      justificativa: str = "") -> dict:
+    """Propõe registrar uma fritura do balcão ("fritei 40 coxinhas, 38 boas, 2 estouraram"): o cru sai do lote que
+    vence primeiro e vira um lote frito. Sem 'boas', todas ficaram boas; perdas pedem 'motivo_perdas'.
+    'conservacao' do cru (se houver em mais de uma); 'destino' do frito (fresco). 'validade' (AAAA-MM-DD) e
+    'justificativa' só se o sistema pedir. Não grava: pede confirmação."""
+    return vendas.propor_registrar_fritura(produto=produto, quantidade=quantidade, boas=boas,
+                                           motivo_perdas=motivo_perdas, conservacao=conservacao, destino=destino,
+                                           validade=validade, justificativa=justificativa, autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def registrar_perda(produto: str, motivo: str, quantidade: float | None = None, unidade: str = "",
+                    conservacao: str = "", forma: str = "", lote: str = "", vencido: bool = False) -> dict:
+    """Propõe dar perda ou descartar ("joga fora 10 coxinhas fritas que caíram", "descarta o leite vencido"). Vale
+    para salgado, ingrediente ou embalagem. Motivo obrigatório. Sem 'quantidade', o lote todo. 'conservacao',
+    'forma' (cru/frito), 'lote' (código) e 'vencido' ajudam a achar o lote certo. Não grava: pede confirmação."""
+    return vendas.propor_registrar_perda(produto=produto, motivo=motivo, quantidade=quantidade, unidade=unidade,
+                                         conservacao=conservacao, forma=forma, lote=lote, vencido=vencido,
+                                         autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def registrar_recebimento(cliente: str = "", valor: float | None = None, data_pagamento: str = "", forma: str = "",
+                          venda_id: int | None = None, parcela_id: int | None = None, juros: float = 0,
+                          multa: float = 0, desconto: float = 0, motivo_diferenca: str = "") -> dict:
+    """Propõe ANOTAR que um cliente pagou o que devia ("o João pagou a conta dele", "a Maria pagou 50 reais");
+    o sistema não cobra nada. Acha a parcela pelo cliente (a mais antiga da venda). 'valor' = quanto abate (vazio =
+    o saldo todo). Juros, multa ou desconto (só um) com 'motivo_diferenca'. Não é mercadoria chegando
+    (isso é receber_compra). Não grava: pede confirmação."""
+    return vendas.propor_registrar_recebimento(
+        cliente=cliente, valor=valor, data_pagamento=data_pagamento, forma=forma, venda_id=venda_id,
+        parcela_id=parcela_id, juros=juros, multa=multa, desconto=desconto, motivo_diferenca=motivo_diferenca,
+        autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def estornar_recebimento_cliente(motivo: str, cliente: str = "", pagamento_id: int | None = None) -> dict:
+    """Propõe desfazer um recebimento de cliente anotado errado (a parcela volta a ficar em aberto).
+    Não grava: pede confirmação."""
+    return vendas.propor_estornar_recebimento_cliente(motivo=motivo, cliente=cliente, pagamento_id=pagamento_id,
+                                                      autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)

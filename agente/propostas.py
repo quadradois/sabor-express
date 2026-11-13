@@ -24,11 +24,14 @@ from cadastros.servicos import criar_tamanho
 from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento,
                               receber_bonificacao, receber_compra, registrar_compra)
 from decisoes.servicos import aprovar_decisao
-from estoque.servicos import entrada_manual, transferir_estado
+from estoque.servicos import entrada_manual, registrar_perda, transferir_estado
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada, _json
-from financeiro.servicos import estornar_pagamento, registrar_pagamento
+from financeiro.servicos import (estornar_pagamento, estornar_recebimento_cliente, registrar_pagamento,
+                                 registrar_recebimento)
+from producao.fritura import registrar_fritura
 from producao.servicos import cancelar_producao, concluir_producao, conciliar_consumo, iniciar_producao
+from vendas.servicos import cancelar_encomenda, cancelar_venda, criar_encomenda, entregar_encomenda, registrar_venda
 
 from .models import Proposta
 
@@ -77,6 +80,17 @@ OPERACOES = {
     "conciliar_consumo": Operacao(conciliar_consumo),
     # caixa de decisões: aprovar executa a operação guardada na decisão (uma vez só, com a chave dela)
     "aprovar_decisao": Operacao(aprovar_decisao),
+    # vendas, encomendas, fritura, perda e contas a receber (Plano 6): os serviços aceitam números e datas
+    # como texto; a validade manual da fritura volta a ser data
+    "registrar_venda": Operacao(registrar_venda),
+    "cancelar_venda": Operacao(cancelar_venda),
+    "criar_encomenda": Operacao(criar_encomenda),
+    "entregar_encomenda": Operacao(entregar_encomenda),
+    "cancelar_encomenda": Operacao(cancelar_encomenda),
+    "registrar_fritura": Operacao(registrar_fritura, datas=("validade_manual",)),
+    "registrar_perda": Operacao(registrar_perda),
+    "registrar_recebimento": Operacao(registrar_recebimento),
+    "estornar_recebimento_cliente": Operacao(estornar_recebimento_cliente),
 }
 
 
