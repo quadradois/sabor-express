@@ -313,7 +313,7 @@ def test_necessidade_vazia(client, dono):
 def test_fritura_registra_pelo_servico_e_mostra_o_custo(client, dono, coxinha, estoque):
     CriterioValidade.objects.create(produto=coxinha, forma="frito", estado="fresco", dias=1)
     t = texto(client.get(reverse("fritura"), {"produto": coxinha.id}))
-    assert "lote K1" in t and "(vence primeiro)" in t and f'value="{estoque.id}|congelado"' in t
+    assert "código K1" in t and "lote do dia" in t and "(vence primeiro)" in t and f'value="{estoque.id}|congelado"' in t
     d = {"chave": "f1", "produto": coxinha.id, "porcao": f"{estoque.id}|congelado", "quantidade": "10", "boas": "9",
          "perda_motivo": "estourou", "estado_destino": "fresco"}
     t = texto(client.post(reverse("fritura"), d, follow=True))

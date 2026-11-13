@@ -2,7 +2,7 @@
 {% load formato %}
 {% block titulo %}Lote {{ l.codigo }} — Sabor Express{% endblock %}
 {% block conteudo %}
-<h1>{{ l.item.nome }} <small>lote {{ l.codigo }}</small></h1>
+<h1>{{ l.item.nome }} <small>{{ l|nome_do_lote }} · código {{ l.codigo }}</small></h1>
 {% include "web/_mensagens.html" %}
 <p>Forma: {{ l.get_forma_display|default:"—" }} — Fabricação: {{ l.criado_em|date:"d/m/Y" }} — Custo unitário: R$ {{ l.custo_unitario|floatformat:4 }}</p>
 
@@ -11,15 +11,18 @@
   <tr><th>Conservação</th><th>Saldo</th><th>Validade</th><th></th></tr>
   {% for e in estados %}<tr><td>{{ e.conservacao }}</td><td>{{ e.quantidade|quantidade:l.item.unidade_base }}</td>
     <td>{{ e.validade|date:"d/m/Y"|default:"—" }}{% if e.validade_manual %} (informada manualmente){% endif %}</td>
-    <td>{% if e.quantidade > 0 %}<a href="{% url 'etiquetas' l.id %}?estado={{ e.estado }}">Etiquetas</a>{% endif %}</td></tr>
+    <td>{% if e.quantidade > 0 %}<a href="{% url 'etiquetas' l.id %}?estado={{ e.estado }}">Etiquetas</a> ·{% endif %}
+      <a href="{% url 'contar_lote' l.id %}?estado={{ e.estado }}">Contar</a></td></tr>
   {% if e.estado in vencidos %}<tr><td colspan="4"><strong class="falta">Vencido</strong>
     {% include "web/_descartar.html" with lote_id=l.id estado=e.estado saldo=e.quantidade next=request.path %}</td></tr>{% endif %}
   {% empty %}<tr><td colspan="4">Sem saldo.</td></tr>{% endfor %}
 </table>
 
 <h2>Origem</h2>
-<ul>{% for lo, q in origem %}<li>{{ lo.item.nome }} (lote {{ lo.codigo|default:"sem lote" }}): {{ q|quantidade:lo.item.unidade_base }}</li>
+<ul>{% for lo, q in origem %}<li>{{ lo.item.nome }} ({{ lo|nome_do_lote }}, código {{ lo.codigo|default:"sem lote" }}): {{ q|quantidade:lo.item.unidade_base }}</li>
 {% empty %}<li>Sem origem registrada.</li>{% endfor %}</ul>
+
+<p><a href="{% url 'contar_lote' l.id %}">Contar este lote</a> <span class="mudo">(o sistema diz uma quantidade e a prateleira tem outra)</span></p>
 
 <h2>Mudar conservação</h2>
 <form method="post" class="form">{% csrf_token %}{% chave %}

@@ -5,8 +5,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
-from estoque.models import ESTADOS, Lote
-from estoque.servicos import registrar_perda
+from estoque.models import DESTINOS_PERDA, ESTADOS, Lote
+from estoque.servicos import livre_porcao, porcoes, registrar_perda
 from nucleo.operacoes import RegraViolada
 from producao.fritura import registrar_fritura
 from vendas import consultas as vc
@@ -23,10 +23,26 @@ def _produtos_com_cru():
     return sorted(vistos.items(), key=lambda kv: kv[1])
 
 
+_FEITO = {"perda": "Perda registrada", "descarte": "Descarte registrado",
+          "consumo_equipe": "Consumo da equipe registrado", "doacao": "Doação registrada"}
+
+
+def _vencidas_cruas(produto_id):
+    """Porções cruas vencidas com saldo livre: só vão para o óleo com um motivo (Plano 9)."""
+    crus = Lote.objects.filter(item_id=produto_id, forma="cru").in_bulk()
+    saida = []
+    for p in porcoes(item=produto_id):
+        lote = crus.get(p["lote_id"])
+        if lote is not None and p["vencido"] and livre_porcao(lote, p["estado"]) > 0:
+            saida.append({**p, "livre": livre_porcao(lote, p["estado"]), "custo_unitario": lote.custo_unitario})
+    return saida
+
+
 @login_required
 def fritura(request):
     post = request.POST if request.method == "POST" else {}
     produto = request.GET.get("produto") or post.get("produto") or ""
+    pede_motivo = False
     if request.method == "POST":
         try:
             kw = _kw(request)
@@ -39,18 +55,22 @@ def fritura(request):
                 boas=post.get("boas"), estado_destino=post.get("estado_destino", "fresco"),
                 perda_motivo=post.get("perda_motivo", ""), validade_manual=post.get("validade_manual") or None,
                 justificativa=post.get("justificativa", ""),
+                motivo_vencido=(post.get("motivo_vencido") or "").strip(),
                 confirmar_perda_total=bool(post.get("confirmar_perda_total")), **kw)
         except RegraViolada as e:
             messages.error(request, str(e))
+            pede_motivo = "motivo" in str(e).lower()
         else:
             txt = f"Fritura registrada: {r['boas']} boas e {r['perdas']} perdas de {r['produto']}."
             if int(r["boas"]):
                 txt += f" Custo: {dinheiro(r['custo_unitario'])} por unidade."
             messages.success(request, txt)
             return redirect(f"{reverse('fritura')}?produto={produto}" if produto else "fritura")
-    porcoes = vc.lotes_para_fritar(produto_id=int(produto)) if produto.isdigit() else []
+    lista = vc.lotes_para_fritar(produto_id=int(produto)) if produto.isdigit() else []
+    vencidas = _vencidas_cruas(int(produto)) if produto.isdigit() else []
     return render(request, "web/fritura.html", {
-        "produtos": _produtos_com_cru(), "produto": produto, "porcoes": porcoes, "p": post,
+        "produtos": _produtos_com_cru(), "produto": produto, "porcoes": lista, "vencidas": vencidas,
+        "pede_motivo": pede_motivo, "p": post,
         "estados": ESTADOS, "frituras": vc.frituras(de=timezone.localdate())})
 
 
@@ -60,14 +80,15 @@ def sobras(request):
         try:
             r = registrar_perda(lote_id=_id(request.POST.get("lote"), "Lote"), estado=request.POST.get("estado", ""),
                                 quantidade=request.POST.get("quantidade"), motivo=request.POST.get("motivo", ""),
-                                **_kw(request))
+                                destino=request.POST.get("destino", "perda"), **_kw(request))
         except RegraViolada as e:
             messages.error(request, str(e))
         else:
-            messages.success(request, f"Perda registrada: {quantidade(r['quantidade'], r['unidade_base'])} "
-                                      f"de {r['item']} ({dinheiro(r['valor'])}).")
+            messages.success(request, f"{_FEITO[r['destino']]}: "
+                                      f"{quantidade(r['quantidade'], r['unidade_base'])} de {r['item']} "
+                                      f"({dinheiro(r['valor'])}).")
         return redirect("sobras")
-    return render(request, "web/sobras.html", {"sobras": vc.sobras_fritas()})
+    return render(request, "web/sobras.html", {"sobras": vc.sobras_fritas(), "destinos": DESTINOS_PERDA})
 
 
 @login_required
@@ -78,11 +99,12 @@ def descartar(request, id):
         try:
             r = registrar_perda(lote_id=lote.id, estado=request.POST.get("estado", ""),
                                 quantidade=request.POST.get("quantidade"), motivo=request.POST.get("motivo", ""),
-                                **_kw(request))
+                                destino=request.POST.get("destino", "perda"), **_kw(request))
         except RegraViolada as e:
             messages.error(request, str(e))
         else:
-            messages.success(request, f"Descartado: {quantidade(r['quantidade'], r['unidade_base'])} de {r['item']} "
+            messages.success(request, f"{'Descartado' if r['destino'] == 'perda' else _FEITO[r['destino']]}: "
+                                      f"{quantidade(r['quantidade'], r['unidade_base'])} de {r['item']} "
                                       f"({dinheiro(r['valor'])}).")
             if r["reservas_liberadas"]:
                 messages.warning(request, "Havia reserva de encomenda nesse lote: complete a reserva com outro lote.")

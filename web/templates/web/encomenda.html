@@ -25,10 +25,12 @@
 {% if e.situacao == "pronta" %}
 <h2>Entregar</h2>
 <form method="post" class="form">{% csrf_token %}{% chave %}
-  <input type="hidden" name="acao" value="entregar">
+  <p><label>Dia da entrega <input type="date" name="data_entrega" value="{% if p.data_entrega %}{{ p.data_entrega }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}" max="{{ hoje|date:'Y-m-d' }}"></label></p>
+  {% if sep %}{% include "web/_separacao.html" %}{% endif %}
   <p>O saldo de {{ e.saldo|dinheiro }} entra agora ou vira conta a receber.</p>
   {% include "web/_pagamento.html" %}
-  <button type="submit">Entregar e fechar a venda</button>
+  {% if not sep or sep.completo %}<button type="submit" name="acao" value="entregar" class="principal">Entregar e fechar a venda</button>
+  {% else %}<p class="erro">Não dá para entregar: falta reservar. Complete a reserva ou diga de qual lote você pegou.</p>{% endif %}
 </form>
 {% else %}<p>Para entregar, todos os itens precisam estar reservados.</p>{% endif %}
 <details class="cancelar" {% if p.acao == "cancelar" %}open{% endif %}><summary>Cancelar encomenda</summary>

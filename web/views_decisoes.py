@@ -1,17 +1,20 @@
 """Telas da caixa de decisões, do resumo do dia ("Hoje") e do histórico de operações.
 Só chamam serviços e consultas do núcleo."""
 from datetime import date
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 
 from backup.situacao import situacao_backup
 from decisoes import consultas as dc
 from decisoes import servicos as ds
 from decisoes.models import Decisao
+from estoque.models import DESTINOS_PERDA
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada
 
@@ -21,7 +24,7 @@ ORIGENS = {
     "recebimento_atrasado": "Compra que não chegou", "consumo_pendente": "Consumo pendente",
     "avisos_ajuste": "Aviso de ajuste", "ficha_rendimento": "Sugestão de ficha", "agente": "Pedido do agente",
     "encomenda_sem_estoque": "Encomenda sem estoque", "receber_vencidas": "Cliente atrasado",
-    "sobras_fritas": "Sobra de frito",
+    "sobras_fritas": "Sobra de frito", "lotes_deixados": "Lote deixado para trás",
 }
 SITUACOES = {"pendente": "Pendentes", "decididas": "Decididas", "aprovada": "Aprovadas", "recusada": "Recusadas",
              "expirada": "Expiradas", "sem_efeito": "Sem efeito"}
@@ -55,7 +58,25 @@ def _links(d):
     return links
 
 
-def _enriquecer(d):
+def _conferencia(d, next_url):
+    """Os três caminhos da conferência do vencido (`detalhes.conferencia`): já saiu, está aqui, não sei."""
+    det = d["detalhes"] or {}
+    conf = det.get("conferencia")
+    if d["origem"] != "lotes_vencidos" or not conf or not det.get("lote_id"):
+        return None
+    base = {"lote": det["lote_id"], "estado": det.get("estado", "")}
+    contar = f"{reverse('contar_lote', args=[det['lote_id']])}?{urlencode({'estado': det.get('estado', ''), 'next': next_url})}"
+    if conf["ja_saiu"]["servico"] == "registrar_venda":
+        ja_saiu = f"{reverse('vender')}?{urlencode({**base, 'data_venda': str(det.get('validade') or '')})}"
+    else:  # ingrediente: o que "já foi usado" se conta
+        ja_saiu = contar
+    return {"nome": det.get("nome", ""), "ja_saiu_url": ja_saiu, "ja_saiu_rotulo": conf["ja_saiu"]["resposta"].capitalize(),
+            "contar_url": contar, "lote_id": det["lote_id"], "estado": det.get("estado", ""),
+            "saldo": det.get("saldo", 0), "destinos": DESTINOS_PERDA}
+
+
+def _enriquecer(d, next_url="/decisoes/"):
+    d["conferencia"] = _conferencia(d, next_url)
     d["origem_rotulo"] = ORIGENS.get(d["origem"], d["origem"].replace("_", " ").capitalize())
     d["links"] = _links(d)
     d["situacao_rotulo"] = dict(Decisao.SITUACOES).get(d["situacao"], d["situacao"])
@@ -94,7 +115,7 @@ def caixa(request):
         itens = [d for d in dc.decisoes(situacao=None) if d["situacao"] != "pendente"]
     else:
         itens = dc.decisoes(situacao=filtro)
-    itens = [_enriquecer(d) for d in itens]
+    itens = [_enriquecer(d, request.get_full_path()) for d in itens]
     return render(request, "web/caixa.html", {
         "itens": itens, "filtro": filtro, "situacoes": SITUACOES,
         "next": request.get_full_path(),
@@ -105,7 +126,7 @@ def caixa(request):
 def hoje(request):
     resumo = dc.resumo_do_dia()
     backup = situacao_backup()
-    caixa_itens = [_enriquecer(d) for d in resumo["decisoes"]]
+    caixa_itens = [_enriquecer(d, reverse("caixa")) for d in resumo["decisoes"]]
     return render(request, "web/inicio.html", {
         "r": resumo, "t": resumo["totais"], "backup": backup, "caixa": caixa_itens[:5],
         "sem_estoque": set(resumo["encomendas"]["sem_estoque"]),

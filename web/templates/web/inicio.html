@@ -15,10 +15,15 @@
 
 <section class="bloco"><h2>Validade</h2>
   <p>{% if t.lotes_vencidos %}<span class="falta">{{ t.lotes_vencidos }} lote(s) vencido(s): {{ r.validade.valor_vencido|dinheiro }}</span>{% else %}Nada vencido.{% endif %}</p>
-  {% for p in r.validade.vencidos %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> · {{ p.saldo|quantidade:p.unidade_base }} · venceu {{ p.validade|date:"d/m/Y" }}</p>
+  {% for p in r.validade.vencidos %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> ({{ p.lote_id|nome_do_lote }}, código {{ p.codigo }}) · {{ p.saldo|quantidade:p.unidade_base }} · venceu {{ p.validade|date:"d/m/Y" }}</p>
   {% include "web/_descartar.html" with lote_id=p.lote_id estado=p.estado saldo=p.saldo next=request.path %}{% endfor %}
   <p>{% if t.lotes_vencendo %}{{ t.lotes_vencendo }} lote(s) vencendo em até {{ r.validade.dias }} dias: {{ r.validade.valor_vencendo|dinheiro }}{% else %}Nada vencendo em {{ r.validade.dias }} dias.{% endif %}</p>
-  {% for p in r.validade.vencendo %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> · {{ p.saldo|quantidade:p.unidade_base }} · vence {{ p.validade|date:"d/m" }}</p>{% endfor %}</section>
+  {% for p in r.validade.vencendo %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> ({{ p.lote_id|nome_do_lote }}) · {{ p.saldo|quantidade:p.unidade_base }} · vence {{ p.validade|date:"d/m" }}</p>{% endfor %}</section>
+
+{% if r.validade.deixados %}<section class="bloco"><h2>Venda primeiro</h2>
+  <p class="mudo">Lotes que ficaram para trás numa venda em que se pegou um lote mais novo.</p>
+  {% for d in r.validade.deixados %}<p><a href="{% url 'lote' d.lote_id %}">{{ d.item }}</a> · <strong>{{ d.nome }}</strong> ({{ d.estado|conservacao|lower }}) · {{ d.livre|numero }} un livres · vence {{ d.validade|date:"d/m" }} <span class="mudo">(ficou na venda {{ d.venda_id }})</span></p>{% endfor %}
+  <p class="acoes"><a href="{% url 'vender' %}">Vender</a></p></section>{% endif %}
 
 <section class="bloco"><h2>O que falta</h2>
   {% for i in r.estoque_baixo %}<p><span class="nome">{{ i.item }}</span>: tem {{ i.disponivel|quantidade:i.unidade_base }}, mínimo {{ i.minimo|quantidade:i.unidade_base }} <span class="falta">falta {{ i.falta|quantidade:i.unidade_base }}</span></p>{% empty %}<p>Nada abaixo do mínimo.</p>{% endfor %}

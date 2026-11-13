@@ -72,6 +72,8 @@ class ConclusaoForm(forms.Form):
     justificativa = forms.CharField(required=False, label="Justificativa da validade")
     anotacao = forms.CharField(required=False, label="Como foi? (inclui sobras)", widget=forms.Textarea(attrs={"rows": 3}))
     confirmar_perda_total = forms.BooleanField(required=False, label="Confirmo a perda total")
+    motivo_vencido = forms.CharField(required=False, label="Motivo do vencido (só se o sistema pedir)",
+                                     help_text="Lote vencido só entra na produção com um motivo, que fica registrado.")
 
 
 class TransferenciaForm(forms.Form):
@@ -81,4 +83,6 @@ class TransferenciaForm(forms.Form):
     validade_manual = forms.DateField(required=False, label="Validade manual (opcional)",
                                       widget=forms.DateInput(attrs={"type": "date"}))
     justificativa = forms.CharField(required=False, label="Justificativa (opcional)")
+    motivo_vencido = forms.CharField(required=False, label="Motivo do vencido (só se o sistema pedir)",
+                                     help_text="Lote vencido só muda de conservação com um motivo, que fica registrado.")
     chave = forms.CharField(widget=forms.HiddenInput)
