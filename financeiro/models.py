@@ -1,15 +1,21 @@
 from django.db import models
 
 DIFERENCAS = [("juros", "Juros"), ("multa", "Multa"), ("desconto", "Desconto")]
+TIPOS = [("pagar", "A pagar"), ("receber", "A receber")]
 
 
 class Conta(models.Model):
-    """Obrigação a pagar (RF-FIN-01). No Plano 3 só nasce de compra: 1 compra → 1 conta → N parcelas."""
+    """Obrigação a pagar (RF-FIN-01) ou a receber (RF-FIN-06). A pagar nasce de compra (1 compra → 1 conta);
+    a receber, de venda a prazo ou do saldo de encomenda entregue a prazo (1 venda → 1 conta). N parcelas."""
 
+    tipo = models.CharField(max_length=10, choices=TIPOS, default="pagar")
     origem = models.CharField(max_length=20, default="compra")
     compra = models.OneToOneField("compras.Compra", null=True, blank=True, on_delete=models.PROTECT,
                                   related_name="conta")
     fornecedor = models.ForeignKey("cadastros.Fornecedor", null=True, blank=True, on_delete=models.PROTECT)
+    venda = models.OneToOneField("vendas.Venda", null=True, blank=True, on_delete=models.PROTECT,
+                                 related_name="conta")
+    cliente = models.ForeignKey("cadastros.Cliente", null=True, blank=True, on_delete=models.PROTECT)
     descricao = models.CharField(max_length=200)
     total = models.DecimalField(max_digits=12, decimal_places=2)
     cancelada = models.BooleanField(default=False)
@@ -36,7 +42,8 @@ class Parcela(models.Model):
 
 
 class Pagamento(models.Model):
-    """Anotação de que o dono pagou (o sistema nunca paga nada)."""
+    """Anotação de que o dono pagou ou recebeu (o sistema nunca movimenta dinheiro).
+    Em conta a receber, `valor_pago` é quanto entrou (desconto = o cliente pagou menos)."""
 
     parcela = models.ForeignKey(Parcela, on_delete=models.PROTECT, related_name="pagamentos")
     valor = models.DecimalField(max_digits=12, decimal_places=2)  # quanto abate da parcela

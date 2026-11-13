@@ -13,6 +13,7 @@ from django.utils import timezone
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada, _json, executar
 from producao.servicos import conciliar_consumo
+from vendas.servicos import completar_reserva
 
 from .models import Decisao
 
@@ -20,6 +21,7 @@ from .models import Decisao
 # voltam do JSON (números e datas como texto)
 OPERACOES = {
     "conciliar_consumo": conciliar_consumo,
+    "completar_reserva": completar_reserva,
 }
 
 

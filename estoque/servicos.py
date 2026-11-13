@@ -78,12 +78,64 @@ def porcoes(*, item=None, ate=None, hoje=None) -> list[dict]:
     return saida
 
 
+def _reservas(**filtro):
+    from vendas.models import Reserva  # vendas depende de estoque; aqui só se lê
+
+    return Reserva.objects.filter(situacao="ativa", **filtro)
+
+
+def reservado(*, item=None, lote=None, estado=None) -> Decimal:
+    """Quanto está reservado para encomendas (reservas ativas), por item, lote ou porção (lote + estado)."""
+    filtro = {}
+    if item is not None:
+        filtro["lote__item"] = item
+    if lote is not None:
+        filtro["lote"] = lote
+    if estado is not None:
+        filtro["estado"] = estado
+    return _reservas(**filtro).aggregate(s=Sum("quantidade"))["s"] or Decimal("0")
+
+
+def livre_porcao(lote, estado: str = "") -> Decimal:
+    """Saldo da porção que não está reservado: o que venda, fritura, perda e transferência podem usar."""
+    return saldo_lote(lote, estado) - reservado(lote=lote, estado=estado)
+
+
 def disponivel(item, *, hoje=None) -> Decimal:
-    """Disponível (RN-03) = saldo − vencido. Reservas entram com as encomendas (Plano 6);
-    a pendência de recebimento nunca está no saldo."""
-    vencido = sum((p["saldo"] for p in porcoes(item=item, ate=(hoje or timezone.localdate()) - timedelta(days=1),
-                                                hoje=hoje)), Decimal("0"))
-    return saldo(item) - vencido
+    """Disponível (RN-03) = saldo − reservado − vencido. A reserva em porção vencida não conta duas vezes
+    (o vencido já saiu inteiro); a pendência de recebimento nunca está no saldo."""
+    hoje = hoje or timezone.localdate()
+    vencidas = porcoes(item=item, ate=hoje - timedelta(days=1), hoje=hoje)
+    vencido = sum((p["saldo"] for p in vencidas), Decimal("0"))
+    fora = {(p["lote_id"], p["estado"]) for p in vencidas}
+    reserva = sum((r.quantidade for r in _reservas(lote__item=item) if (r.lote_id, r.estado) not in fora),
+                  Decimal("0"))
+    return saldo(item) - vencido - reserva
+
+
+def alocar_porcoes(item, quantidade: Decimal, *, forma: str, estado: str, hoje, valida_ate=None,
+                   usar_reservas=None) -> tuple[list, Decimal]:
+    """FEFO por porção (RN-18) para produto vendido ou reservado: só lotes da `forma`, porções no `estado`,
+    sem vencido (nem o que vence antes de `valida_ate`) e sem o reservado para outras encomendas.
+    `usar_reservas` = {(lote_id, estado): quantidade} que pode ser usado mesmo reservado (as da própria
+    encomenda). Devolve ([(lote, quantidade)], quanto faltou)."""
+    limite = max(hoje, valida_ate or hoje)
+    usar_reservas = usar_reservas or {}
+    lotes = Lote.objects.filter(item=item, forma=forma).in_bulk()
+    falta, saida = quantidade, []
+    for p in porcoes(item=item, hoje=hoje):
+        if falta <= 0:
+            break
+        if p["estado"] != estado or p["lote_id"] not in lotes or (p["validade"] and p["validade"] < limite):
+            continue
+        lote = lotes[p["lote_id"]]
+        livre = livre_porcao(lote, estado) + usar_reservas.get((lote.id, estado), Decimal("0"))
+        if livre <= 0:
+            continue
+        q = min(livre, falta)
+        saida.append((lote, q))
+        falta -= q
+    return saida, max(falta, Decimal("0"))
 
 
 def itens_abaixo_do_minimo(*, hoje=None) -> list[dict]:
@@ -191,6 +243,9 @@ def transferir_estado(*, lote_id, quantidade, de, para, validade_manual=None, ju
             raise RegraViolada("Lote vencido só aceita descarte.")
         if quantidade > saldo_lote(lote, de):
             raise RegraViolada(f"Só há {fmt_qtd(saldo_lote(lote, de), lote.item.unidade_base)} em {de}.")
+        if quantidade > livre_porcao(lote, de):
+            raise RegraViolada(f"Só {fmt_qtd(livre_porcao(lote, de), lote.item.unidade_base)} em {de} não estão "
+                               "reservadas para encomendas.")
         nova, manual = calcular_validade(lote.item, lote.forma, para, hoje=hoje, manual=validade_manual,
                                          justificativa=justificativa)
         for estado, q, val, man in ((de, -quantidade, None, False), (para, quantidade, nova, manual)):
@@ -201,3 +256,51 @@ def transferir_estado(*, lote_id, quantidade, de, para, validade_manual=None, ju
         return {"lote_id": lote.id, "validade": nova.isoformat(), "validade_manual": manual}
 
     return executar("transferir_estado", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
+
+
+def registrar_perda(*, lote_id, estado="", quantidade, unidade="", motivo, autor, canal="web", chave=None) -> dict:
+    """Baixa com motivo (RF-EST-02 perda/descarte): sobra de frito, quebra, vencido (RF-EST-10, RN-19).
+
+    Não passa do saldo da porção. Fora do vencido, não toca no reservado; descartar porção vencida
+    libera as reservas dela (FL-07 A3: o sistema avisa para reservar de outro lote).
+    `quantidade` na `unidade` informada (padrão: a unidade base do item)."""
+    parametros = {"lote_id": lote_id, "estado": estado, "quantidade": quantidade, "unidade": unidade,
+                  "motivo": motivo}
+
+    def func(op):
+        from nucleo.valores import decimal
+
+        texto = (motivo or "").strip()
+        if not texto:
+            raise RegraViolada("Informe o motivo da perda.")
+        lote = Lote.objects.select_related("item").filter(id=lote_id).first()
+        if lote is None:
+            raise RegraViolada("Lote não encontrado.")
+        un, f = fator(lote.item, unidade or lote.item.unidade_base)
+        qtd = (decimal(quantidade, "quantidade") * f).quantize(Decimal("0.001"), ROUND_HALF_UP)
+        if qtd <= 0:
+            raise RegraViolada("A quantidade deve ser maior que zero.")
+        base = lote.item.unidade_base
+        tem = saldo_lote(lote, estado)
+        if qtd > tem:
+            raise RegraViolada(f"Só há {fmt_qtd(tem, base)} de '{lote.item.nome}' nessa porção.")
+        v = validade_porcao(lote, estado)
+        vencido = v is not None and v < timezone.localdate()
+        liberadas = []
+        if vencido:
+            for r in _reservas(lote=lote, estado=estado):
+                r.situacao, r.fim_operacao, r.motivo = "liberada", op, "lote vencido descartado"
+                r.save(update_fields=["situacao", "fim_operacao", "motivo"])
+                liberadas.append(r.id)
+        elif qtd > livre_porcao(lote, estado):
+            raise RegraViolada(f"Só {fmt_qtd(livre_porcao(lote, estado), base)} não estão reservadas para "
+                               "encomendas. Cancele a encomenda antes de dar a perda.")
+        m = Movimento.objects.create(tipo="perda", item=lote.item, lote=lote, quantidade=-qtd,
+                                     quantidade_informada=decimal(quantidade, "quantidade"), unidade_informada=un,
+                                     fator=f, motivo=texto, estado=estado, operacao=op)
+        return {"movimento_id": m.id, "lote_id": lote.id, "item": lote.item.nome, "quantidade": qtd,
+                "unidade_base": base, "vencido": vencido, "reservas_liberadas": liberadas,
+                "valor": (qtd * lote.custo_unitario).quantize(Decimal("0.01"), ROUND_HALF_UP),
+                "saldo": saldo_lote(lote, estado)}
+
+    return executar("registrar_perda", func, autor=autor, canal=canal, chave=chave, parametros=parametros)

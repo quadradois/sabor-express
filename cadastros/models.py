@@ -72,3 +72,14 @@ class Fornecedor(models.Model):
 
     def __str__(self):
         return self.nome
+
+
+class Cliente(models.Model):
+    """Quem compra a prazo ou encomenda (RF-CAD-05). Venda de balcão não precisa de cliente."""
+
+    nome = models.CharField(max_length=120, unique=True)
+    contato = models.CharField(max_length=120, blank=True)  # telefone, endereço de entrega etc.
+    ativo = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.nome

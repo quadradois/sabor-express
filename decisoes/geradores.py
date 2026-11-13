@@ -12,12 +12,14 @@ from django.utils import timezone
 
 from cadastros.models import Item
 from compras.consultas import compras_em_aberto
-from estoque.servicos import consumos_pendentes, itens_abaixo_do_minimo, porcoes
-from financeiro.consultas import avisos_de_ajuste, contas_a_vencer, contas_vencidas
+from estoque.servicos import alocar_porcoes, consumos_pendentes, itens_abaixo_do_minimo, porcoes, validade_porcao
+from financeiro.consultas import avisos_de_ajuste, contas_a_vencer, contas_vencidas, receber_vencidas
 from producao.models import LinhaPreparo, Producao
+from vendas.consultas import encomendas, sobras_fritas
+from vendas.models import Reserva
 from web.templatetags.formato import dinheiro, quantidade
 
-from .consultas import DIAS_RECEBIMENTO, DIAS_VALIDADE
+from .consultas import DIAS_ENCOMENDAS, DIAS_RECEBIMENTO, DIAS_VALIDADE
 from .servicos import expirar_decisoes, sincronizar
 
 DIAS_CONTAS = 3  # a caixa avisa a conta que vence em até 3 dias (o resumo mostra a semana)
@@ -183,6 +185,64 @@ def ficha_rendimento(hoje):
     return saida
 
 
+def _dia(e, hoje):
+    dias = e["dias"]
+    if dias < 0:
+        return f"para {_data(e['entrega_data'])}, que já passou"
+    return {0: "para hoje", 1: "para amanhã"}.get(dias, f"para {_data(e['entrega_data'])}")
+
+
+def encomenda_sem_estoque(hoje):
+    """Encomendas abertas até hoje + DIAS_ENCOMENDAS (e as atrasadas) com algo sem reserva ou reservado em
+    lote que vence antes da entrega. Se há estoque livre que serve, propõe completar a reserva (RF-VEN-07:
+    com confirmação, nunca sozinho); se não, avisa o que falta produzir."""
+    saida, expira = [], timezone.now() + VALIDADE_DECISAO
+    for e in encomendas(ate=hoje + timedelta(days=DIAS_ENCOMENDAS), hoje=hoje):
+        limite = max(hoje, e["entrega_data"])
+        faltas, cobre = [], Decimal("0")
+        for i in e["itens"]:
+            ruins = sum((r.quantidade for r in Reserva.objects.filter(item_encomenda_id=i["item_encomenda_id"],
+                                                                      situacao="ativa").select_related("lote")
+                         if (v := validade_porcao(r.lote, r.estado)) and v < limite), Decimal("0"))
+            falta = i["falta"] + ruins
+            if falta <= 0:
+                continue
+            alocacao, _ = alocar_porcoes(Item.objects.get(id=i["produto_id"]), falta, forma=i["forma"], estado=i["estado"], hoje=hoje,
+                                         valida_ate=e["entrega_data"])
+            cobre += sum((q for _, q in alocacao), Decimal("0"))
+            faltas.append(f"{quantidade(falta, 'un')} de {i['produto']} {i['forma']} {i['estado']}")
+        if not faltas:
+            continue
+        texto = f"Encomenda {e['encomenda_id']} de {e['cliente']} {_dia(e, hoje)}: falta reservar " + ", ".join(faltas)
+        if cobre > 0:
+            saida.append({"assunto": f"completar_reserva:{e['encomenda_id']}",
+                          "texto": f"{texto}. Há {quantidade(cobre, 'un')} no estoque que servem: reservar agora?",
+                          "operacao": "completar_reserva", "parametros": {"encomenda_id": e["encomenda_id"]},
+                          "detalhes": e, "expira_em": expira})
+        else:
+            saida.append({"assunto": f"encomenda_sem_estoque:{e['encomenda_id']}",
+                          "texto": f"{texto}. Não há estoque livre que sirva: é preciso produzir.",
+                          "detalhes": e})
+    return saida
+
+
+def receber_vencidas_(hoje):
+    return [{"assunto": f"receber_vencida:{p['parcela_id']}",
+             "texto": f"{p['cliente'] or p['descricao']} está devendo {dinheiro(p['saldo'])} "
+                      f"(parcela {p['numero']} de {p['de']}), que venceu em {_data(p['vencimento'])}.",
+             "detalhes": p}
+            for p in receber_vencidas(hoje=hoje)]
+
+
+def sobras_fritas_(hoje):
+    """Fritos de dias anteriores ainda com saldo (RF-FRI-03): pedem destino (perda ou outro permitido)."""
+    return [{"assunto": f"sobra_frita:{p['lote_id']}:{p['estado']}",
+             "texto": f"Sobraram {quantidade(p['saldo'], 'un')} de {p['item']} fritos em {_data(p['frito_em'])} "
+                      f"(lote {p['codigo']}). Registre a perda ou o destino das sobras.",
+             "detalhes": p}
+            for p in sobras_fritas(hoje=hoje, ate_ontem=True)]
+
+
 GERADORES = {
     "lotes_vencidos": lotes_vencidos,
     "lotes_vencendo": lotes_vencendo,
@@ -193,6 +253,9 @@ GERADORES = {
     "consumo_pendente": consumo_pendente,
     "avisos_ajuste": avisos_ajuste,
     "ficha_rendimento": ficha_rendimento,
+    "encomenda_sem_estoque": encomenda_sem_estoque,
+    "receber_vencidas": receber_vencidas_,
+    "sobras_fritas": sobras_fritas_,
 }
 
 
