@@ -1,3 +1,4 @@
+import unicodedata
 from decimal import Decimal
 
 from nucleo.operacoes import RegraViolada, executar
@@ -28,6 +29,12 @@ def criar_tamanho(*, ficha_id: int, peso_g: Decimal, oleo_ref_un: Decimal | None
                     parametros={"ficha_id": ficha_id, "peso_g": peso_g, "oleo_ref_un": oleo_ref_un})
 
 
+def _normal(s: str) -> str:
+    """Minúsculas e sem acento: "ATACADÃO" e "Atacadao" são o mesmo nome (o iexact do SQLite só cobre ASCII)."""
+    s = unicodedata.normalize("NFKD", s.casefold())
+    return "".join(c for c in s if not unicodedata.combining(c)).strip()
+
+
 def salvar_fornecedor(*, nome, documento="", contato="", ativo=True, fornecedor_id=None,
                       autor: str, canal: str = "web", chave: str | None = None) -> dict:
     """Cria (sem `fornecedor_id`) ou altera um fornecedor. Fornecedor com compras não é apagado: inativa-se."""
@@ -37,7 +44,9 @@ def salvar_fornecedor(*, nome, documento="", contato="", ativo=True, fornecedor_
         n = (nome or "").strip()
         if not n:
             raise RegraViolada("Informe o nome do fornecedor.")
-        outro = Fornecedor.objects.filter(nome__iexact=n).exclude(id=fornecedor_id).first()
+        alvo = _normal(n)
+        outro = next((f for f in Fornecedor.objects.exclude(id=fornecedor_id).order_by("id")
+                      if _normal(f.nome) == alvo), None)
         if outro:
             raise RegraViolada(f"Já existe o fornecedor '{outro.nome}'.")
         if fornecedor_id is None:
