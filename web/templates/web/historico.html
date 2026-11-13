@@ -1,0 +1,27 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Histórico de operações{% endblock %}
+{% block conteudo %}
+<h1>Histórico de operações</h1>
+{% include "web/_mensagens.html" %}
+<form method="get" class="form">
+  <div class="campo"><label>De<input type="date" name="de" value="{{ f.de }}"></label></div>
+  <div class="campo"><label>Até<input type="date" name="ate" value="{{ f.ate }}"></label></div>
+  <div class="campo"><label>Quem<select name="autor"><option value="">Todos</option>{% for a in autores %}<option value="{{ a }}"{% if a == f.autor %} selected{% endif %}>{{ a }}</option>{% endfor %}</select></label></div>
+  <div class="campo"><label>Canal<select name="canal"><option value="">Todos</option>{% for c in canais %}<option value="{{ c }}"{% if c == f.canal %} selected{% endif %}>{{ c }}</option>{% endfor %}</select></label></div>
+  <div class="campo"><label>O que foi feito<select name="nome"><option value="">Tudo</option>{% for k, r in rotulos %}<option value="{{ k }}"{% if k == f.nome %} selected{% endif %}>{{ r }}</option>{% endfor %}</select></label></div>
+  <div class="campo"><label>Resultado<select name="status"><option value="">Todos</option><option value="sucesso"{% if f.status == "sucesso" %} selected{% endif %}>Deu certo</option><option value="erro"{% if f.status == "erro" %} selected{% endif %}>Recusadas (erro)</option></select></label></div>
+  <button type="submit">Filtrar</button>
+</form>
+<p>{{ total }} operação(ões).</p>
+{% for o in pagina %}<section class="bloco">
+  <p><strong>{{ o.rotulo }}</strong>{% if o.status == "erro" %} <span class="falta">recusada</span>{% endif %}<br><small>{{ o.criado_em|date:"d/m/Y H:i" }} · {{ o.autor }} · {{ o.canal }}</small></p>
+  {% if o.erro %}<p class="erro">{{ o.erro }}</p>{% endif %}
+  <details><summary>Detalhes</summary><pre>{{ o.parametros|bonito }}</pre>{% if o.resultado %}<pre>{{ o.resultado|bonito }}</pre>{% endif %}</details>
+</section>{% empty %}<p>Nenhuma operação com esses filtros.</p>{% endfor %}
+{% if pagina.has_other_pages %}<p class="navegar">
+  {% if pagina.has_previous %}<a href="?{{ query }}&pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+  <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+  {% if pagina.has_next %}<a href="?{{ query }}&pagina={{ pagina.next_page_number }}">Próxima</a>{% endif %}</p>{% endif %}
+<p><a href="{% url 'inicio' %}">Voltar para Hoje</a></p>
+{% endblock %}

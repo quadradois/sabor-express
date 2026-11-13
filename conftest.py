@@ -60,3 +60,9 @@ def lote_produzido(bolinha):
     usar_previsto_restantes(producao_id=p, autor="dono")
     r = concluir_producao(producao_id=p, quantidade_boa=9, perdas=1, perda_motivo="rasgou", estado="resfriado", autor="dono")
     return Lote.objects.get(id=r["lote_id"])
+
+
+@pytest.fixture(autouse=True)
+def _backup_isolado(settings, tmp_path):
+    """Testes nunca leem a pasta de backups real do usuário."""
+    settings.BACKUP_DIR = tmp_path / "backups-teste"

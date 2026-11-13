@@ -1,10 +1,12 @@
 from django.contrib.auth import views as auth
 from django.urls import path
 
-from . import views, views_compras as vc
+from . import views, views_compras as vc, views_decisoes as vd
 
 urlpatterns = [
-    path("", views.inicio, name="inicio"),
+    path("", vd.hoje, name="inicio"),
+    path("decisoes/", vd.caixa, name="caixa"),
+    path("historico/", vd.historico, name="historico"),
     path("receita/", views.receita, name="receita"),
     path("producao/", views.producoes, name="producoes"),
     path("producao/nova/", views.producao_nova, name="producao_nova"),
