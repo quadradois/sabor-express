@@ -2,7 +2,7 @@ from django.contrib.auth import views as auth
 from django.urls import path
 
 from . import (views, views_compras as vc, views_decisoes as vd, views_fritura as vf, views_receber as vr,
-               views_vendas as vv, views_custos as vcu)
+               views_vendas as vv, views_custos as vcu, views_despesas as vde)
 
 urlpatterns = [
     path("", vd.hoje, name="inicio"),
@@ -57,6 +57,18 @@ urlpatterns = [
     path("previsto-realizado/", vcu.previsto_realizado, name="previsto_realizado"),
     path("previsto-realizado/<int:id>/", vcu.previsto_realizado_producao, name="previsto_producao"),
     path("relatorio/", vcu.relatorio, name="relatorio"),
+    path("custos/referencias/", vcu.referencias, name="referencias"),
+    path("despesas/", vde.despesas, name="despesas"),
+    path("despesas/nova/", vde.despesa_nova, name="despesa_nova"),
+    path("despesas/valor/", vde.informar_valor, name="despesa_valor"),
+    path("despesas/pagar/", vde.pagar_despesa, name="despesa_pagar"),
+    path("despesas/cancelar/", vde.cancelar_despesa, name="despesa_cancelar"),
+    path("despesas/mensais/", vde.despesas_mensais, name="despesas_mensais"),
+    path("despesas/mensais/nova/", vde.despesa_mensal_form, name="despesa_mensal_nova"),
+    path("despesas/mensais/<int:id>/", vde.despesa_mensal_form, name="despesa_mensal"),
+    path("despesas/categorias/", vde.categorias, name="categorias_despesa"),
+    path("canais/", vde.canais, name="canais_venda"),
+    path("estudo-de-preco/", vde.estudo_de_preco, name="estudo_preco"),
     path("entrar/", auth.LoginView.as_view(), name="login"),
     path("sair/", auth.LogoutView.as_view(), name="logout"),
 ]

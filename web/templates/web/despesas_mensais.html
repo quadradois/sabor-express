@@ -1,0 +1,13 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Despesas mensais — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Despesas mensais</h1>
+{% include "web/_despesas_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">As contas que se repetem todo mês. O sistema cria a despesa de cada mês e lembra do vencimento. O valor previsto é opcional: sem ele, o mês aparece como "sem valor" até você informar.</p>
+<p class="acoes"><a href="{% url 'despesa_mensal_nova' %}">Nova despesa mensal</a></p>
+{% for d in lista %}<p class="bloco"><a href="{% url 'despesa_mensal' d.despesa_id %}"><strong>{{ d.nome }}</strong></a> <span class="mudo">{{ d.categoria }}</span>{% if not d.ativa %} <strong class="falta">inativa</strong>{% endif %}<br>
+  Vence todo dia {{ d.dia_vencimento }} · valor previsto: {% if d.valor_previsto is None %}não informado{% else %}{{ d.valor_previsto|din }}{% endif %}</p>
+{% empty %}<p>Nenhuma despesa mensal cadastrada.</p>{% endfor %}
+{% endblock %}

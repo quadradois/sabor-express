@@ -1,0 +1,20 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Categorias de despesa — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Categorias de despesa</h1>
+{% include "web/_despesas_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">"Indireta" quer dizer: é custo da produção (mão de obra, energia, gás, diária). Só as indiretas entram na conta dos indiretos por salgado; todas entram no resultado depois das despesas.</p>
+{% for c in lista %}<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="categoria_id" value="{{ c.categoria_id }}">
+  <p><label>Nome <input name="nome" value="{{ c.nome }}" required></label></p>
+  <p><label><input type="checkbox" name="indireta" {% if c.indireta %}checked{% endif %}> Indireta (da produção)</label>
+     <label><input type="checkbox" name="ativa" {% if c.ativa %}checked{% endif %}> Ativa</label></p>
+  <button type="submit">Salvar {{ c.nome }}</button></form></section>{% endfor %}
+<h2>Nova categoria</h2>
+<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Nome <input name="nome" required></label></p>
+  <p><label><input type="checkbox" name="indireta"> Indireta (da produção)</label></p>
+  <button type="submit">Criar categoria</button></form></section>
+{% endblock %}

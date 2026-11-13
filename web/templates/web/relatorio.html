@@ -16,6 +16,19 @@
   <p class="mudo">Não é lucro. Não inclui: {{ r.resultado.nao_inclui|join:"; " }}.</p>
   {% for x in r.ressalvas %}<p class="aviso">{{ x }}</p>{% endfor %}</section>
 
+{% with dd=r.depois_das_despesas %}
+<section class="bloco" id="depois-das-despesas"><h2>Resultado depois das despesas <span class="rotulo">{{ dd.rotulo }}</span></h2>
+  <p>Antes das despesas {{ dd.resultado_antes|din }} − despesas {{ dd.despesas|din }}</p>
+  <p>= <strong>{{ dd.resultado|din }}</strong>{% if dd.resultado_pct is not None %} ({{ dd.resultado_pct|pct }} das vendas){% endif %}, depois das despesas.</p>
+  {% if not dd.completo %}<p class="falta">Resultado incompleto: {% for f in dd.faltando %}falta o valor de {{ f.despesa }} de {{ f.competencia|date:"m/Y" }}{% if not forloop.last %}; {% endif %}{% endfor %}. Informe o valor em <a href="{% url 'despesas' %}?mes={{ p.ate|date:'Y-m' }}">despesas do mês</a>.</p>{% endif %}
+  {% for x in dd.ressalvas %}<p class="aviso">{{ x }}</p>{% endfor %}
+  <p class="mudo">Não é lucro. Não inclui: {{ dd.nao_inclui|join:"; " }}.</p>
+  <h3>Despesas por categoria</h3>
+  {% for c in r.despesas.por_categoria %}<p class="mudo">{{ c.categoria }}{% if c.indireta %} (indireta){% endif %}: {{ c.valor|din }} ({{ c.lancamentos }} lançamento(s)){% if not c.completo %} <span class="falta">falta valor</span>{% endif %}</p>
+  {% empty %}<p class="mudo">Nenhuma despesa com valor neste período.</p>{% endfor %}
+  <p class="acoes"><a href="{% url 'despesas' %}?mes={{ p.ate|date:'Y-m' }}">Despesas do mês</a> <a href="{% url 'estudo_preco' %}">Estudo de preço</a></p></section>
+{% endwith %}
+
 <section class="bloco"><h2>Vendas</h2>
   {% with t=r.vendas.totais %}
   <p>{{ t.vendas }} venda(s) concluída(s): <strong>{{ t.receita|din }}</strong> · {{ t.unidades }} un · desconto dado {{ t.desconto|din }}</p>

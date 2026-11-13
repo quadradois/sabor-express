@@ -1,0 +1,27 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Despesas — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Despesas de {{ comp|date:"m/Y" }}</h1>
+{% include "web/_despesas_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'despesas' %}?mes={{ anterior|date:'Y-m' }}">&larr; {{ anterior|date:"m/Y" }}</a>
+  {% if not e_hoje %}<a href="{% url 'despesas' %}">Este mês</a>{% endif %}
+  <a href="{% url 'despesas' %}?mes={{ proximo|date:'Y-m' }}">{{ proximo|date:"m/Y" }} &rarr;</a></p>
+
+<section class="bloco"><h2>Resumo <span class="rotulo">estimado</span></h2>
+  <p>Total do mês: <strong>{{ t.valor|din }}</strong> · já pago {{ t.pago|din }} · <strong>falta pagar {{ t.falta_pagar|din }}</strong></p>
+  {% if t.sem_valor %}<p class="falta">{{ t.sem_valor }} despesa(s) ainda sem valor: o total acima não as inclui.</p>{% endif %}
+  {% if t.vencidas %}<p class="falta">{{ t.vencidas }} vencida(s).</p>{% endif %}
+  {% for c in desp.por_categoria %}<p class="mudo">{{ c.categoria }}{% if c.indireta %} (indireta){% endif %}: {{ c.valor|din }}{% if not c.completo %} <span class="falta">falta valor</span>{% endif %}</p>
+  {% empty %}<p class="mudo">Nenhuma despesa com valor neste mês.</p>{% endfor %}
+  {% for x in desp.ressalvas %}<p class="mudo">{{ x }}</p>{% endfor %}</section>
+
+<h2>Falta pagar ({{ a_pagar|length }})</h2>
+{% for d in a_pagar %}{% include "web/_despesa.html" with next=request.get_full_path %}{% empty %}<p>Nada a pagar neste mês.</p>{% endfor %}
+{% if pagas %}<h2>Já pagas ({{ pagas|length }})</h2>
+{% for d in pagas %}{% include "web/_despesa.html" with next=request.get_full_path %}{% endfor %}{% endif %}
+{% if canceladas %}<h2>Canceladas</h2>
+{% for d in canceladas %}{% include "web/_despesa.html" with next=request.get_full_path %}{% endfor %}{% endif %}
+<p class="acoes"><a href="{% url 'despesa_nova' %}">Lançar despesa avulsa</a> <a href="{% url 'despesas_mensais' %}">Despesas mensais</a></p>
+{% endblock %}

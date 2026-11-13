@@ -4,6 +4,7 @@
 {% block conteudo %}
 <h1>Custo dos produtos</h1>
 {% include "web/_custos_nav.html" %}
+<p class="acoes"><a href="{% url 'referencias' %}">Óleo e indiretos de cada tamanho</a> <a href="{% url 'estudo_preco' %}">Estudo de preço</a></p>
 <p class="mudo">Custo <strong>estimado</strong> de uma unidade, pela ficha e pelo preço da última compra de cada ingrediente. Não inclui despesas, tributos nem perdas da produção.</p>
 {% for c in produtos %}<section class="bloco">
   {% if c.erro %}<p><strong>{{ c.produto }}</strong></p><p class="erro">Ficha com problema: {{ c.erro }}</p>
