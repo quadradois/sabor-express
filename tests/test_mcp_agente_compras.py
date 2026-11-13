@@ -448,7 +448,7 @@ def test_produzir_sem_estoque_e_conciliar_quando_chega(bolinha, atacadao):
                               f"da produção {p.id}. Quer conciliar?")
     r = chamar("conciliar_consumo", item="farinha")
     assert r["confirmar"] == ("Conciliar 1 kg de Farinha de trigo da produção "
-                              f"{p.id} com o lote sem código: custo de 5 reais. O custo da produção fica fechado. Confirma?")
+                              f"{p.id} com o lote do dia {hoje.day}: custo de 5 reais. O custo da produção fica fechado. Confirma?")
     assert ConsumoPendente.objects.get().lote is None
     confirmar(r)
     confirmar(r)

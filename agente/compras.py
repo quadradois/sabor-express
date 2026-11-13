@@ -820,7 +820,9 @@ def propor_estornar_pagamento(*, motivo, fornecedor="", pagamento_id=None, autor
 
 # --- nível 2: consumo pendente ---------------------------------------------------------
 
-def propor_conciliar_consumo(*, item="", pendente_id=None, lote_id=None, autor, canal):
+def propor_conciliar_consumo(*, item="", pendente_id=None, lote_id=None, motivo_vencido="", autor, canal):
+    from .lotes import nome, pedir_motivo, porcao_vencida, vencidos_txt
+
     ps = consumos_pendentes()
     if pendente_id:
         ps = [p for p in ps if p["pendente_id"] == _inteiro(pendente_id, "pendente_id")]
@@ -842,14 +844,20 @@ def propor_conciliar_consumo(*, item="", pendente_id=None, lote_id=None, autor, 
         raise ConsultaInvalida(f"Ainda não há lote de {p['item']} com {qtd(p['quantidade'], p['unidade_base'])} "
                                "disponíveis para conciliar.", 409)
 
+    vencido = porcao_vencida(lote, "")
+    mv = (motivo_vencido or "").strip() if vencido else ""
+    parametros = {"pendente_id": p["pendente_id"], "lote_id": lote.id}
+    if mv:
+        parametros["motivo_vencido"] = mv
+
     def resumir(r):
-        t = (f"Conciliar {_pendente_txt(p)} com o lote {lote.codigo or 'sem código'}"
+        t = (f"Conciliar {_pendente_txt(p)} com o {nome(lote)}"
              + (f", validade {quando(lote.validade)}" if lote.validade else "") + f": custo de {reais(r['custo'])}")
         if r["producao_id"] and not r["custo_pendente"]:
             t += ". O custo da produção fica fechado"
-        return t
+        return t + (vencidos_txt([vencido], mv) if mv else "")
 
-    return _proposta("conciliar_consumo", {"pendente_id": p["pendente_id"], "lote_id": lote.id}, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("conciliar_consumo", parametros, resumir, autor, canal))
 
 
 # --- o que dizer depois de confirmar ---------------------------------------------

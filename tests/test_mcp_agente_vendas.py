@@ -135,7 +135,7 @@ def test_alcada_das_ferramentas_de_vendas():
                                                   "ver_estudo_preco", "simular_preco"}  # os dois do Plano 8 só leem
     assert nivel["ver_estudo_preco"] == nivel["simular_preco"] == 0
     t = ferramentas()
-    assert len(t) == 88
+    assert len(t) == 92  # + 4 do Plano 9 (separação, separação da encomenda, contagem, conferência)
     assert {n for n in LEITURA if t[n].annotations.readOnlyHint} == LEITURA
     assert "$ref" not in json.dumps(t["registrar_venda"].inputSchema)
     assert t["registrar_venda"].inputSchema["properties"]["itens"]["items"]["required"] == ["produto", "quantidade"]
@@ -192,7 +192,9 @@ def test_venda_a_vista_so_grava_depois_do_sim(coxinha, tabela, caixa_papelao):
     r = chamar("registrar_venda", itens=[{"produto": "coxinha", "apresentacao": "caixas", "conservacao": "congelada",
                                           "quantidade": 2}], forma_pagamento="pix")
     assert falavel(r["confirmar"]) == ("Vender 2 caixas com 25 de Coxinha 150 g, cru congelado, a 45 reais cada. "
-                                       "Total 90 reais, à vista no pix. Confirma?")
+                                       "Total 90 reais, à vista no pix. De onde sai: 50 unidades de Coxinha 150 g cru "
+                                       f"congelado: 50 do lote do dia {HOJE.day}; no lote do dia {HOJE.day} sobram 10. "
+                                       "Confirma?")
     assert Venda.objects.count() == 0 and saldo(coxinha) == 60 and saldo(caixa_papelao) == 20  # nada gravado
     f = confirmar(r)
     v = Venda.objects.get()
@@ -210,7 +212,10 @@ def test_venda_varias_linhas_e_tabela_de_atacado(coxinha, tabela):
     r = chamar("registrar_venda", itens=[{"produto": "coxinha", "apresentacao": "unidade frita", "quantidade": 3},
                                          {"produto": "coxinha unidade", "conservacao": "congelado", "quantidade": 1}])
     assert r["confirmar"] == ("Vender 3 unidades fritas de Coxinha 150 g, frito fresco, a 4 reais cada e 1 unidade "
-                              "de Coxinha 150 g, cru congelado, por 2 reais. Total 14 reais, à vista. Confirma?")
+                              "de Coxinha 150 g, cru congelado, por 2 reais. Total 14 reais, à vista. De onde sai: "
+                              f"3 unidades de Coxinha 150 g frito fresco: 3 do lote do dia {HOJE.day}, que vence "
+                              f"amanhã; no lote do dia {HOJE.day} sobram 7. 1 unidade de Coxinha 150 g cru congelado: "
+                              f"1 do lote do dia {HOJE.day}; no lote do dia {HOJE.day} sobram 59. Confirma?")
     sem_atacado = chamar("registrar_venda", itens=[{"produto": "coxinha unidade frita", "quantidade": 1}],
                          tabela="atacado")
     assert sem_atacado["erro"].endswith("não tem preço de atacado.")
@@ -248,7 +253,8 @@ def test_fiado_vira_conta_a_receber_e_o_cliente_paga(coxinha, tabela, joao):
     r = chamar("registrar_venda", itens=item, condicao="a_prazo", cliente="joao", prazo_dias=30, parcelas=2)
     assert falavel(r["confirmar"]) == (
         f"Vender 2 caixas com 25 de Coxinha 150 g, cru congelado, a 45 reais cada, para João. Total 90 reais, a prazo "
-        f"em 2 parcelas: 45 reais {quando(dia(30))} e 45 reais {quando(dia(60))}. Confirma?")
+        f"em 2 parcelas: 45 reais {quando(dia(30))} e 45 reais {quando(dia(60))}. De onde sai: 50 unidades de "
+        f"Coxinha 150 g cru congelado: 50 do lote do dia {HOJE.day}; no lote do dia {HOJE.day} sobram 10. Confirma?")
     confirmar(r)
     v = Venda.objects.get()
     d = chamar("ver_a_receber", cliente="JOÃO")
@@ -355,7 +361,9 @@ def test_encomenda_reserva_o_que_ha_completa_e_entrega(coxinha, tabela, joao, ca
     ent = chamar("entregar_encomenda", cliente="joao", forma_pagamento="dinheiro")
     assert falavel(ent["confirmar"]) == (
         f"Entregar a encomenda {e.id} de João: 2 caixas com 25 de Coxinha 150 g, cru congelado. Total 90 reais, com "
-        "20 reais de sinal já pago. Recebe 70 reais agora no dinheiro. Confirma?")
+        "20 reais de sinal já pago. Recebe 70 reais agora no dinheiro. De onde sai: 50 unidades de Coxinha 150 g cru "
+        f"congelado: 30 do lote do dia {HOJE.day} e 20 do segundo lote do dia {HOJE.day}; o lote do dia {HOJE.day} zera e "
+        f"no segundo lote do dia {HOJE.day} sobram 20. Confirma?")
     assert saldo(coxinha) == 70
     feito = confirmar(ent)
     v = Venda.objects.get()
@@ -383,7 +391,7 @@ def test_encomenda_a_prazo_e_cancelamento_com_sinal(coxinha, tabela, joao):
     assert (e.situacao, e.sinal_devolvido) == ("cancelada", D("0"))
     # a outra: entrega a prazo
     ent = chamar("entregar_encomenda", cliente="joao", condicao="a prazo", prazo_dias=15)
-    assert ent["confirmar"].endswith(f"Total 45 reais. Os 45 reais ficam a prazo, vence {quando(dia(15))}. Confirma?")
+    assert f"Total 45 reais. Os 45 reais ficam a prazo, vence {quando(dia(15))}. De onde sai: 25 unidades" in ent["confirmar"]
     confirmar(ent)
     assert chamar("ver_a_receber", cliente="joao")["devido"]["valor"] == 45
 
@@ -402,7 +410,7 @@ def test_fritura_pergunta_a_conservacao_e_vira_sobra(coxinha, tabela):
     r = chamar("registrar_fritura", produto="coxinha", quantidade=40, boas=38, conservacao="freezer",
                motivo_perdas="estouraram")
     assert falavel(r["confirmar"]) == (
-        f"Fritar 40 unidades de Coxinha 150 g do lote C1, congelado, que vence {quando(dia(30))}: 38 boas e 2 "
+        f"Fritar 40 unidades de Coxinha 150 g do lote do dia {HOJE.day}, congelado, que vence {quando(dia(30))}: 38 boas e 2 "
         "perdidas (estouraram). Custo de 68 centavos por unidade frita; o frito fica fresco e vale até amanhã. "
         "Confirma?")
     assert Fritura.objects.count() == 0 and saldo_lote(cong, "congelado") == 50
@@ -414,7 +422,7 @@ def test_fritura_pergunta_a_conservacao_e_vira_sobra(coxinha, tabela):
     p = chamar("registrar_perda", produto="coxinha", forma="frita", quantidade=8, motivo="sobra do dia")
     frito = Fritura.objects.get().lote
     assert falavel(p["confirmar"]) == (
-        f"Dar perda de 8 unidades de Coxinha 150 g, lote {frito.codigo}, frito, fresco, 38 un, vence amanhã "
+        f"Dar perda de 8 unidades de Coxinha 150 g, lote do dia {HOJE.day}, frito, fresco, 38 un, vence amanhã "
         "(motivo: sobra do dia). Sai do estoque sem volta: 5 reais e 47 centavos em mercadoria. Ficam 30 unidades "
         "nesse lote. Confirma?")
     assert saldo_lote(frito, "fresco") == 38
@@ -427,11 +435,11 @@ def test_perda_ambigua_e_descarte_de_vencido_libera_reserva(coxinha, tabela, joa
     lote(coxinha, 10, validade=dia(9), codigo="B1")
     amb = chamar("registrar_perda", produto="coxinha", motivo="caiu")
     assert amb["erro"].startswith("Há mais de um lote de Coxinha 150 g com saldo") and len(amb["opcoes"]) == 2
-    assert amb["opcoes"][0] == "lote V1, cru, congelado, 10 un, venceu ontem"
+    assert amb["opcoes"][0] == f"lote do dia {HOJE.day}, cru, congelado, 10 un, venceu ontem"
     assert chamar("registrar_perda", produto="coxinha", vencido=True, motivo="") == {
         "erro": "Informe o motivo da perda."}
     r = chamar("registrar_perda", produto="coxinha", vencido=True, motivo="vencido")
-    assert r["confirmar"] == ("Descartar 10 unidades de Coxinha 150 g, lote V1, cru, congelado, 10 un, venceu ontem "
+    assert r["confirmar"] == (f"Descartar 10 unidades de Coxinha 150 g, lote do dia {HOJE.day}, cru, congelado, 10 un, venceu ontem "
                               "(motivo: vencido). Sai do estoque sem volta: 6 reais em mercadoria. O lote fica zerado. "
                               "Confirma?")
     assert saldo_lote(venc, "congelado") == 10

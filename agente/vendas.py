@@ -29,6 +29,8 @@ from vendas.models import Apresentacao
 from vendas.servicos import completar_reserva as _completar
 
 from .acoes import _data, _decimal, _estado, _feito, _forma, _proposta, _uma_vez
+from .lotes import (checar_motivo_na_separacao, lotes_da_apresentacao, lotes_indicados, nome, pedir_motivo, porcao_vencida, resolver_lote,
+                    separacao_falada, separacao_resposta, vencidos_da_separacao, vencidos_txt)
 from .compras import (_ate_cinco, _condicao, _dicts, _dinheiro, _juntar, _n, _parcela_txt, _sem_valor, _unidade,
                       qtd, quando, reais)
 from .consultas import ConsultaInvalida, _casa, _inteiro, _normal, escolher, resolver_produto
@@ -158,11 +160,33 @@ def _apresentacao(pedido: dict) -> Apresentacao:
 
 
 def _itens(itens) -> list[tuple[Apresentacao, int]]:
+    return [(a, q) for a, q, _ in _itens_com_lotes(itens)]
+
+
+def _itens_com_lotes(itens) -> list[tuple[Apresentacao, int, list | None]]:
+    """Itens falados com os lotes indicados ("peguei 10 do lote do dia 10") já resolvidos para o núcleo."""
     pedidos = _dicts(itens)
     if not pedidos:
         raise ConsultaInvalida("Diga os itens: produto, quantidade e, se houver mais de um jeito de vender, "
                                "a apresentação (unidade, caixa com 25...) e a conservação.")
-    return [(_apresentacao(p), _inteiro(p.get("quantidade"), "quantidade")) for p in pedidos]
+    saida = []
+    for p in pedidos:
+        a = _apresentacao(p)
+        saida.append((a, _inteiro(p.get("quantidade"), "quantidade"), lotes_indicados(a, _dicts(p.get("lotes")))))
+    return saida
+
+
+def _itens_nucleo(lidos) -> list[dict]:
+    return [{"apresentacao_id": a.id, "quantidade": q, **({"lotes": l} if l else {})} for a, q, l in lidos]
+
+
+def _data_venda(valor) -> date | None:
+    """"ontem", "anteontem", "dia 12", AAAA-MM-DD: o dia em que a venda aconteceu (vazio = hoje). Data futura o
+    núcleo recusa."""
+    from .despesas import _data as data_falada
+
+    d = data_falada(valor, "data", passado=True)
+    return None if d == timezone.localdate() else d
 
 
 def _cliente(nome, *, obrigatorio="") -> Cliente | None:
@@ -604,34 +628,67 @@ def _linhas_venda_txt(itens, linhas) -> str:
                    for (a, q), l in zip(itens, linhas))
 
 
+def _separacao_venda(lidos, quando_venda, motivo_vencido=""):
+    from vendas.lotes import separacao_venda
+
+    return separacao_venda(itens=_itens_nucleo(lidos), data_venda=quando_venda, motivo_vencido=motivo_vencido)
+
+
+def ver_separacao(*, itens, data=""):
+    """"30 coxinhas, de onde eu pego?": a separação do núcleo (a mesma que a venda vai baixar), falada."""
+    lidos = _itens_com_lotes(itens)
+    return separacao_resposta(_separacao_venda(lidos, _data_venda(data)))
+
+
+def _motivo(motivo_vencido, vencidos) -> str:
+    """O motivo só vai para o núcleo quando há vencido na separação (a trilha não guarda motivo à toa)."""
+    return (motivo_vencido or "").strip() if vencidos else ""
+
+
+def _separacao_proposta(sep, motivo) -> str:
+    """O que a proposta repete da separação: de quais lotes sai e, se houver, o vencido com o motivo."""
+    t = ". De onde sai: " + separacao_falada(sep).rstrip(".")
+    return t + vencidos_txt([(n, v, "") for n, v in vencidos_da_separacao(sep)], motivo)
+
+
 def propor_registrar_venda(*, itens, cliente="", condicao="a_vista", forma_pagamento="", tabela="varejo",
-                           prazo_dias=None, vencimento="", parcelas=1, intervalo_dias=30, autor, canal):
-    lidos = _itens(itens)
+                           prazo_dias=None, vencimento="", parcelas=1, intervalo_dias=30, data="",
+                           motivo_vencido="", autor, canal):
+    lidos = _itens_com_lotes(itens)
     cond = _condicao(condicao or "a_vista")
     c = _cliente(cliente, obrigatorio="Venda a prazo precisa do cliente: para quem foi?" if cond == "a_prazo" else "")
     tab = _tabela(tabela)
-    parametros = {"itens": [{"apresentacao_id": a.id, "quantidade": q} for a, q in lidos], "tabela": tab,
-                  "cliente_id": c.id if c else None, "condicao": cond}
+    dia_venda = _data_venda(data)
+    sep = _separacao_venda(lidos, dia_venda, motivo_vencido)
+    checar_motivo_na_separacao(sep)
+    motivo = _motivo(motivo_vencido, vencidos_da_separacao(sep))
+    parametros = {"itens": _itens_nucleo(lidos), "tabela": tab, "cliente_id": c.id if c else None, "condicao": cond}
+    if dia_venda:
+        parametros["data_venda"] = dia_venda
+    if motivo:
+        parametros["motivo_vencido"] = motivo
     if cond == "a_prazo":
-        parametros["parcelas"] = _parcelas(_total_tabela(lidos, tab), prazo_dias=prazo_dias, vencimento=vencimento,
-                                           parcelas=parcelas, intervalo_dias=intervalo_dias,
-                                           desde=timezone.localdate(),
+        parametros["parcelas"] = _parcelas(_total_tabela([(a, q) for a, q, _ in lidos], tab), prazo_dias=prazo_dias,
+                                           vencimento=vencimento, parcelas=parcelas, intervalo_dias=intervalo_dias,
+                                           desde=dia_venda or timezone.localdate(),
                                            pergunta="Quando o cliente vai pagar? Diga o prazo em dias ou a data.")
     else:
         parametros["forma_pagamento"] = (forma_pagamento or "").strip()
 
     def resumir(r):
-        t = f"Vender {_linhas_venda_txt(lidos, r['linhas'])}"
+        t = f"Vender {_linhas_venda_txt([(a, q) for a, q, _ in lidos], r['linhas'])}"
         if c:
             t += f", para {c.nome}"
+        if dia_venda:
+            t += f", venda de {_sem_em(quando(dia_venda))}"
         t += f". Total {reais(r['total'])}" + (", preço de atacado" if tab == "atacado" else "")
         if cond == "a_vista":
             t += ", à vista" + _forma_txt(forma_pagamento)
         else:
             t += ", " + _prazo_txt(r["parcelas"])
-        return t
+        return t + _separacao_proposta(sep, motivo)
 
-    return _proposta("registrar_venda", parametros, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("registrar_venda", parametros, resumir, autor, canal))
 
 
 def _venda_alvo(venda_id, cliente) -> dict:
@@ -655,10 +712,29 @@ def _venda_alvo(venda_id, cliente) -> dict:
     return lista[0]
 
 
-def propor_cancelar_venda(*, motivo, venda_id=None, cliente="", destino="perda", autor, canal):
+def _vencidos_da_venda(venda_id) -> list[tuple]:
+    """Porções vencidas hoje de onde a venda saiu (o que voltaria vencido ao estoque)."""
+    from vendas.models import LinhaVenda
+
+    saida = []
+    for l in LinhaVenda.objects.filter(venda_id=venda_id).select_related("apresentacao"):
+        for b in l.baixas:
+            if b["item_id"] != l.apresentacao.produto_id:
+                continue
+            x = porcao_vencida(Lote.objects.select_related("item").get(id=b["lote_id"]), b["estado"])
+            if x and x not in saida:
+                saida.append(x)
+    return saida
+
+
+def propor_cancelar_venda(*, motivo, venda_id=None, cliente="", destino="perda", motivo_vencido="", autor, canal):
     v = _venda_alvo(venda_id, cliente)
     d = _destino(destino)
     parametros = {"venda_id": v["venda_id"], "motivo": motivo, "destino": d}
+    vencidos = _vencidos_da_venda(v["venda_id"]) if d == "estoque" else []
+    mv = _motivo(motivo_vencido, vencidos)
+    if mv:
+        parametros["motivo_vencido"] = mv
 
     def resumir(r):
         t = (f"Cancelar a venda {v['venda_id']}, de {_sem_em(quando(v['data']))}, {_linhas_txt(v['linhas'])}"
@@ -672,9 +748,11 @@ def propor_cancelar_venda(*, motivo, venda_id=None, cliente="", destino="perda",
             t += ". A conta a receber é cancelada"
         if Decimal(str(r["valor_devolvido"])) > 0:
             t += f". Fica anotado que {reais(r['valor_devolvido'])} voltam para o cliente"
+        if mv:
+            t += vencidos_txt(vencidos, mv) + " (volta ao estoque ainda vencido)"
         return t
 
-    return _proposta("cancelar_venda", parametros, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("cancelar_venda", parametros, resumir, autor, canal))
 
 
 # --- nível 2: encomendas ------------------------------------------------------------------
@@ -715,11 +793,67 @@ def propor_criar_encomenda(*, cliente, dia, itens, hora="", modo="retirada", obs
     return _proposta("criar_encomenda", parametros, resumir, autor, canal)
 
 
+def _lotes_entrega(encomenda_id, pedidos) -> list[dict] | None:
+    """[{lote | lote_id, unidades, produto?}] falados → [{item_encomenda_id, lotes: [{lote_id, unidades}]}]. O item
+    da encomenda sai do lote (produto e forma) e, se a encomenda tiver mais de um item que sirva, do 'produto' dito."""
+    from vendas.models import ItemEncomenda
+
+    pedidos = _dicts(pedidos)
+    if not pedidos:
+        return None
+    itens = list(ItemEncomenda.objects.filter(encomenda_id=encomenda_id).select_related("apresentacao__produto"))
+    por_item = {}
+    for p in pedidos:
+        candidatos = itens
+        if (p.get("produto") or "").strip():
+            ditos = _tokens(p["produto"])
+            candidatos = [i for i in itens if _cobre(ditos, _tokens(_rotulo_apres(i.apresentacao)))] or itens
+        lotes = {l.id: l for i in candidatos for l in lotes_da_apresentacao(i.apresentacao)}
+        oque = _juntar(sorted({f"{i.apresentacao.produto.nome} {i.apresentacao.forma} {i.apresentacao.estado}"
+                               for i in candidatos}))
+        lote = resolver_lote(p.get("lote"), lotes.values(), oque=oque, lote_id=p.get("lote_id"))
+        servem = [i for i in candidatos if i.apresentacao.produto_id == lote.item_id
+                  and i.apresentacao.forma == lote.forma and lote in lotes_da_apresentacao(i.apresentacao)]
+        if len(servem) > 1:
+            raise ConsultaInvalida(f"O {nome(lote)} serve para mais de um item da encomenda; diga qual ('produto').",
+                                   409, opcoes=[_apres_txt(i.apresentacao, i.quantidade) for i in servem])
+        por_item.setdefault(servem[0].id, []).append(
+            {"lote_id": lote.id, "unidades": _inteiro(p.get("unidades"), "unidades do lote")})
+    return [{"item_encomenda_id": k, "lotes": v} for k, v in por_item.items()]
+
+
+def _separacao_encomenda(n, dia, lotes, motivo_vencido=""):
+    from vendas.lotes import separacao_encomenda
+
+    return separacao_encomenda(encomenda_id=n, data_entrega=dia, lotes=lotes, motivo_vencido=motivo_vencido)
+
+
+def ver_separacao_encomenda(*, encomenda_id=None, cliente="", data="", lotes=None):
+    """"A encomenda do João, de quais lotes?": a separação da entrega (pelas reservas ou pelos lotes indicados)."""
+    e = _encomenda_aberta(encomenda_id, cliente)
+    n = e["encomenda_id"]
+    sep = _separacao_encomenda(n, _data_venda(data), _lotes_entrega(n, lotes))
+    r = separacao_resposta(sep, encomenda_id=n, cliente=e["cliente"])
+    r["texto"] = f"Encomenda {n} de {e['cliente']}: {r['texto']}"
+    return r
+
+
 def propor_entregar_encomenda(*, encomenda_id=None, cliente="", condicao="a_vista", forma_pagamento="",
-                              prazo_dias=None, vencimento="", parcelas=1, intervalo_dias=30, autor, canal):
+                              prazo_dias=None, vencimento="", parcelas=1, intervalo_dias=30, lotes=None, data="",
+                              motivo_vencido="", autor, canal):
     e = _encomenda_aberta(encomenda_id, cliente)
     cond = _condicao(condicao or "a_vista")
     parametros = {"encomenda_id": e["encomenda_id"], "condicao": cond}
+    dia_entrega = _data_venda(data)
+    indicados = _lotes_entrega(e["encomenda_id"], lotes) if e["situacao"] in ("aberta", "pronta") else None
+    sep = None
+    if e["situacao"] in ("aberta", "pronta"):  # entregue/cancelada: quem recusa é o núcleo
+        sep = _separacao_encomenda(e["encomenda_id"], dia_entrega, indicados, motivo_vencido)
+        checar_motivo_na_separacao(sep)
+    mv = _motivo(motivo_vencido, vencidos_da_separacao(sep) if sep else [])
+    for k, v in (("data_entrega", dia_entrega), ("lotes", indicados), ("motivo_vencido", mv)):
+        if v:
+            parametros[k] = v
     if cond == "a_prazo" and e["saldo"] > 0:
         parametros["parcelas"] = _parcelas(e["saldo"], prazo_dias=prazo_dias, vencimento=vencimento,
                                            parcelas=parcelas, intervalo_dias=intervalo_dias,
@@ -735,12 +869,16 @@ def propor_entregar_encomenda(*, encomenda_id=None, cliente="", condicao="a_vist
         if sinal:
             t += f", com {reais(sinal)} de sinal já pago"
         if saldo <= 0:
-            return t + ". Já está tudo pago"
-        if r["condicao"] == "a_vista":
-            return t + f". Recebe {reais(saldo)} agora" + _forma_txt(forma_pagamento)
-        return t + f". Os {reais(saldo)} ficam {_prazo_txt(r['parcelas'])}"
+            t += ". Já está tudo pago"
+        elif r["condicao"] == "a_vista":
+            t += f". Recebe {reais(saldo)} agora" + _forma_txt(forma_pagamento)
+        else:
+            t += f". Os {reais(saldo)} ficam {_prazo_txt(r['parcelas'])}"
+        if dia_entrega:
+            t += f". Entrega de {_sem_em(quando(dia_entrega))}"
+        return t + (_separacao_proposta(sep, mv) if sep else "")
 
-    return _proposta("entregar_encomenda", parametros, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("entregar_encomenda", parametros, resumir, autor, canal))
 
 
 def propor_cancelar_encomenda(*, motivo, encomenda_id=None, cliente="", devolver_sinal=True, autor, canal):
@@ -761,12 +899,26 @@ def propor_cancelar_encomenda(*, motivo, encomenda_id=None, cliente="", devolver
 
 # --- nível 2: fritura e perda -----------------------------------------------------------
 
+def _porcoes_cruas_do_lote(p, lote, conservacao):
+    """Fritura de um lote dito ("frita do lote do dia 8"): as porções cruas dele, vencidas inclusive (vencido só
+    sai com motivo, quem confere é o núcleo)."""
+    crus = Lote.objects.select_related("item").filter(item=p, forma="cru")
+    ps = [x for x in porcoes(item=p) if x["lote_id"] in {l.id for l in crus}]
+    if (conservacao or "").strip():
+        ps = [x for x in ps if x["estado"] == _estado(conservacao)]
+    escolhido = resolver_lote(lote, [l for l in crus if l.id in {x["lote_id"] for x in ps}], oque=f"{p.nome} cru")
+    return [x for x in ps if x["lote_id"] == escolhido.id]
+
+
 def propor_registrar_fritura(*, produto, quantidade, boas=None, motivo_perdas="", conservacao="", destino="fresco",
-                             validade="", justificativa="", autor, canal):
+                             validade="", justificativa="", lote="", motivo_vencido="", autor, canal):
     p = resolver_produto(produto)
     q = _inteiro(quantidade, "quantidade")
     b = q if _sem_valor(boas) and boas != 0 else _inteiro(boas, "boas")
-    porcoes_cruas = vc.lotes_para_fritar(produto_id=p.id)
+    if (lote or "").strip():
+        porcoes_cruas = _porcoes_cruas_do_lote(p, lote, conservacao)
+    else:
+        porcoes_cruas = vc.lotes_para_fritar(produto_id=p.id)
     if (conservacao or "").strip():
         estado = _estado(conservacao)
         porcoes_cruas = [x for x in porcoes_cruas if x["estado"] == estado]
@@ -779,31 +931,37 @@ def propor_registrar_fritura(*, produto, quantidade, boas=None, motivo_perdas=""
         livres = {e: sum((x["livre"] for x in porcoes_cruas if x["estado"] == e), ZERO) for e in estados}
         raise ConsultaInvalida(f"Há {p.nome} cru em mais de uma conservação; pergunte de qual saiu.", 409,
                                opcoes=[f"{e}: {_un(livres[e])} livres" for e in estados])
-    porcao = porcoes_cruas[0]  # a que vence primeiro (RN-18)
+    porcao = porcoes_cruas[0]  # a que vence primeiro (RN-18), ou a do lote dito
     destino_estado = _estado(destino or "fresco", "destino")
+    cru = Lote.objects.select_related("item").get(id=porcao["lote_id"])
+    vencido = porcao_vencida(cru, porcao["estado"])
+    mv = _motivo(motivo_vencido, [vencido] if vencido else [])
     parametros = {"lote_id": porcao["lote_id"], "quantidade": q, "boas": b, "estado": porcao["estado"],
                   "estado_destino": destino_estado, "perda_motivo": (motivo_perdas or "").strip(),
                   "validade_manual": _data(validade, "validade"), "justificativa": justificativa,
                   "confirmar_perda_total": b == 0}
-    origem = (f"do lote {porcao['codigo']}, {porcao['estado']}"
-              + (f", que vence {quando(porcao['validade'])}" if porcao["validade"] else ""))
+    if mv:
+        parametros["motivo_vencido"] = mv
+    origem = (f"do {nome(cru)}, {porcao['estado']}"
+              + (f", que {'venceu' if vencido else 'vence'} {quando(porcao['validade'])}" if porcao["validade"] else ""))
 
     def resumir(r):
         t = f"Fritar {_un(q)} de {p.nome} {origem}: "
         perdas = r["perdas"]
         perda = f"{perdas} perdida{'s' if perdas > 1 else ''} ({parametros['perda_motivo']})" if perdas else ""
         if r["boas"] == 0:
-            return t + "PERDA TOTAL, nenhuma boa" + (f", {perda}" if perda else "")
+            return (t + "PERDA TOTAL, nenhuma boa" + (f", {perda}" if perda else "")
+                    + (vencidos_txt([vencido], mv) if mv else ""))
         t += f"{r['boas']} boa{'s' if r['boas'] > 1 else ''}" + (f" e {perda}" if perda else "")
         t += f". Custo de {reais(r['custo_unitario'])} por unidade frita"
         if r["validade"]:
             t += f"; o frito fica {destino_estado} e vale até {_sem_em(quando(r['validade']))}"
-        return t
+        return t + (vencidos_txt([vencido], mv) if mv else "")
 
-    return _proposta("registrar_fritura", parametros, resumir, autor, canal)
+    return pedir_motivo(lambda: _proposta("registrar_fritura", parametros, resumir, autor, canal))
 
 
-def _porcao_para_perda(produto, *, conservacao="", forma="", lote="", vencido=False):
+def _porcao_para_perda(produto, *, conservacao="", forma="", lote="", vencido=False, lote_id=None):
     """(item, porção) com saldo pelo nome falado; ambíguo → opcoes com lote, conservação, validade e saldo."""
     if not (produto or "").strip():
         raise ConsultaInvalida("Diga o que vai ser jogado fora.")
@@ -816,8 +974,10 @@ def _porcao_para_perda(produto, *, conservacao="", forma="", lote="", vencido=Fa
         f = _forma(forma)
         formas = Lote.objects.in_bulk({x["lote_id"] for x in ps})
         ps = [x for x in ps if formas[x["lote_id"]].forma == f]
-    if (lote or "").strip():
-        ps = [x for x in ps if _normal(lote) in _normal(x["codigo"])]
+    if (lote or "").strip() or lote_id not in (None, ""):
+        lotes = Lote.objects.select_related("item").in_bulk({x["lote_id"] for x in ps})
+        escolhido = resolver_lote(lote, lotes.values(), oque=i.nome, lote_id=lote_id)
+        ps = [x for x in ps if x["lote_id"] == escolhido.id]
     if vencido:
         ps = [x for x in ps if x["vencido"]]
     if not ps:
@@ -825,34 +985,50 @@ def _porcao_para_perda(produto, *, conservacao="", forma="", lote="", vencido=Fa
                                + (" nessa conservação" if (conservacao or "").strip() else "") + ".", 404)
     if len(ps) > 1:
         raise ConsultaInvalida(f"Há mais de um lote de {i.nome} com saldo; pergunte qual (conservação, frito ou "
-                               "cru, ou o código do lote).", 409, opcoes=[_porcao_txt(i, x) for x in ps[:MAX_OPCOES]])
+                               "cru, ou o dia do lote).", 409, opcoes=[_porcao_txt(i, x) for x in ps[:MAX_OPCOES]])
     return i, ps[0]
 
 
 def _porcao_txt(i, x) -> str:
-    forma = Lote.objects.get(id=x["lote_id"]).forma if i.tipo == "produto" else ""
-    t = f"lote {x['codigo']}" + (f", {forma}" if forma else "") + (f", {x['estado']}" if x["estado"] else "")
+    l = Lote.objects.get(id=x["lote_id"])
+    forma = l.forma if i.tipo == "produto" else ""
+    t = nome(l) + (f", {forma}" if forma else "") + (f", {x['estado']}" if x["estado"] else "")
     t += f", {qtd(x['saldo'], x['unidade_base'])}"
     if x["validade"]:
         t += f", {'venceu' if x['vencido'] else 'vence'} {quando(x['validade'])}"
     return t
 
 
-def propor_registrar_perda(*, produto, motivo, quantidade=None, unidade="", conservacao="", forma="", lote="",
-                           vencido=False, autor, canal):
-    i, x = _porcao_para_perda(produto, conservacao=conservacao, forma=forma, lote=lote, vencido=vencido)
-    if _sem_valor(quantidade):  # sem quantidade: o lote todo (ex.: "joga fora o vencido")
-        q, un = x["saldo"], i.unidade_base
-    else:
-        q = _decimal(quantidade, "quantidade")
-        un = i.unidade_base if i.tipo == "produto" else (_unidade(i, unidade) or i.unidade_base)
-    parametros = {"lote_id": x["lote_id"], "estado": x["estado"], "quantidade": q, "unidade": un, "motivo": motivo}
+_DESTINOS_PERDA = (("consumo_equipe", ("equipe", "consumo", "funcionari", "comeram", "comer")),
+                   ("doacao", ("doa",)), ("descarte", ("descart", "lixo", "fora", "jog")), ("perda", ("perd",)))
+_VERBO_DESTINO = {"perda": "Dar perda de", "descarte": "Descartar", "consumo_equipe": "Dar para consumo da equipe",
+                  "doacao": "Doar"}
+
+
+def _destino_perda(valor) -> str:
+    """perda (padrão), descarte, consumo da equipe ou doação — como foi dito."""
+    v = _normal(valor or "perda").replace("_", " ")
+    for chave, sinais in _DESTINOS_PERDA:
+        if any(s in v for s in sinais):
+            return chave
+    raise ConsultaInvalida("'destino' deve ser perda, descarte, consumo da equipe ou doação.")
+
+
+def propor_perda_lote(lote, estado, quantidade, unidade, motivo, destino, *, autor, canal, resumo_porcao=None):
+    """Proposta de perda de uma porção já escolhida (também a resposta "estão aqui" da conferência do vencido)."""
+    i = lote.item
+    x = next((p for p in porcoes(item=i) if p["lote_id"] == lote.id and p["estado"] == estado), None)
+    porcao = resumo_porcao or (_porcao_txt(i, x) if x else nome(lote))
+    parametros = {"lote_id": lote.id, "estado": estado, "quantidade": quantidade, "unidade": unidade,
+                  "motivo": motivo}
+    if destino != "perda":
+        parametros["destino"] = destino
 
     def resumir(r):
         base = r["unidade_base"]
         quanto = _un(r["quantidade"]) if base == "un" else qtd(r["quantidade"], base)
-        verbo = "Descartar" if r["vencido"] else "Dar perda de"
-        t = f"{verbo} {quanto} de {i.nome}, {_porcao_txt(i, x)} (motivo: {(motivo or '').strip()}). "
+        verbo = "Descartar" if r["vencido"] and destino == "perda" else _VERBO_DESTINO[destino]
+        t = f"{verbo} {quanto} de {i.nome}, {porcao} (motivo: {(motivo or '').strip()}). "
         t += f"Sai do estoque sem volta: {reais(r['valor'])} em mercadoria"
         saldo = Decimal(str(r["saldo"]))
         t += f". Ficam {_un(saldo) if base == 'un' else qtd(saldo, base)} nesse lote" if saldo > 0 else \
@@ -863,6 +1039,21 @@ def propor_registrar_perda(*, produto, motivo, quantidade=None, unidade="", cons
         return t
 
     return _proposta("registrar_perda", parametros, resumir, autor, canal)
+
+
+def propor_registrar_perda(*, produto, motivo, quantidade=None, unidade="", conservacao="", forma="", lote="",
+                           vencido=False, destino="perda", lote_id=None, autor, canal):
+    d = _destino_perda(destino)
+    i, x = _porcao_para_perda(produto, conservacao=conservacao, forma=forma, lote=lote, vencido=vencido,
+                              lote_id=lote_id)
+    if _sem_valor(quantidade):  # sem quantidade: o lote todo (ex.: "joga fora o vencido")
+        q, un = x["saldo"], i.unidade_base
+    else:
+        q = _decimal(quantidade, "quantidade")
+        un = i.unidade_base if i.tipo == "produto" else (_unidade(i, unidade) or i.unidade_base)
+    lote_obj = Lote.objects.select_related("item").get(id=x["lote_id"])
+    return propor_perda_lote(lote_obj, x["estado"], q, un, motivo, d, autor=autor, canal=canal,
+                             resumo_porcao=_porcao_txt(i, x))
 
 
 # --- nível 2: contas a receber ------------------------------------------------------------
@@ -946,10 +1137,17 @@ def propor_estornar_recebimento_cliente(*, motivo, cliente="", pagamento_id=None
 def depois(p) -> str:
     r = p.resultado
     if p.operacao == "registrar_venda":
-        return f" É a venda {r['venda_id']}."
+        return f" É a venda {r['venda_id']}." + _avisos_falados(r)
     if p.operacao == "criar_encomenda":
         return f" É a encomenda {r['encomenda_id']}."
     if p.operacao == "entregar_encomenda":
-        return f" Virou a venda {r['venda_id']}."
+        return f" Virou a venda {r['venda_id']}." + _avisos_falados(r)
     return ""
+
+
+def _avisos_falados(r) -> str:
+    """Os avisos da venda gravada (lote deixado para trás, vence hoje/amanhã), como se fala."""
+    from .decisoes import falavel
+
+    return "".join(f" {falavel(a)}" for a in r.get("avisos") or [])
 

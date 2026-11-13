@@ -30,6 +30,11 @@ def _n(q) -> str:
     return str(int(q)) if q == q.to_integral_value() else str(q.normalize()).replace(".", ",")
 
 
+def _faltam(q) -> str:
+    """Concordância: "Falta 1 un", "Faltam 2 un" (e "Falta 0,5 un")."""
+    return "Faltam" if Decimal(q) >= 2 else "Falta"
+
+
 def _juntar(partes) -> str:
     """"a, b e c"; com oração no meio ("..., que vence amanhã"), a vírgula fecha a oração: "..., que vence
     amanhã, e c"."""
@@ -210,7 +215,7 @@ class Separador:
                   for l in lotes]
         texto = f"{cabeca}: {_juntar(partes)}; {_juntar(sobras)}."
         if falta > 0:
-            texto += f" Faltam {_n(falta)} un."
+            texto += f" {_faltam(falta)} {_n(falta)} un."
         return texto
 
 
@@ -230,7 +235,7 @@ def _avisos_linha(sep, a, unidades, lotes, falta, deixados) -> list[dict]:
                                 "venda esse primeiro."})
     if falta > 0:
         tem = unidades - falta
-        avisos.append({"tipo": "falta", "texto": f"Faltam {_n(falta)} un de {a.produto.nome} {a.forma} {a.estado}: "
+        avisos.append({"tipo": "falta", "texto": f"{_faltam(falta)} {_n(falta)} un de {a.produto.nome} {a.forma} {a.estado}: "
                                                   f"só há {_n(tem)} un livres e dentro da validade."})
         vencidas = [p for p in sep._candidatas(a) if p["vencido"] and sep.livre(p["lote"], a.estado) > 0]
         for p in vencidas:

@@ -24,7 +24,7 @@ from cadastros.servicos import criar_tamanho
 from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento,
                               receber_bonificacao, receber_compra, registrar_compra)
 from decisoes.servicos import aprovar_decisao
-from estoque.servicos import entrada_manual, registrar_perda, transferir_estado
+from estoque.servicos import ajustar_contagem, entrada_manual, registrar_perda, transferir_estado
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada, _json
 from financeiro.despesas import cancelar_despesa, lancar_despesa, pagar_despesa_do_mes
@@ -90,6 +90,8 @@ OPERACOES = {
     "cancelar_encomenda": Operacao(cancelar_encomenda),
     "registrar_fritura": Operacao(registrar_fritura, datas=("validade_manual",)),
     "registrar_perda": Operacao(registrar_perda),
+    # lotes na operação (Plano 9): contagem da porção ("contei, tem 15"); o serviço aceita o número como texto
+    "ajustar_contagem": Operacao(ajustar_contagem),
     "registrar_recebimento": Operacao(registrar_recebimento),
     "estornar_recebimento_cliente": Operacao(estornar_recebimento_cliente),
     # despesas (Plano 8): os serviços aceitam valor e datas como texto; o sistema só anota o pagamento
