@@ -9,6 +9,7 @@ nível 1. Nenhuma regra de negócio aqui: custos, saldos, parcelas e recusas
 vêm de `compras`, `financeiro`, `estoque` e `producao`.
 """
 
+import re
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -64,6 +65,36 @@ def quando(d) -> str:
     if perto:
         return perto
     return f"em {d.day} de {MESES[d.month - 1]}" + ("" if d.year == hoje.year else f" de {d.year}")
+
+
+def mes_falado(competencia) -> str:
+    """"novembro" (no ano de hoje) ou "novembro de 2025"."""
+    d, hoje = _dia(competencia), timezone.localdate()
+    return MESES[d.month - 1] + ("" if d.year == hoje.year else f" de {d.year}")
+
+
+def dia_falado(d) -> str:
+    """"hoje", "amanhã", "ontem", "dia 10" (no mês de hoje) ou "dia 2 de dezembro" — o jeito de dizer vencimento."""
+    d, hoje = _dia(d), timezone.localdate()
+    perto = {0: "hoje", 1: "amanhã", -1: "ontem"}.get((d - hoje).days)
+    if perto:
+        return perto
+    if (d.year, d.month) == (hoje.year, hoje.month):
+        return f"dia {d.day}"
+    return f"dia {d.day} de {MESES[d.month - 1]}" + ("" if d.year == hoje.year else f" de {d.year}")
+
+
+_MES_NUMERICO = re.compile(r"(\s+—\s+)?(?<![/\d])(\d{1,2})/(\d{4})\b")
+
+
+def sem_mes_numerico(texto) -> str:
+    """"Energia — 11/2026" → "Energia de novembro" (o núcleo escreve o mês da despesa como MM/AAAA)."""
+    def troca(m):
+        mes = int(m.group(2))
+        if not 1 <= mes <= 12:
+            return m.group(0)
+        return (" de " if m.group(1) else "") + mes_falado(date(int(m.group(3)), mes, 1))
+    return _MES_NUMERICO.sub(troca, texto or "")
 
 
 def qtd(q, unidade) -> str:
@@ -266,8 +297,15 @@ _SITUACOES = {"todas": "todas", "aberta": "todas", "abertas": "todas", "vencidas
 
 def _parcela_curta(p) -> dict:
     return {"parcela_id": p["parcela_id"], "compra_id": p["compra_id"], "fornecedor": p["fornecedor"],
-            "numero": p["numero"], "de": p["de"], "saldo": _dinheiro(p["saldo"]),
+            "origem": p.get("origem", "compra"), "descricao": p.get("descricao", ""), "numero": p["numero"], "de": p["de"], "saldo": _dinheiro(p["saldo"]),
             "vencimento": p["vencimento"].isoformat(), "dias": p["dias"], "vencida": p["vencida"]}
+
+
+def _de_quem(p) -> str:
+    """"Atacadão, compra 3" ou, para despesa (Plano 8, sem fornecedor), "despesa Energia de novembro"."""
+    if p.get("origem") == "despesa":
+        return f"despesa {sem_mes_numerico(p['descricao'])}"
+    return f"{p['fornecedor']}, compra {p['compra_id']}"
 
 
 def ver_contas(situacao="todas", dias=7, fornecedor=""):
@@ -298,7 +336,7 @@ def ver_contas(situacao="todas", dias=7, fornecedor=""):
         texto = f"{cabeca}, somando {reais(total)}"
         if tipo == "todas" and vencido:
             texto += f", dos quais {reais(vencido)} já vencidos"
-        texto += ". " + _ate_cinco(f"{p['fornecedor']}, compra {p['compra_id']}, {_parcela_txt(p)}" for p in ps)
+        texto += ". " + _ate_cinco(f"{_de_quem(p)}, {_parcela_txt(p)}" for p in ps)
     return {"parcelas": [_parcela_curta(p) for p in ps], "total": _dinheiro(total), "vencido": _dinheiro(vencido),
             "texto": texto}
 

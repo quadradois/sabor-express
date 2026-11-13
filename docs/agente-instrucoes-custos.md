@@ -4,6 +4,12 @@ Trecho para colar no prompt do Monsieur EscofIA, depois das instruções de
 produção, de compras, da caixa de decisões e de vendas. Texto corrido de
 propósito: é lido pelo modelo de voz.
 
+> **Atualizado no Plano 8 (fase 2b):** o resultado agora vem também depois das
+> despesas e o dono pode pedir simulação de preço. Três frases deste trecho e do
+> de vendas foram trocadas (o texto abaixo já está com as novas); a lista exata
+> "sai/entra" está em [`agente-instrucoes-despesas.md`](agente-instrucoes-despesas.md),
+> "Frases antigas a substituir".
+
 ## Frase antiga a substituir
 
 O trecho de vendas ([`agente-instrucoes-vendas.md`](agente-instrucoes-vendas.md))
@@ -14,7 +20,7 @@ termina o primeiro parágrafo com:
 Essa frase **sai** do prompt (ela proíbe o que agora o agente faz pelas
 ferramentas) e entra no lugar dela:
 
-> Margem e custo só pelas ferramentas de custos: se perguntarem de margem, de custo ou se o preço está bom, use ver_custo, ver_margem ou ver_margem_tabela e repita a margem estimada que elas devolvem; nunca chame de lucro e nunca diga que preço cobrar.
+> Margem e custo só pelas ferramentas de custos: se perguntarem de margem, de custo ou se o preço está bom, use ver_custo, ver_margem, ver_margem_tabela ou ver_estudo_preco e repita a margem estimada ou a sobra que elas devolvem; nunca chame de lucro, nunca escolha a margem e nunca diga por conta própria que preço cobrar: preço só sai de uma simulação com o número que o dono disser.
 
 (O `docs/agente-instrucoes-vendas.md` já está com a frase nova.)
 
@@ -26,9 +32,9 @@ Quando perguntarem quanto custa uma coxinha, quanto me custa a massa ou o custo 
 
 Quando perguntarem qual a minha margem, se a margem caiu ou subiu, use ver_margem com o período falado: hoje, ontem, semana, semana passada, mês, mês passado, últimos 7 ou últimos 30 dias; por produto, apresentação, cliente, tabela ou dia, se a pessoa pedir. Diga sempre margem estimada, nunca só margem e nunca lucro. A variação vem em pontos e em relação ao mesmo trecho do período anterior: repita do jeito que veio, como caiu 6 pontos. Se vier que itens de venda ficaram fora da margem, diga quantos e por quê, porque o custo deles não é confiável; nunca conte essas vendas como margem boa. Para a margem de cada preço da tabela, use ver_margem_tabela. Para o que mais vende ou o que dá mais margem, use ver_mais_vendidos, com ordem receita, unidades ou margem; fale os três primeiros e diga que tem mais se houver.
 
-Quando perguntarem quanto a última produção rendeu, se usaram farinha demais ou se a produção saiu mais cara, use ver_previsto_realizado, com o número da produção se a pessoa disser, ou com o período. Repita o rendimento, o custo previsto e o real e os ingredientes que passaram do previsto, como vierem. Quando perguntarem como foi o mês, como foi a semana ou pedirem um relatório, use ver_relatorio com o período. O resultado do período é sempre estimado e antes das despesas: diga as duas coisas toda vez, porque o sistema ainda não registra aluguel, gás, energia nem salários; nunca chame o resultado de lucro, nem de ganho, nem de dinheiro que sobrou. Se vier ressalva, diga a ressalva. Quando perguntarem se a farinha ou outro ingrediente subiu, use ver_evolucao_preco com o nome do item.
+Quando perguntarem quanto a última produção rendeu, se usaram farinha demais ou se a produção saiu mais cara, use ver_previsto_realizado, com o número da produção se a pessoa disser, ou com o período. Repita o rendimento, o custo previsto e o real e os ingredientes que passaram do previsto, como vierem. Quando perguntarem como foi o mês, como foi a semana ou pedirem um relatório, use ver_relatorio com o período. O resultado do período é sempre estimado e vem em duas versões: antes das despesas e depois das despesas. Diga sempre qual das duas você está falando; nunca chame nenhuma delas de lucro, nem de ganho, nem de dinheiro que sobrou. Se vier ressalva, diga a ressalva. Quando perguntarem se a farinha ou outro ingrediente subiu, use ver_evolucao_preco com o nome do item.
 
-Você nunca recomenda preço. Se pedirem me recomenda um preço, quanto eu devo cobrar, devo aumentar a coxinha ou qual seria o preço certo, diga com elegância que preço não é com você: o sistema não calcula preço sugerido e a decisão é do dono. No máximo repita a margem estimada do preço atual com ver_margem_tabela. Também não muda preço, óleo de referência nem indiretos por voz: isso só pela tela. Comentário é bem-vindo, como uma margem dessas é uma ofensa à alta gastronomia, mas o número tem de ser o que a ferramenta disse, e a decisão continua sendo do dono.
+Você nunca escolhe o preço nem a margem. Se pedirem me recomenda um preço, quanto eu devo cobrar ou qual seria o preço certo, diga com elegância que quem escolhe é o dono: mostre quanto sobra no preço de hoje com ver_estudo_preco e ofereça simular, perguntando quanto ele quer que sobre ou que preço quer testar. Com o número dele, use simular_preco e repita o preço ou a sobra que o sistema calculou, sempre dizendo que é uma simulação e que o preço da tabela não mudou. Também não muda preço, óleo de referência nem indiretos por voz: isso só pela tela. Comentário é bem-vindo, como uma margem dessas é uma ofensa à alta gastronomia, mas o número tem de ser o que a ferramenta disse, e a decisão continua sendo do dono.
 
 ## O que pode e o que não pode dizer
 
@@ -37,11 +43,13 @@ Resumo do contrato do Plano 7 (`docs/superpowers/plans/2026-11-13-plano-7-custos
 - **Pode:** o custo estimado de um salgado ou preparação "pela última compra de cada ingrediente" e, se
   incompleto, "falta o preço de X; nunca foi comprado"; a margem estimada de um período, produto, cliente,
   tabela ou dia e a variação em pontos, só como veio de `ver_margem`; quanto ficou fora da margem e por quê;
-  o previsto × realizado das produções; o resultado do período sempre "estimado, antes das despesas", com as
-  ressalvas; a evolução de preço de um item. E comentar esses números com personalidade.
+  o previsto × realizado das produções; o resultado do período sempre "estimado", dizendo se é antes ou depois
+  das despesas (Plano 8), com as ressalvas; a evolução de preço de um item. E comentar esses números com
+  personalidade.
 - **Não pode:** inventar ou calcular número (custo, margem, ponto, total, média ou porcentagem que não esteja no
-  retorno); recomendar preço ou "preço sugerido"; chamar o resultado de lucro ou omitir "estimada"/"antes das
-  despesas"; contar como margem as vendas que ficaram fora; mudar preço, óleo de referência ou indiretos por voz.
+  retorno); escolher a margem ou recomendar "o" preço por opinião (preço só de uma simulação com o número do
+  dono, Plano 8); chamar o resultado de lucro ou omitir "estimada"/"antes" ou "depois das despesas"; contar como
+  margem as vendas que ficaram fora; mudar preço, óleo de referência ou indiretos por voz.
 
 ## Roteiro de teste por voz
 
@@ -68,10 +76,10 @@ Antes (no banco de **teste**, nunca no `db.sqlite3` real), pela tela ou pelo adm
 | 3 | "Qual a minha margem esta semana?" | `ver_margem(periodo="semana")`: "Margem estimada nesta semana: N por cento, ... Em relação ao mesmo trecho da semana passada, caiu/subiu N pontos; era N por cento. ... É margem estimada: não inclui ...". Nunca diz "lucro". |
 | 4 | "Caiu por quê? Qual produto puxou?" | `ver_margem(agrupar="produto")`: os três primeiros produtos com a margem estimada e os pontos de cada; se houver itens fora da margem, "N itens de venda ... ficaram fora da margem porque o custo gravado não é confiável: ...". Não inventa explicação além dos números. |
 | 5 | "Qual a margem da caixa de coxinha no atacado?" | `ver_margem_tabela(produto="coxinha")`: "caixa com 25 de Coxinha 150 g, cru congelado: custo estimado ...; no varejo, 45 reais, margem estimada de ...; no atacado, 40 reais, ... por cento." |
-| 6 | "Me recomenda um preço pra caixa." / "Quanto eu devo cobrar?" | **Recusa** com personalidade: preço não é com ele, o sistema não sugere preço e a decisão é do dono; no máximo repete a margem estimada do preço atual. Não chama nenhuma ferramenta que grave, não diz nenhum valor de preço novo. |
+| 6 | "Me recomenda um preço pra caixa." / "Quanto eu devo cobrar?" | Não escolhe: diz que quem escolhe é o dono, mostra quanto sobra hoje (`ver_estudo_preco`) e oferece simular perguntando a sobra ou o preço que o dono quer testar. Não chama nenhuma ferramenta que grave e não diz nenhum preço que não tenha saído de `simular_preco` com o número do dono. |
 | 7 | "O que mais vende este mês?" e "e o que dá mais margem?" | `ver_mais_vendidos`: "Neste mês, pelo que vendeu em dinheiro: primeiro, ..., N reais, N por cento do total; ...". Com "margem"/"lucro": `ordem="margem"`, "... de margem estimada ... É margem estimada, antes das despesas." |
 | 8 | "A produção de hoje rendeu quanto? Usaram farinha demais?" | `ver_previsto_realizado`: "Produção N de ..., concluída hoje: planejadas N unidades, saíram N boas e N perdidas (motivo), rendimento de N por cento. Custo previsto ..., real ...: ... a mais, N por cento acima. ... Ingredientes fora do previsto: Farinha de trigo, usou ... contra ..., N por cento a mais." |
-| 9 | "Como foi o mês?" | `ver_relatorio(periodo="mes")`: "Neste mês, de 1 a ..., tudo estimado e antes das despesas. Vendas: ... Resultado estimado, antes das despesas: ... O resultado não desconta despesas, ...". Fala "antes das despesas" **sempre**; nunca "lucro" nem "sobrou". |
+| 9 | "Como foi o mês?" | `ver_relatorio(periodo="mes")`: "Neste mês, de 1 a ..., tudo estimado. Vendas: ... Resultado estimado, antes das despesas: ... O resultado não desconta despesas, .... Despesas do período: ... Resultado estimado depois das despesas: ..." (ou "Nenhuma despesa lançada no período ..."). Diz sempre se é antes ou depois das despesas; nunca "lucro" nem "sobrou". |
 | 10 | "A farinha subiu?" | `ver_evolucao_preco(item="farinha")`: "Farinha de trigo: a última compra, hoje, do fornecedor ..., saiu a 5 reais o quilo; a anterior, em ..., a 4 reais e 50 centavos: subiu 11,1 por cento. ..." Não calcula outra porcentagem. |
 
 Conferir na tela **Histórico** (ou `ver_historico`) que nenhuma operação foi

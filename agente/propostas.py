@@ -27,6 +27,7 @@ from decisoes.servicos import aprovar_decisao
 from estoque.servicos import entrada_manual, registrar_perda, transferir_estado
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada, _json
+from financeiro.despesas import cancelar_despesa, lancar_despesa, pagar_despesa_do_mes
 from financeiro.servicos import (estornar_pagamento, estornar_recebimento_cliente, registrar_pagamento,
                                  registrar_recebimento)
 from producao.fritura import registrar_fritura
@@ -91,6 +92,10 @@ OPERACOES = {
     "registrar_perda": Operacao(registrar_perda),
     "registrar_recebimento": Operacao(registrar_recebimento),
     "estornar_recebimento_cliente": Operacao(estornar_recebimento_cliente),
+    # despesas (Plano 8): os serviços aceitam valor e datas como texto; o sistema só anota o pagamento
+    "lancar_despesa": Operacao(lancar_despesa),
+    "pagar_despesa_do_mes": Operacao(pagar_despesa_do_mes),
+    "cancelar_despesa": Operacao(cancelar_despesa),
 }
 
 

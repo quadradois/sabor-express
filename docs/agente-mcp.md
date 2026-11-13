@@ -5,8 +5,9 @@ O agente (voz, Telegram, texto) conversa com o Sabor Express por um servidor
 ferramentas ficam em `agente/ferramentas.py`; a lógica das consultas, em
 `agente/consultas.py` (a mesma que a API REST provisória `/api/agente/` usa);
 a das gravações, em `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`,
-`agente/vendas.py` e `agente/propostas.py`; as de custos, margens e relatórios
-(só leitura), em `agente/custos.py`. São 77 ferramentas.
+`agente/vendas.py`, `agente/despesas.py` e `agente/propostas.py`; as de custos,
+margens, relatórios e estudo de preço (só leitura), em `agente/custos.py`.
+São 88 ferramentas.
 O sistema faz todas as contas; o modelo só escolhe a ferramenta e fala o
 resultado.
 
@@ -168,7 +169,7 @@ aprovar: ..."), para o dono responder "aprova a doze", "ciente da quinze".
 
 | Ferramenta | Nível | Parâmetros | O que faz |
 |---|---|---|---|
-| `ver_resumo_do_dia` | 0 | — | `resumo_do_dia()`: abre com a caixa ("Na caixa, 1 decisão para aprovar e 3 avisos."), depois até três assuntos do mais urgente (vencido, backup atrasado ou ausente, contas vencidas, validade perto, estoque baixo, contas a vencer, compras atrasadas, consumo e custo pendentes, avisos de ajuste, produções em andamento, compras a chegar) e "Tem mais N assuntos: ... Quer que eu fale?"; dia vazio: "Dia tranquilo: ...". `assuntos` traz todas as frases |
+| `ver_resumo_do_dia` | 0 | — | `resumo_do_dia()`: abre com a caixa ("Na caixa, 1 decisão para aprovar e 3 avisos."), depois até três assuntos do mais urgente (vencido, backup atrasado ou ausente, contas vencidas, despesas vencidas sem valor, validade perto, estoque baixo, contas a vencer, despesas sem valor vencendo, compras atrasadas, consumo e custo pendentes, avisos de ajuste, produções em andamento, compras a chegar) e "Tem mais N assuntos: ... Quer que eu fale?"; dia vazio: "Dia tranquilo: ...". `assuntos` traz todas as frases |
 | `ver_decisoes` | 0 | `tipo=""` (`decisao`, `aviso`), `origem=""` | pendentes da caixa: decisões antes dos avisos e, entre elas, pela urgência da origem; `origem` aceita o assunto falado ("vencido", "contas", "estoque baixo", "consumo pendente", "ficha"); desconhecido → `erro` + `opcoes` |
 | `ver_decisao` | 0 | `decisao_id` | uma decisão: texto, desde quando, último erro ao aprovar, ou quem decidiu, quando e o motivo |
 | `ver_historico` | 0 | `periodo="hoje"` (`ontem`, `semana`, `mes`, `AAAA-MM-DD`), `autor=""`, `canal=""` (`voz`, `tela`, `sistema`), `operacao=""`, `so_erros=false` | `historico_operacoes`: total, as três mais recentes (rótulo, hora, quem) e "E mais N"; `por_tipo` com a contagem por rótulo. Sem `canal`, a rotina automática (canal `sistema`) fica de fora; `operacao` casa com o rótulo ("compra", "pagamento", "peso") |
@@ -305,8 +306,10 @@ gravação**: as sete são de leitura (nível 0). O modelo de voz não faz conta
 números estruturados vêm ao lado (Decimal como número, datas ISO).
 
 - **Sempre estimado:** toda margem é dita "margem estimada" e o resultado do
-  período "estimado, antes das despesas", com o que não inclui (RF-CUS-06,
-  CA-33). A palavra "lucro" não aparece em nenhum `texto`.
+  período "estimado", antes e (Plano 8) depois das despesas, com o que não
+  inclui (RF-CUS-06, CA-33). A palavra "lucro" não aparece em nenhum `texto`.
+  A margem **com indiretos** de referência (Plano 8) é dita à parte, como outra
+  margem.
 - **Dado faltante nunca vira zero:** ingrediente nunca comprado deixa o custo
   incompleto ("falta o preço de Queijo; nunca foi comprado"); venda com custo
   duvidoso fica **fora da margem** e o `texto` diz quantos itens, quanto e por
@@ -320,17 +323,18 @@ números estruturados vêm ao lado (Decimal como número, datas ISO).
   segunda ao mesmo dia).
 - **Fala curta:** no máximo três grupos, produtos ou apresentações no `texto`;
   o resto fica nos dados.
-- **Preço, óleo e indiretos não mudam por voz**, e nenhuma ferramenta sugere
-  preço (o PRD não define a regra).
+- **Preço, óleo e indiretos não mudam por voz**, e nenhuma ferramenta escolhe
+  margem ou sugere preço; o preço calculado só aparece numa **simulação** com o
+  número que o dono disser (`simular_preco`, abaixo).
 
 | Ferramenta | Nível | Parâmetros | O que faz |
 |---|---|---|---|
 | `ver_custo` | 0 | `produto` (nome falado do tamanho, ou de uma preparação) | `custo_estimado` (ou `custo_preparacao`): ingredientes, indiretos, cru e frito por unidade, pela última compra de cada ingrediente, e o que não inclui; `partes` com cada preparação e item. Incompleto → diz o que falta, sem número. Dois tamanhos → `opcoes` |
-| `ver_margem` | 0 | `periodo="semana"`, `agrupar="produto"` (`apresentacao`, `cliente`, `tabela`, `dia`), `comparar=true` | `intervalo` + `comparar_margens` com `intervalo_anterior` (ou `margens` sem comparar): margem estimada em %, em reais, variação em **pontos**, descontos, o que ficou fora e os três maiores grupos |
-| `ver_margem_tabela` | 0 | `produto=""` | `margem_apresentacoes`: custo estimado de cada jeito de vender e a margem estimada no varejo e no atacado pelo preço de tabela de hoje; sem custo → o que falta |
+| `ver_margem` | 0 | `periodo="semana"`, `agrupar="produto"` (`apresentacao`, `cliente`, `tabela`, `dia`), `comparar=true` | `intervalo` + `comparar_margens` com `intervalo_anterior` (ou `margens` sem comparar): margem estimada em %, em reais, variação em **pontos**, descontos, o que ficou fora e os três maiores grupos; depois, a margem **com indiretos** de referência ("Com os indiretos de referência por salgado ..., a margem estimada fica em N por cento") ou quantos itens não têm indireto |
+| `ver_margem_tabela` | 0 | `produto=""` | `margem_apresentacoes`: custo estimado de cada jeito de vender e a margem estimada no varejo e no atacado pelo preço de tabela de hoje e, com referência, a margem com indiretos; sem custo → o que falta |
 | `ver_mais_vendidos` | 0 | `periodo="mes"`, `ordem="receita"` (`unidades`, `margem`; "lucro" vira `margem`) | `ranking_produtos`: os três primeiros com a participação no total; na ordem margem, quantos ficaram fora |
 | `ver_previsto_realizado` | 0 | `producao_id?`, `periodo="semana"`, `produto=""` | `previsto_realizado_producao` (uma) ou `previsto_realizado` (período): rendimento, custo previsto × real (diferença em reais e %), custo por unidade boa e os ingredientes que passaram do previsto; o que ficou fora da comparação |
-| `ver_relatorio` | 0 | `periodo="mes"` | `relatorio_periodo`: vendas e margem estimada, perdas com valor, resultado estimado antes das despesas (e % da receita), produção, compras, dinheiro anotado, contas em aberto hoje, o que não desconta e as ressalvas |
+| `ver_relatorio` | 0 | `periodo="mes"` | `relatorio_periodo`: vendas e margem estimada, perdas com valor, resultado estimado antes das despesas (e % da receita), produção, compras, dinheiro anotado, contas em aberto hoje, o que não desconta, o resultado **depois das despesas** (com o que falta) e as ressalvas |
 | `ver_evolucao_preco` | 0 | `item` | `evolucao_preco`: preço por quilo/litro/unidade da última compra × a anterior e desde a primeira, em % |
 
 ```
@@ -348,6 +352,79 @@ agente → ver_custo(produto="bolinha de queijo")
 
 O trecho para o prompt do agente e um roteiro de teste por voz estão em
 [`agente-instrucoes-custos.md`](agente-instrucoes-custos.md).
+
+### Despesas, resultado depois das despesas e estudo de preço
+
+Lógica em `agente/despesas.py` (despesas) e `agente/custos.py` (resultado,
+indireto real, estudo e simulação de preço, ponto de equilíbrio) — Plano 8,
+fase 2b, sobre `financeiro.despesas`, `financeiro.consultas`,
+`custos.relatorios` e `custos.precos`. Nenhuma regra nova.
+
+- **Despesa pelo nome falado:** "luz" casa com a despesa mensal Energia (ou a
+  categoria Energia); "botijão" → gás, "diarista"/"faxina" → diária, "DAS" →
+  impostos. Palavras como "conta", "boleto", "da" são ignoradas. Nome idêntico
+  ganha das parciais; ambíguo → `erro` + `opcoes`.
+- **Mês e datas falados:** `mes` vazio (este), "mês passado", "outubro",
+  "AAAA-MM"; datas "hoje", "ontem", "amanhã", "dia 20" (vencimento: o próximo
+  dia 20; pagamento: o último), "20 de dezembro", "AAAA-MM-DD". Na fala, o
+  vencimento sai como "dia 10", "amanhã", "dia 2 de dezembro"; o mês da despesa
+  como "Energia de novembro" (nunca "11/2026").
+- **Sem valor nunca é zero:** despesa mensal sem valor aparece como "sem valor",
+  fica fora das somas e deixa o resultado depois das despesas incompleto ("falta
+  o valor de Internet de novembro"); taxa de canal não informada = "taxa não
+  informada, sem conta".
+- **O sistema só anota:** `pagar_despesa` acha a despesa em aberto (mensal do
+  mês ou avulsa a pagar) e propõe anotar o pagamento (`pagar_despesa_do_mes` com
+  o valor real, ou `registrar_pagamento` na avulsa); sem despesa em aberto com o
+  nome, propõe lançar uma avulsa **já paga** (`lancar_despesa(paga=True)`) com a
+  categoria pelo nome falado (sem categoria reconhecida → pergunta, com as
+  categorias em `opcoes`). Já paga neste mês → `erro` (não lança em dobro).
+- **Não por voz:** cadastrar/alterar despesa mensal (previsto, dia, categoria),
+  categorias, canais e taxas, referências de óleo e indireto, preço.
+- **Simulação é simulação:** `simular_preco` começa com "Simulação, o preço da
+  tabela não muda" e termina com "É só uma simulação: o preço só muda pela
+  tela, e quem decide é o dono"; a sobra pedida é a do dono, nunca escolhida
+  pelo agente.
+
+| Ferramenta | Nível | Parâmetros | O que faz |
+|---|---|---|---|
+| `ver_despesas` | 0 | `mes=""` | `despesas_do_mes` + `despesas_periodo` (por categoria): "Despesas de novembro: 3.280 reais lançados, 230 reais já com pagamento anotado, falta pagar 3.050 reais. Ainda sem valor, fora da conta: Internet; ... Vencidas: Energia, 850 reais, venceu dia 10. A pagar: ... Por categoria: ..." |
+| `ver_despesas_a_pagar` | 0 | `situacao="todas"` (`vencidas`) | `despesas_em_aberto` (qualquer mês): "Falta pagar 3.050 reais de despesas, 850 reais já vencidos. Sem valor ainda, fora da soma: Internet de novembro. Energia de novembro, 850 reais, venceu dia 10; ..." |
+| `ver_resultado` | 0 | `periodo="mes"` (como `ver_margem`) | `relatorio_periodo`: "Neste mês, de 1 a 13 de novembro, tudo estimado. Vendas: ... Resultado antes das despesas: ... Despesas do período: ..., com as mensais pela parte dos dias do período. Resultado estimado depois das despesas: ..., N por cento da receita. Ainda incompleto: falta o valor de Internet de novembro; o resultado de verdade é menor que este. ... Por categoria: ..." Sem despesa lançada: não diz número depois das despesas |
+| `ver_indireto_real` | 0 | `mes=""` | `indireto_real`: "Conferência dos indiretos de novembro, de 1 a 13: N unidades boas produzidas; as despesas da produção ... somam ... Dá 82 centavos por salgado; a referência cadastrada é 74 centavos: o real está 8 centavos acima, 10,8 por cento. ... É estimado." |
+| `ver_estudo_preco` | 0 | `produto=""`, `canal=""`, `tabela="varejo"` | `estudo_preco`: por jeito de vender (até três), CMV e % do preço, indiretos e, por canal (canais com a mesma taxa juntos), "sobram ..., N por cento do preço" ou "taxa não informada, sem conta"; "o preço da tabela não muda" |
+| `simular_preco` | 0 | `produto`, `apresentacao=""`, `preco?` **ou** `sobra_pct?`, `canal=""` (padrão balcão), `tabela="varejo"`, `forma=""`, `conservacao=""` | `simular_preco` (rotulado "simulação"): com preço, quanto sobra; com a sobra que o dono quer, o preço que o sistema calcula (arredondado ao centavo), a diferença para o preço de hoje e o aviso de que o preço só muda pela tela. Canal sem taxa → `erro` |
+| `ver_ponto_equilibrio` | 0 | `produto`, `apresentacao=""`, `canal=""`, `mes=""`, `forma=""`, `conservacao=""` | `ponto_equilibrio`: "Estimativa, como se todas as vendas fossem ...: cada venda deixa ... depois do CMV e da taxa; as despesas de novembro somam ... seria preciso vender 678 unidades, 3.390 reais de vendas no mês. Ficou fora, sem valor: Internet; com ela o número é maior." |
+| `informar_valor_despesa` | 1 | `nome`, `valor`, `mes=""` | `informar_valor_despesa` na despesa mensal em aberto: "Anotado: Internet de novembro veio 99 reais e 90 centavos; estava lançada com ... Vence dia 10, ainda sem pagamento anotado." Com pagamento anotado, o núcleo recusa ("estorne o pagamento antes") |
+| `pagar_despesa` | 2 | `nome`, `valor?`, `data_pagamento=""`, `forma=""`, `mes=""`, `categoria=""` | propõe **anotar** o pagamento: "Anotar o pagamento de Energia de novembro: 850 reais, paga hoje. Fica quitada. Confirma?" (com "(estava lançada com 850 reais; fica o valor real)" ou "(ela ainda não tinha valor; fica este)"); sem despesa em aberto: "Lançar a despesa Diarista, em Diária: 120 reais, paga hoje. Confirma?" |
+| `lancar_despesa` | 2 | `descricao`, `valor`, `categoria=""`, `vencimento=""`, `paga=false`, `data_pagamento=""`, `forma=""` | propõe despesa avulsa a pagar ("Lançar a despesa Boleto do gás, em Gás: 230 reais, a pagar, vence dia 20. Confirma?") ou já paga; se for uma despesa mensal do mês ainda em aberto → `erro` mandando para `informar_valor_despesa`/`pagar_despesa` |
+| `cancelar_despesa` | 2 | `motivo`, `nome=""`, `mes=""`, `conta_id?` | propõe cancelar (este mês ou o passado; `mes` para outro): "Cancelar a despesa Energia de novembro, 850 reais (motivo: lancei errado). O pagamento anotado de 850 reais é estornado junto. Ela sai das contas a pagar e do resultado. Confirma?". Sem motivo → `erro`; despesa sem valor → `erro` (não há conta) |
+
+O resumo do dia (`ver_resumo_do_dia`) ganhou dois assuntos: despesas do mês
+**vencidas sem valor** (logo depois das contas vencidas) e **sem valor vencendo
+logo** (depois das contas a vencer); despesa com valor já entra em "contas
+vencidas"/"a vencer", então não há aviso em dobro. Na caixa (`ver_decisoes`), o
+assunto "despesa sem valor" filtra os lembretes da rotina, e os textos do núcleo
+saem falados ("Energia de novembro", sem "11/2026" nem "parcela 1 de 1"). Em
+`ver_contas`, despesa aparece como "despesa Energia de novembro, parcela única,
+...".
+
+```
+usuário: "paguei 850 de luz"
+agente → pagar_despesa(nome="luz", valor=850)
+       ← {"confirmar": "Anotar o pagamento de Energia de novembro: 850 reais, paga hoje. Fica quitada. Confirma?",
+          "proposta_id": 41, ...}
+usuário: "sim"
+agente → confirmar_proposta(proposta_id=41)
+usuário: "quero que sobre 30 por cento na coxinha, qual o preço?"
+agente → simular_preco(produto="coxinha", sobra_pct=30)
+       ← {"texto": "Simulação, o preço da tabela não muda: para sobrar 30 por cento do preço no balcão, dinheiro, o
+                    sistema calcula ... É só uma simulação: o preço só muda pela tela, e quem decide é o dono.", ...}
+```
+
+O trecho para o prompt do agente (com as frases antigas a substituir) e um
+roteiro de teste por voz estão em
+[`agente-instrucoes-despesas.md`](agente-instrucoes-despesas.md).
 
 ### Fluxo de proposta (nível 2)
 
