@@ -23,6 +23,7 @@ from django.utils import timezone
 from cadastros.servicos import criar_tamanho
 from compras.servicos import (cancelar_compra, devolver_ao_fornecedor, encerrar_pendencia, estornar_recebimento,
                               receber_bonificacao, receber_compra, registrar_compra)
+from decisoes.servicos import aprovar_decisao
 from estoque.servicos import entrada_manual, transferir_estado
 from nucleo.models import RegistroOperacao
 from nucleo.operacoes import RegraViolada, _json
@@ -74,6 +75,8 @@ OPERACOES = {
     "registrar_pagamento": Operacao(registrar_pagamento),
     "estornar_pagamento": Operacao(estornar_pagamento),
     "conciliar_consumo": Operacao(conciliar_consumo),
+    # caixa de decisões: aprovar executa a operação guardada na decisão (uma vez só, com a chave dela)
+    "aprovar_decisao": Operacao(aprovar_decisao),
 }
 
 
