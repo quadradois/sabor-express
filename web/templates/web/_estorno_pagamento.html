@@ -1,0 +1,8 @@
+{% load formato %}
+<details class="cancelar"><summary>Estornar pagamento</summary>
+<form method="post" action="{% url 'estornar_pagamento' %}" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="pagamento" value="{{ pg.pagamento_id }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <p><label>Motivo <input name="motivo"></label></p>
+  <button type="submit">Estornar</button>
+</form></details>

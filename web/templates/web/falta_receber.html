@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Falta receber</h1>
+<ul class="linhas">
+{% for l in linhas %}<li><a class="nome" href="{% url 'compra' l.compra_id %}">{{ l.item }}</a> <strong class="falta">falta {{ l.pendente|quantidade:l.unidade_base }}</strong> {{ l.fornecedor }} · compra #{{ l.compra_id }} · há {{ l.dias }} dia(s){% if l.dias > 7 %} <strong class="falta">atrasado</strong>{% endif %}</li>
+{% empty %}<li>Nada pendente de entrega.</li>{% endfor %}
+</ul>
+<p><a href="{% url 'compras' %}">Compras em aberto</a></p>
+{% endblock %}

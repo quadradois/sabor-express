@@ -1,0 +1,40 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Nova compra</h1>
+{% include "web/_mensagens.html" %}
+{% if duplicatas %}<div class="aviso">{% for d in duplicatas %}<p>Compra parecida: <a href="{% url 'compra' d.compra_id %}">#{{ d.compra_id }}</a> de {{ d.data|date:"d/m/Y" }}, {{ d.total|dinheiro }}{% if d.documento %}, documento {{ d.documento }}{% endif %}{% if d.bloqueia %} — mesmo documento: não será aceita{% endif %}.</p>{% endfor %}
+<p><label><input type="checkbox" name="ciente" value="1" form="f-compra"> Lançar mesmo assim</label></p></div>{% endif %}
+<form method="post" class="form" id="f-compra">{% csrf_token %}
+  <input type="hidden" name="chave" value="{{ chave }}">
+  <p><label>Fornecedor <select name="fornecedor"><option value="">—</option>{% for f in fornecedores %}<option value="{{ f.id }}" {% if p.fornecedor == f.id|stringformat:"s" %}selected{% endif %}>{{ f.nome }}</option>{% endfor %}</select></label>
+     <a href="{% url 'fornecedor_novo' %}">cadastrar fornecedor</a></p>
+  <p><label>Data da compra <input type="date" name="data" value="{{ p.data|default:hoje|date:'Y-m-d' }}"></label></p>
+  <p><label>Documento (nota/número, opcional) <input name="documento" value="{{ p.documento|default:'' }}"></label></p>
+  <h2>Itens (na unidade em que comprou)</h2>
+  {% for l in linhas %}<div class="bloco">
+    <select name="item_{{ forloop.counter0 }}"><option value="">— item —</option>{% for i in itens %}<option value="{{ i.id }}" {% if l.item == i.id|stringformat:"s" %}selected{% endif %}>{{ i.nome }}</option>{% endfor %}</select>
+    <input name="quantidade_{{ forloop.counter0 }}" value="{{ l.quantidade }}" placeholder="Quantidade" inputmode="decimal">
+    <input name="unidade_{{ forloop.counter0 }}" value="{{ l.unidade }}" placeholder="Unidade (kg, caixa...)" list="unidades" autocapitalize="off">
+    <input name="valor_{{ forloop.counter0 }}" value="{{ l.valor }}" placeholder="Valor da linha (R$)" inputmode="decimal">
+  </div>{% endfor %}
+  <datalist id="unidades">{% for u in unidades %}<option>{{ u }}</option>{% endfor %}</datalist>
+  <p><label>Frete (R$) <input name="frete" value="{{ p.frete|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Desconto (R$) <input name="desconto" value="{{ p.desconto|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Acréscimo (R$) <input name="acrescimo" value="{{ p.acrescimo|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Total da compra (R$) <input name="total" value="{{ p.total|default:'' }}" inputmode="decimal"></label></p>
+  <p><label>Justificativa (se o total não bater com a soma) <input name="justificativa" value="{{ p.justificativa|default:'' }}"></label></p>
+  <h2>Pagamento</h2>
+  <p><label><input type="radio" name="condicao" value="a_vista" {% if p.condicao != "a_prazo" %}checked{% endif %}> À vista</label>
+     <label><input type="radio" name="condicao" value="a_prazo" {% if p.condicao == "a_prazo" %}checked{% endif %}> A prazo</label></p>
+  <p><label>À vista — forma (pix, dinheiro...) <input name="forma_pagamento" value="{{ p.forma_pagamento|default:'' }}"></label></p>
+  <p><label>À vista — data do pagamento <input type="date" name="data_pagamento" value="{{ p.data_pagamento|default:'' }}"></label></p>
+  <p><label>A prazo — número de parcelas <input name="parcelas_n" value="{{ p.parcelas_n|default:'1' }}" inputmode="numeric"></label></p>
+  <p><label>A prazo — primeiro vencimento <input type="date" name="primeiro_vencimento" value="{{ p.primeiro_vencimento|default:'' }}"></label></p>
+  <p><label>A prazo — dias entre parcelas <input name="intervalo" value="{{ p.intervalo|default:'30' }}" inputmode="numeric"></label></p>
+  <h2>Recebimento</h2>
+  <p><label><input type="checkbox" name="recebi_tudo" value="1" {% if p.recebi_tudo %}checked{% endif %}> Recebi tudo agora</label></p>
+  <p><label>Validade (se recebeu tudo e os itens têm validade) <input type="date" name="validade_tudo" value="{{ p.validade_tudo|default:'' }}"></label></p>
+  <button type="submit">Lançar compra</button>
+</form>
+{% endblock %}

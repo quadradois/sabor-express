@@ -1,0 +1,10 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Fornecedores</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'fornecedor_novo' %}">Novo fornecedor</a></p>
+<ul class="linhas">
+{% for f in fornecedores %}<li><a class="nome" href="{% url 'fornecedor' f.id %}">{{ f.nome }}</a>{% if f.contato %}<span>{{ f.contato }}</span>{% endif %}{% if not f.ativo %}<strong class="falta">inativo</strong>{% endif %}</li>
+{% empty %}<li>Nenhum fornecedor cadastrado.</li>{% endfor %}
+</ul>
+{% endblock %}

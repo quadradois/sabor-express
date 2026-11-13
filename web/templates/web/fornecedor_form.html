@@ -1,0 +1,18 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>{% if f %}{{ f.nome }}{% else %}Novo fornecedor{% endif %}</h1>
+{% include "web/_mensagens.html" %}
+<form method="post" class="form">{% csrf_token %}{% load formato %}{% chave %}
+  <p><label>Nome <input name="nome" value="{{ d.nome|default:'' }}"></label></p>
+  <p><label>CNPJ/CPF (opcional) <input name="documento" value="{{ d.documento|default:'' }}"></label></p>
+  <p><label>Contato (opcional) <input name="contato" value="{{ d.contato|default:'' }}"></label></p>
+  <button type="submit">Salvar</button>
+</form>
+{% if f %}
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  {% if f.ativo %}<input type="hidden" name="acao" value="inativar"><button type="submit">Inativar fornecedor</button>
+  {% else %}<input type="hidden" name="acao" value="reativar"><button type="submit">Reativar fornecedor</button>{% endif %}
+</form>
+{% endif %}
+<p><a href="{% url 'fornecedores' %}">Voltar</a></p>
+{% endblock %}

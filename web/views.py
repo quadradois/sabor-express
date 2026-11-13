@@ -10,6 +10,9 @@ from cadastros.servicos import criar_tamanho
 from estoque.etiquetas import dados_etiqueta, registrar_impressao
 from estoque.models import ESTADOS, Lote, Movimento
 from estoque.servicos import entrada_manual, saldo_lote, transferir_estado
+from compras.consultas import falta_receber
+from estoque.servicos import consumos_pendentes
+from financeiro.consultas import avisos_de_ajuste, contas_a_vencer, contas_vencidas
 from fichas.escala import escalar
 from nucleo.operacoes import RegraViolada
 from producao.models import Producao
@@ -21,7 +24,9 @@ from .forms import ConclusaoForm, EntradaForm, PesoForm, ProducaoForm, ReceitaFo
 
 @login_required
 def inicio(request):
-    return render(request, "web/inicio.html")
+    return render(request, "web/inicio.html", {
+        "vencidas": len(contas_vencidas()), "a_vencer": len(contas_a_vencer(dias=7)),
+        "falta": len(falta_receber()), "avisos": len(avisos_de_ajuste()), "pendentes": len(consumos_pendentes())})
 
 
 @login_required
@@ -99,7 +104,9 @@ def _acao_preparo(request, p):
     elif acao == "cancelar":
         cancelar_producao(producao_id=p.id, motivo=request.POST.get("motivo", ""), **kw)
     elif acao == "concluir":
-        concluir_producao(producao_id=p.id, **_validado(ConclusaoForm(request.POST)), **kw)
+        r = concluir_producao(producao_id=p.id, **_validado(ConclusaoForm(request.POST)), **kw)
+        for pend in r.get("pendentes", []):
+            messages.warning(request, f"Consumo pendente de {pend['item']}: concilie quando a compra chegar.")
     else:
         raise RegraViolada("Ação desconhecida.")
 
@@ -134,6 +141,7 @@ def producao_nova(request):
             d = form.cleaned_data
             try:
                 r = iniciar_producao(produto_id=d["produto"].id, unidades=d["unidades"], forma=d["forma"],
+                                     pendente_justificativa=d["pendente_justificativa"],
                                      autor=request.user.username, canal="web", chave=d["chave"])
             except RegraViolada as e:
                 form.add_error(None, str(e))
@@ -141,11 +149,12 @@ def producao_nova(request):
                 return redirect("producao", id=r["producao_id"])
     else:
         form = ProducaoForm(request.GET or None)
-        del form.fields["chave"]  # a chave só vale no POST
+        del form.fields["chave"], form.fields["pendente_justificativa"]  # só valem no POST
         ctx["chave"] = uuid.uuid4().hex
         if request.GET and form.is_valid():
             d = form.cleaned_data
             ctx["r"] = escalar(d["produto"].ficha, d["unidades"], d["produto"].peso_g)
+            ctx["falta"] = any(l.falta > 0 for b in ctx["r"].blocos for l in b.linhas)
     return render(request, "web/producao_nova.html", {**ctx, "form": form})
 
 

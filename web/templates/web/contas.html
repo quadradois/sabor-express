@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block conteudo %}
+<h1>Contas a pagar</h1>
+{% include "web/_mensagens.html" %}
+<h2>Vencidas</h2>
+{% for p in vencidas %}<section class="bloco">{% include "web/_parcela.html" %}</section>{% empty %}<p>Nada vencido.</p>{% endfor %}
+<h2>A vencer (7 dias)</h2>
+{% for p in a_vencer %}<section class="bloco">{% include "web/_parcela.html" %}</section>{% empty %}<p>Nada a vencer nos próximos 7 dias.</p>{% endfor %}
+<h2>Total por fornecedor</h2>
+<ul class="linhas">{% for f in fornecedores %}<li><span class="nome">{{ f.fornecedor }}</span> <strong>{{ f.devido|dinheiro }}</strong>{% if f.vencido %} <span class="falta">vencido {{ f.vencido|dinheiro }}</span>{% endif %}</li>{% empty %}<li>Não há dívida em aberto.</li>{% endfor %}</ul>
+<h2>Pagamentos dos últimos 30 dias</h2>
+{% for pg in pagamentos %}<section class="bloco"><p>{{ pg.data|date:"d/m/Y" }} · {{ pg.fornecedor }} · {{ pg.descricao }} · {{ pg.valor_pago|dinheiro }}{% if pg.diferenca %} ({{ pg.diferenca_tipo }} {{ pg.diferenca|dinheiro }}){% endif %}</p>
+  {% include "web/_estorno_pagamento.html" with next=request.path %}</section>{% empty %}<p>Nenhum pagamento recente.</p>{% endfor %}
+<p><a href="{% url 'avisos' %}">Avisos de ajuste</a></p>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Bonificação (veio de graça)</h1>
+{% include "web/_mensagens.html" %}
+<form method="post" class="form">{% csrf_token %}{% load formato %}{% chave %}
+  <p><label>Item <select name="item"><option value="">—</option>{% for i in itens %}<option value="{{ i.id }}">{{ i.nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Quantidade <input name="quantidade" inputmode="decimal"></label></p>
+  <p><label>Unidade <input name="unidade" list="unidades" autocapitalize="off"></label></p>
+  <datalist id="unidades">{% for u in unidades %}<option>{{ u }}</option>{% endfor %}</datalist>
+  <p><label>Motivo <input name="motivo"></label></p>
+  <p><label>Lote (opcional) <input name="lote_codigo"></label></p>
+  <p><label>Validade <input type="date" name="validade"></label></p>
+  <p><label>Compra relacionada (número, opcional) <input name="compra_id" inputmode="numeric"></label></p>
+  <button type="submit">Registrar bonificação</button>
+</form>
+{% endblock %}

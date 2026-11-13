@@ -1,0 +1,9 @@
+{% extends "web/base.html" %}
+{% block conteudo %}
+<h1>Avisos de ajuste</h1>
+{% include "web/_mensagens.html" %}
+{% for a in avisos %}<section class="bloco"><p>{{ a.texto }}{% if a.compra_id %} (<a href="{% url 'compra' a.compra_id %}">compra #{{ a.compra_id }}</a>){% endif %}</p>
+  <form method="post" class="form">{% csrf_token %}{% load formato %}{% chave %}<input type="hidden" name="aviso" value="{{ a.aviso_id }}">
+    <p><label>O que ficou combinado com o fornecedor <input name="observacao"></label></p><button type="submit">Resolver</button></form></section>
+{% empty %}<p>Nenhum aviso em aberto.</p>{% endfor %}
+{% endblock %}

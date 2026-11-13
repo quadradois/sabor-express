@@ -1,0 +1,13 @@
+{% load formato %}
+<details class="cancelar"><summary>Paguei</summary>
+<form method="post" action="{% url 'pagar' %}" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="parcela" value="{{ p.parcela_id }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <p><label>Valor pago (R$) — vazio = saldo de {{ p.saldo|dinheiro }} <input name="valor" inputmode="decimal"></label></p>
+  <p><label>Data <input type="date" name="data_pagamento" value="{% now 'Y-m-d' %}"></label></p>
+  <p><label>Forma (pix, dinheiro...) <input name="forma"></label></p>
+  <p><label>Juros, multa ou desconto (R$) <input name="diferenca" inputmode="decimal"></label></p>
+  <p><label>Tipo <select name="diferenca_tipo"><option value="">—</option><option value="juros">Juros</option><option value="multa">Multa</option><option value="desconto">Desconto</option></select></label></p>
+  <p><label>Motivo da diferença <input name="diferenca_motivo"></label></p>
+  <button type="submit">Registrar pagamento</button>
+</form></details>

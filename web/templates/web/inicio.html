@@ -1,11 +1,26 @@
 {% extends "web/base.html" %}
 {% block conteudo %}
 <h1>Sabor Express</h1>
+{% if vencidas or a_vencer or falta or avisos or pendentes %}<div class="aviso">
+  {% if vencidas %}<p><a href="{% url 'contas' %}">{{ vencidas }} parcela(s) vencida(s)</a></p>{% endif %}
+  {% if a_vencer %}<p><a href="{% url 'contas' %}">{{ a_vencer }} parcela(s) a vencer em 7 dias</a></p>{% endif %}
+  {% if falta %}<p><a href="{% url 'falta_receber' %}">{{ falta }} item(ns) faltando receber</a></p>{% endif %}
+  {% if avisos %}<p><a href="{% url 'avisos' %}">{{ avisos }} aviso(s) de ajuste</a></p>{% endif %}
+  {% if pendentes %}<p><a href="{% url 'consumos' %}">{{ pendentes }} consumo(s) pendente(s)</a></p>{% endif %}
+</div>{% endif %}
 <nav class="menu">
   <a href="{% url 'receita' %}">Gerar receita</a>
   <a href="{% url 'producoes' %}">Produção</a>
   <a href="{% url 'producao_nova' %}">Nova produção</a>
   <a href="{% url 'entrada' %}">Entrada de estoque</a>
+  <a href="{% url 'compra_nova' %}">Nova compra</a>
+  <a href="{% url 'compras' %}">Compras em aberto</a>
+  <a href="{% url 'falta_receber' %}">Falta receber</a>
+  <a href="{% url 'contas' %}">Contas a pagar</a>
+  <a href="{% url 'avisos' %}">Avisos de ajuste</a>
+  <a href="{% url 'consumos' %}">Consumos pendentes</a>
+  <a href="{% url 'fornecedores' %}">Fornecedores</a>
+  <a href="{% url 'bonificacao' %}">Bonificação</a>
   <a href="/admin/">Cadastros</a>
 </nav>
 {% endblock %}
