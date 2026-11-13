@@ -1,0 +1,17 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Despesa mensal — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>{% if atual %}{{ atual.nome }}{% else %}Nova despesa mensal{% endif %}</h1>
+{% include "web/_despesas_nav.html" %}
+{% include "web/_mensagens.html" %}
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Nome (luz, internet, funcionário...) <input name="nome" value="{{ d.nome|default:'' }}" required></label></p>
+  <p><label>Categoria <select name="categoria" required><option value="">Escolha…</option>{% for c in categorias %}<option value="{{ c.categoria_id }}"{% if d.categoria == c.categoria_id|stringformat:"s" %} selected{% endif %}>{{ c.nome }}{% if not c.ativa %} (inativa){% endif %}</option>{% endfor %}</select></label></p>
+  <p><label>Dia do vencimento (1 a 31) <input name="dia_vencimento" inputmode="numeric" value="{{ d.dia_vencimento|default:'10' }}"></label></p>
+  <p><label>Valor previsto (R$) — pode deixar em branco <input name="valor_previsto" inputmode="decimal" value="{{ d.valor_previsto|reais }}"></label></p>
+  <p class="mudo">Com valor previsto, a despesa já entra no total do mês; ao pagar, você diz o valor real. Em branco, aparece "sem valor" até você informar.</p>
+  <p><label><input type="checkbox" name="ativa" {% if d.ativa %}checked{% endif %}> Ativa (gera a despesa todo mês)</label></p>
+  <button type="submit">Salvar</button>
+</form>
+{% endblock %}

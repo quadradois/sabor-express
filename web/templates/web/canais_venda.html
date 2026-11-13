@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Canais e taxas — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Canais de venda e taxas</h1>
+{% include "web/_despesas_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">A taxa (%) é o que o canal desconta de cada venda (maquininha de débito e de crédito, por exemplo). Em branco quer dizer "não informada": o estudo de preço não inventa taxa. Mudar a taxa não muda nenhum preço nem venda já feita.</p>
+{% for c in lista %}<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="canal_id" value="{{ c.canal_id }}">
+  <p><strong>{{ c.nome }}</strong> — taxa: {% if c.taxa_pct is None %}<span class="falta">não informada</span>{% else %}{{ c.taxa_pct|pct }}{% endif %}{% if not c.ativo %} <span class="mudo">(inativo)</span>{% endif %}</p>
+  <p><label>Nome <input name="nome" value="{{ c.nome }}" required></label></p>
+  <p><label>Taxa (%) — em branco = não informada <input name="taxa_pct" inputmode="decimal" value="{{ c.taxa_pct|reais }}"></label></p>
+  <p><label><input type="checkbox" name="ativo" {% if c.ativo %}checked{% endif %}> Ativo</label></p>
+  <button type="submit">Salvar {{ c.nome }}</button></form></section>{% endfor %}
+<h2>Novo canal</h2>
+<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Nome (iFood, 99...) <input name="nome" required></label></p>
+  <p><label>Taxa (%) — pode deixar em branco <input name="taxa_pct" inputmode="decimal"></label></p>
+  <button type="submit">Criar canal</button></form></section>
+<p class="acoes"><a href="{% url 'estudo_preco' %}">Estudo de preço</a></p>
+{% endblock %}

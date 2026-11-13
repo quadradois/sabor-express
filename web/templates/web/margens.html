@@ -16,14 +16,16 @@
   {% if a.margem is None %}<p class="aviso">Sem margem para estimar neste período: nenhuma venda com custo confiável.</p>
   {% else %}<p>Margem estimada: <strong>{{ a.margem|din }}</strong> = <strong>{{ a.margem_pct|pct }}</strong> das vendas com custo</p>{% endif %}
   <p class="mudo">Período anterior ({{ comp.de_anterior|date:"d/m" }} a {{ comp.ate_anterior|date:"d/m" }}): vendas {{ b.receita|din }}, margem {{ b.margem_pct|pct }}.</p>
+  <p>Margem <strong>com indiretos</strong> <span class="rotulo">{{ rotulo_ind }}</span>: {% if a.margem_com_indiretos is None %}sem como calcular{% if a.linhas_sem_indireto %} ({{ a.linhas_sem_indireto }} linha(s) sem indireto de referência){% endif %}{% else %}<strong>{{ a.margem_com_indiretos|din }}</strong> ({{ a.margem_com_indiretos_pct|pct }}) · indiretos {{ a.indiretos|din }}{% endif %}</p>
   <p>{% if v.pontos is None %}Sem como comparar a margem com o período anterior.{% else %}Margem {{ v.pontos|pontos }} em relação ao período anterior{% endif %}
     · vendas {{ v.receita_pct|pctsinal }}</p>{% endwith %}</section>
 {% include "web/_fora.html" with f=comp.atual.fora %}
 <section class="bloco"><h2>Por {{ agrupamentos|get_item:agrupar|lower }}</h2>
-  <table><tr><th>{{ agrupamentos|get_item:agrupar }}</th><th class="num">Vendas</th><th class="num">Desconto</th><th class="num">Custo</th><th class="num">Margem</th><th class="num">Margem %</th><th class="num">Antes</th><th class="num">Variação</th></tr>
+  <table><tr><th>{{ agrupamentos|get_item:agrupar }}</th><th class="num">Vendas</th><th class="num">Desconto</th><th class="num">Custo</th><th class="num">Margem</th><th class="num">Margem %</th><th class="num">Com indiretos</th><th class="num">Com indiretos %</th><th class="num">Antes</th><th class="num">Variação</th></tr>
   {% for g in grupos %}<tr><td>{% if agrupar == "dia" %}{{ g.nome|date:"d/m" }}{% else %}{{ g.nome }}{% endif %}</td><td class="num">{{ g.receita|din }}</td><td class="num">{{ g.desconto|din }}</td><td class="num">{{ g.custo|din }}</td>
-    <td class="num">{{ g.margem|din }}</td><td class="num">{{ g.margem_pct|pct }}</td><td class="num">{{ g.margem_pct_anterior|pct }}</td><td class="num">{{ g.pontos|pontos }}</td></tr>
-  {% empty %}<tr><td colspan="8">Nenhuma venda neste período.</td></tr>{% endfor %}</table>
+    <td class="num">{{ g.margem|din }}</td><td class="num">{{ g.margem_pct|pct }}</td><td class="num">{{ g.margem_com_indiretos|din }}</td><td class="num">{{ g.margem_com_indiretos_pct|pct }}</td><td class="num">{{ g.margem_pct_anterior|pct }}</td><td class="num">{{ g.pontos|pontos }}</td></tr>
+  {% empty %}<tr><td colspan="10">Nenhuma venda neste período.</td></tr>{% endfor %}</table>
+  <p class="mudo">"Com indiretos": a margem menos {{ rotulo_ind }}; "—" quando alguma linha não tem indireto de referência (<a href="{% url 'referencias' %}">cadastrar</a>).</p>
   <p class="mudo">"—" na margem: todas as vendas dessa linha ficaram fora da conta (custo não confiável).</p></section>
 <section class="bloco" id="tabela"><h2>Margem estimada dos preços de hoje</h2>
   <p class="mudo">Preço de tabela atual menos o custo atual (ficha e última compra). Não é o que foi vendido.</p>

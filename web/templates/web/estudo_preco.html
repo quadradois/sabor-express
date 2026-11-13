@@ -1,0 +1,72 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Estudo de preço — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Estudo de preço <span class="rotulo">{{ estudo.rotulo }}</span></h1>
+{% include "web/_custos_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">{{ estudo.observacao }} CMV = custo da mercadoria vendida (ingredientes, óleo e embalagem). "Sobra" = preço − CMV − indiretos de referência − taxa do canal. O sistema não escolhe a margem nem muda preço: quem decide é você. Para mudar um preço, vá em <a href="{% url 'precos' %}">Preços</a>.</p>
+<form method="get" class="form">
+  <p><label>Tabela <select name="tabela">{% for k, v in tabelas.items %}<option value="{{ k }}"{% if tabela == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label></p>
+  <p><label>Canal de venda <select name="canal">{% for c in canais %}<option value="{{ c.canal_id }}"{% if canal.canal_id == c.canal_id %} selected{% endif %}>{{ c.nome }} ({% if c.taxa_pct is None %}taxa não informada{% else %}taxa {{ c.taxa_pct|pct }}{% endif %})</option>{% endfor %}</select></label></p>
+  <button type="submit">Ver estudo</button></form>
+{% if canal and canal.taxa_pct is None %}<p class="aviso">A taxa de {{ canal.nome }} não foi informada: sem ela não dá para dizer quanto sobra neste canal. <a href="{% url 'canais_venda' %}">Informar a taxa</a></p>{% endif %}
+
+<h2>{{ tabelas|get_item:tabela }} — {{ canal.nome }}</h2>
+{% for a in linhas %}<section class="bloco">
+  <p><strong>{{ a.descricao }}</strong> <span class="rotulo">estimado</span></p>
+  {% if a.erro %}<p class="erro">Ficha com problema: {{ a.erro }}</p>
+  {% elif a.cmv is None %}<p class="falta">CMV incompleto: {% for f in a.faltando %}{{ f.item }} ({{ f.motivo }}){% if not forloop.last %}, {% endif %}{% endfor %}</p>
+  {% else %}
+  <p>Preço {{ a.preco|din }} ({{ a.preco_un|din }} por unidade)</p>
+  <p>CMV <strong>{{ a.cmv|din }}</strong> = {{ a.cmv_pct|pct }} do preço <span class="mudo">(salgado {{ a.custo_salgado|din }} + embalagem {{ a.custo_embalagem|din }})</span></p>
+  <p>Indiretos de referência: {% if a.indiretos is None %}<span class="falta">sem referência cadastrada</span> <a href="{% url 'referencias' %}">cadastrar</a>{% else %}{{ a.indiretos|din }}{% endif %}</p>
+  {% with c=a.pc %}{% if c %}
+  <p>Taxa de {{ c.canal }}: {% if c.taxa_pct is None %}<span class="falta">não informada</span>{% else %}{{ c.taxa|din }} ({{ c.taxa_pct|pct }}){% endif %}</p>
+  <p>Sobra: <strong>{{ c.sobra|din }}</strong> ({{ c.sobra_pct|pct }} do preço) · por unidade {{ c.sobra_un|din }}</p>
+  {% if c.sobra is None %}<p class="mudo">Sem sobra calculada: {% if c.faltando %}{{ c.faltando }}{% elif a.indiretos is None %}faltam os indiretos de referência{% else %}falta preço nesta tabela{% endif %}.</p>{% endif %}
+  {% endif %}{% endwith %}{% endif %}
+</section>{% empty %}<p>Nenhuma apresentação cadastrada.</p>{% endfor %}
+
+<h2 id="simulador">Simulador <span class="rotulo">simulação</span></h2>
+<p class="mudo">É só uma conta para decidir: o preço da tabela <strong>não muda</strong>. Vale para o canal ({{ canal.nome }}) e a tabela escolhidos acima.</p>
+<section class="bloco"><h3>Com este preço, quanto sobra?</h3>
+  <form method="get" action="{% url 'estudo_preco' %}#simulador" class="form">
+    <input type="hidden" name="tabela" value="{{ tabela }}"><input type="hidden" name="canal" value="{{ canal.canal_id }}"><input type="hidden" name="acao" value="preco">
+    <p><label>Apresentação <select name="apresentacao">{% for a in estudo.apresentacoes %}<option value="{{ a.apresentacao_id }}"{% if g.apresentacao == a.apresentacao_id|stringformat:"s" and acao == "preco" %} selected{% endif %}>{{ a.descricao }}</option>{% endfor %}</select></label></p>
+    <p><label>Preço (R$) <input name="preco" inputmode="decimal" value="{% if acao == 'preco' %}{{ g.preco }}{% endif %}" required></label></p>
+    <button type="submit">Simular preço</button></form></section>
+<section class="bloco"><h3>Para sobrar tanto %, qual seria o preço?</h3>
+  <form method="get" action="{% url 'estudo_preco' %}#simulador" class="form">
+    <input type="hidden" name="tabela" value="{{ tabela }}"><input type="hidden" name="canal" value="{{ canal.canal_id }}"><input type="hidden" name="acao" value="sobra">
+    <p><label>Apresentação <select name="apresentacao">{% for a in estudo.apresentacoes %}<option value="{{ a.apresentacao_id }}"{% if g.apresentacao == a.apresentacao_id|stringformat:"s" and acao == "sobra" %} selected{% endif %}>{{ a.descricao }}</option>{% endfor %}</select></label></p>
+    <p><label>Quanto quero que sobre (% do preço) <input name="sobra_pct" inputmode="decimal" value="{% if acao == 'sobra' %}{{ g.sobra_pct }}{% endif %}" required></label></p>
+    <button type="submit">Simular sobra</button></form></section>
+{% if sim %}<section class="bloco" id="resultado"><p><span class="rotulo">{{ sim.rotulo }}</span> {{ sim.aviso }}</p>
+  <p><strong>{{ sim.descricao }}</strong> no canal {{ sim.canal }} (taxa {{ sim.taxa_pct|pct }}){% if sim.sobra_pct_pedida is not None %}, para sobrar {{ sim.sobra_pct_pedida|pct }}{% endif %}</p>
+  <p>Preço{% if sim.sobra_pct_pedida is not None %} que daria essa sobra{% endif %}: <strong>{{ sim.preco|din }}</strong> ({{ sim.preco_un|din }} por unidade)</p>
+  <p>CMV {{ sim.cmv|din }} ({{ sim.cmv_pct|pct }} do preço) · indiretos {% if sim.inclui_indiretos %}{{ sim.indiretos|din }}{% else %}<span class="falta">sem referência: não incluídos</span>{% endif %} · taxa {{ sim.taxa|din }}</p>
+  <p>Sobra: <strong>{{ sim.sobra|din }}</strong> ({{ sim.sobra_pct|pct }} do preço) · {{ sim.sobra_un|din }} por unidade</p>
+  <p class="mudo">Preço atual na tabela: {{ sim.preco_atual|din }}{% if sim.diferenca_preco_atual is not None %} · a simulação difere em {{ sim.diferenca_preco_atual|din }}{% endif %}. <a href="{% url 'precos' %}">Mudar preços</a></p></section>{% endif %}
+
+<section class="bloco"><h3>Ponto de equilíbrio</h3>
+  <p class="mudo">Quantas vendas desta apresentação, neste canal e no preço atual, cobrem as despesas do mês (se vendesse só ela).</p>
+  <form method="get" action="{% url 'estudo_preco' %}#equilibrio" class="form">
+    <input type="hidden" name="tabela" value="{{ tabela }}"><input type="hidden" name="canal" value="{{ canal.canal_id }}"><input type="hidden" name="acao" value="equilibrio">
+    <p><label>Apresentação <select name="apresentacao">{% for a in estudo.apresentacoes %}<option value="{{ a.apresentacao_id }}"{% if g.apresentacao == a.apresentacao_id|stringformat:"s" and acao == "equilibrio" %} selected{% endif %}>{{ a.descricao }}</option>{% endfor %}</select></label></p>
+    <button type="submit">Calcular</button></form>
+  {% if eq %}<div id="equilibrio"><p><span class="rotulo">{{ eq.rotulo }}</span> {{ eq.descricao }} a {{ eq.preco|din }} em {{ eq.canal }}: cada venda deixa {{ eq.contribuicao|din }} (preço − CMV − taxa).</p>
+    <p>Despesas do mês {{ eq.competencia|date:"m/Y" }}: {{ eq.despesas|din }} → <strong>{{ eq.apresentacoes }} venda(s)</strong> ({{ eq.unidades }} un, {{ eq.receita|din }}) para empatar.</p>
+    {% for x in eq.ressalvas %}<p class="aviso">{{ x }}</p>{% endfor %}</div>{% endif %}</section>
+
+{% if real %}<section class="bloco" id="indireto-real"><h2>Os indiretos por salgado estão certos? <span class="rotulo">{{ real.rotulo }}</span></h2>
+  <p class="mudo">Compara a referência cadastrada com o que as despesas de produção (mão de obra, energia, gás, diária) custaram de verdade em {{ real.de|date:"m/Y" }}, dividido pelas unidades produzidas.</p>
+  {% if real.indireto_real_un is None %}<p>Sem conta possível: {% if not real.unidades_produzidas %}nenhuma produção concluída neste mês.{% else %}faltam dados.{% endif %}</p>
+  {% else %}<p>Real: <strong>{{ real.indireto_real_un|custo4 }}</strong> por unidade ({{ real.despesas_indiretas|din }} ÷ {{ real.unidades_produzidas }} un)
+    · referência: {{ real.referencia_un|custo4 }}
+    {% if real.diferenca_un is not None %}· diferença {{ real.diferenca_un|custo4 }} ({{ real.diferenca_pct|pctsinal }}){% endif %}</p>{% endif %}
+  <p class="mudo">Todas as despesas por unidade produzida: {{ real.despesa_total_un|custo4 }}.</p>
+  {% for f in real.faltando %}<p class="falta">Falta o valor de {{ f.despesa }} de {{ f.competencia|date:"m/Y" }}.</p>{% endfor %}
+  {% for x in real.ressalvas %}<p class="mudo">{{ x }}</p>{% endfor %}
+  <p class="acoes"><a href="{% url 'referencias' %}">Mudar as referências de cada tamanho</a></p></section>{% endif %}
+{% endblock %}

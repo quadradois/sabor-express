@@ -1,0 +1,48 @@
+{% load formato %}
+{# uma despesa do mês (mensal ou avulsa); `d` vem de despesas_do_mes + tipo/chave_id/titulo; `next` volta ao mês #}
+<section class="bloco" id="d-{{ d.tipo }}-{{ d.chave_id }}">
+  <p><strong>{{ d.titulo }}</strong> <span class="mudo">{{ d.categoria }}{% if d.tipo == "avulsa" %} · avulsa{% endif %}</span>
+    {% if d.situacao == "sem_valor" %}<span class="falta">sem valor</span>{% elif d.situacao == "paga" %}<span class="ok">paga</span>
+    {% elif d.situacao == "cancelada" %}<span class="mudo">cancelada</span>
+    {% elif d.vencida %}<span class="falta">vencida</span>{% endif %}</p>
+  {% if d.situacao == "cancelada" %}<p class="mudo">{{ d.valor|din }} · motivo: {{ d.motivo_cancelamento|default:"—" }}</p>
+  {% else %}
+  <p>{% if d.situacao == "sem_valor" %}Valor: <strong>—</strong> <span class="mudo">(ainda não informado{% if d.valor_previsto is not None %}; previsto {{ d.valor_previsto|din }}{% endif %})</span>
+    {% else %}Valor <strong>{{ d.valor|din }}</strong>{% if d.situacao == "parcial" %} · pago {{ d.pago|din }} · falta <strong>{{ d.saldo|din }}</strong>{% endif %}{% endif %}
+    · vence {{ d.vencimento|date:"d/m/Y" }}{% if d.situacao == "aberta" or d.situacao == "parcial" or d.situacao == "sem_valor" %}{% if d.vencida %} <strong class="falta">{{ d.dias|cut:"-" }} dia(s) de atraso</strong>{% endif %}{% endif %}</p>
+  {% endif %}
+  {% if d.situacao == "sem_valor" or d.situacao == "aberta" or d.situacao == "parcial" %}
+  <form method="post" action="{% url 'despesa_pagar' %}" class="form">{% csrf_token %}{% chave %}
+    <input type="hidden" name="tipo" value="{{ d.tipo }}">
+    <input type="hidden" name="{% if d.tipo == 'mensal' %}despesa{% else %}parcela{% endif %}" value="{% if d.tipo == 'mensal' %}{{ d.despesa_do_mes_id }}{% else %}{{ d.parcela_id }}{% endif %}">
+    <input type="hidden" name="next" value="{{ next }}">
+    {% if d.tipo == "avulsa" %}<p class="mudo">Paga o que falta ({{ d.saldo|din }}), a menos que você escreva outro valor.</p>
+    <p><label>Valor pago (R$) <input name="valor" inputmode="decimal" value="{{ d.saldo|reais }}"></label></p>
+    {% elif d.situacao == "parcial" %}<p class="mudo">Paga o que falta: {{ d.saldo|din }}.</p>
+    {% else %}<p><label>Valor real da conta (R$) <input name="valor" inputmode="decimal" placeholder="quanto foi" value="{% if d.situacao == 'aberta' %}{{ d.valor|reais }}{% endif %}" required></label></p>{% endif %}
+    <p><label>Pago em <input type="date" name="data_pagamento" value="{% now 'Y-m-d' %}"></label></p>
+    <p><label>Forma (pix, dinheiro...) <input name="forma"></label></p>
+    <button type="submit">Paguei</button>
+  </form>
+  {% endif %}
+  {% if d.tipo == "mensal" and d.situacao != "paga" and d.situacao != "cancelada" and d.situacao != "parcial" %}
+  <details class="cancelar"><summary>{% if d.situacao == "sem_valor" %}Só informar o valor (sem pagar)</summary>{% else %}Mudar o valor (sem pagar)</summary>{% endif %}
+  <form method="post" action="{% url 'despesa_valor' %}" class="form">{% csrf_token %}{% chave %}
+    <input type="hidden" name="despesa" value="{{ d.despesa_do_mes_id }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <p><label>Valor da conta deste mês (R$) <input name="valor" inputmode="decimal" value="{{ d.valor|reais }}" required></label></p>
+    <button type="submit">Anotar valor</button>
+  </form></details>
+  {% endif %}
+  {% if d.conta_id and d.situacao != "cancelada" %}
+  <details class="cancelar"><summary>Cancelar esta despesa</summary>
+  <form method="post" action="{% url 'despesa_cancelar' %}" class="form">{% csrf_token %}{% chave %}
+    <input type="hidden" name="conta" value="{{ d.conta_id }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    {% if d.pago %}<p class="aviso">O pagamento anotado ({{ d.pago|din }}) será estornado junto.</p>{% endif %}
+    <p><label>Motivo <input name="motivo" required></label></p>
+    <button type="submit">Cancelar despesa</button>
+  </form></details>
+  {% elif d.situacao == "sem_valor" %}<p class="mudo">Para dizer que esta despesa não existe neste mês, informe o valor e cancele em seguida.</p>
+  {% endif %}
+</section>

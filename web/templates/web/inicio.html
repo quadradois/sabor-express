@@ -27,8 +27,10 @@
 <section class="bloco"><h2><a href="{% url 'contas' %}">O que pagar</a></h2>
   <p>{% if t.contas_vencidas %}<span class="falta">{{ t.contas_vencidas }} parcela(s) vencida(s): {{ r.contas.total_vencido|dinheiro }}</span>{% else %}Nada vencido.{% endif %}</p>
   <p>{{ t.contas_a_vencer }} parcela(s) a vencer em {{ r.contas.dias }} dias: {{ r.contas.total_a_vencer|dinheiro }}</p>
+  {% for d in r.despesas.sem_valor %}{% if forloop.first %}<p class="falta">{{ r.despesas.sem_valor|length }} despesa(s) do mês sem valor{% if r.despesas.sem_valor_vencidas %} ({{ r.despesas.sem_valor_vencidas|length }} vencida(s)){% endif %}:
+    {% endif %}{{ d.despesa }}{% if not forloop.last %}, {% else %}. <a href="{% url 'despesas' %}">Informar o valor</a></p>{% endif %}{% endfor %}
   <p>Total devido: <strong>{{ r.contas.total_devido|dinheiro }}</strong></p>
-  <p><a href="{% url 'contas' %}">Ver contas a pagar</a></p></section>
+  <p class="acoes"><a href="{% url 'contas' %}">Ver contas a pagar</a> <a href="{% url 'despesas' %}">Despesas do mês</a></p></section>
 
 <section class="bloco"><h2><a href="{% url 'compras' %}">O que chega</a></h2>
   <p>{{ t.compras_a_chegar }} compra(s) esperando chegar{% if t.compras_atrasadas %}, <span class="falta">{{ t.compras_atrasadas }} atrasada(s)</span>{% endif %}.</p>
