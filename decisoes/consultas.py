@@ -17,6 +17,7 @@ from financeiro.consultas import (avisos_de_ajuste, contas_a_vencer, contas_venc
 from nucleo.models import RegistroOperacao
 from producao.models import Producao
 from vendas.consultas import encomendas, necessidade_producao, sobras_fritas, vendas_do_dia
+from vendas.lotes import lotes_deixados
 
 from .models import Decisao
 
@@ -103,6 +104,7 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
     validade = porcoes(ate=hoje + timedelta(days=dias_validade), hoje=hoje)
     vencidos = [p for p in validade if p["vencido"]]
     vencendo = [p for p in validade if not p["vencido"]]
+    deixados = lotes_deixados(hoje=hoje, dias_validade=dias_validade)
     baixo = itens_abaixo_do_minimo(hoje=hoje)
     c_vencidas, c_a_vencer = contas_vencidas(hoje=hoje), contas_a_vencer(dias=dias_contas, hoje=hoje)
     a_chegar = compras_em_aberto()
@@ -126,7 +128,9 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
     return {
         "hoje": hoje,
         "validade": {"dias": dias_validade, "vencidos": vencidos, "vencendo": vencendo,
-                     "valor_vencido": _soma(vencidos, "valor"), "valor_vencendo": _soma(vencendo, "valor")},
+                     "valor_vencido": _soma(vencidos, "valor"), "valor_vencendo": _soma(vencendo, "valor"),
+                     # Plano 9: lote que uma venda deixou para trás (vence antes do que saiu), fora de "vencendo"
+                     "deixados": deixados},
         "estoque_baixo": baixo,
         "contas": {"dias": dias_contas, "vencidas": c_vencidas, "a_vencer": c_a_vencer,
                    "total_vencido": _soma(c_vencidas, "saldo"), "total_a_vencer": _soma(c_a_vencer, "saldo"),
@@ -148,7 +152,7 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
         # despesa mensal sem valor (vencida ou vencendo na semana); com valor, já está em `contas`
         "despesas": {"sem_valor": sem_valor, "sem_valor_vencidas": [d for d in sem_valor if d["vencida"]]},
         "totais": {
-            "lotes_vencidos": len(vencidos), "lotes_vencendo": len(vencendo),
+            "lotes_vencidos": len(vencidos), "lotes_vencendo": len(vencendo), "lotes_deixados": len(deixados),
             "itens_abaixo_do_minimo": len(baixo),
             "contas_vencidas": len(c_vencidas), "contas_a_vencer": len(c_a_vencer),
             "valor_contas_vencidas": _soma(c_vencidas, "saldo"), "valor_contas_a_vencer": _soma(c_a_vencer, "saldo"),
@@ -199,7 +203,7 @@ ROTULOS = {
     "gerar_despesas_do_mes": "Despesas do mês geradas", "lancar_despesa": "Despesa lançada",
     "cancelar_despesa": "Despesa cancelada", "informar_valor_despesa": "Valor de despesa informado",
     "pagar_despesa_do_mes": "Despesa do mês paga", "salvar_referencias": "Referências do salgado salvas",
-    "salvar_canal_venda": "Canal de venda salvo",
+    "salvar_canal_venda": "Canal de venda salvo", "ajustar_contagem": "Ajuste por contagem",
 }
 
 
@@ -224,4 +228,4 @@ def historico_operacoes(*, de=None, ate=None, autor="", canal="", nome="", statu
     return [{"operacao_id": r.id, "criado_em": r.criado_em, "nome": r.nome,
              "rotulo": ROTULOS.get(r.nome, r.nome.replace("_", " ").capitalize()), "canal": r.canal,
              "autor": r.autor, "status": r.status, "parametros": r.parametros, "resultado": r.resultado,
-             "erro": r.erro} for r in qs]
+             "erro": r.erro, "motivo_vencido": (r.parametros or {}).get("motivo_vencido", "")} for r in qs]

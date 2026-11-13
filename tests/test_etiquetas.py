@@ -35,6 +35,8 @@ def test_impressao_e_reimpressao(lote):
 def test_dados_etiqueta_iguais_ao_lote(lote):
     assert dados_etiqueta(lote, "resfriado") == {
         "produto": lote.item.nome, "lote": "L1", "fabricacao": timezone.localdate(lote.criado_em),
+        "dia_producao": timezone.localdate(lote.criado_em).day, "nome_lote": "lote do dia "
+        f"{timezone.localdate(lote.criado_em).day}",
         "validade": lote.validade, "validade_manual": True, "conservacao": "Resfriado", "forma": "Cru",
         "quantidade": D("250")}
 

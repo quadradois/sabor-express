@@ -6,6 +6,7 @@ from django.db.models import Min, Sum
 from django.utils import timezone
 
 from cadastros.models import Item
+from estoque.lotes import checar_vencido
 from estoque.models import ESTADOS, FORMAS, ConsumoPendente, Lote, Movimento
 from estoque.servicos import alocar_fefo, alocar_fefo_parcial, calcular_validade, saldo_lote
 from fichas.escala import escalar
@@ -165,14 +166,19 @@ def cancelar_producao(*, producao_id, motivo, autor, canal="web", chave=None) ->
 
 def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="", estado, validade_manual=None,
                       justificativa="", anotacao="", confirmar_perda_total=False, pendente_justificativa="",
-                      autor, canal="web", chave=None) -> dict:
+                      motivo_vencido="", autor, canal="web", chave=None) -> dict:
     """Sem saldo para o que foi pesado: recusa, a menos que haja justificativa de consumo pendente
-    (aqui ou ao iniciar); então o que faltar vira `ConsumoPendente` e o custo fica pendente."""
+    (aqui ou ao iniciar); então o que faltar vira `ConsumoPendente` e o custo fica pendente.
+
+    Ingrediente vencido (Plano 9): só sai se o lote foi escolhido na pesagem e com `motivo_vencido` (o FEFO
+    automático nunca pega vencido); o motivo fica no movimento de consumo."""
     parametros = {"producao_id": producao_id, "quantidade_boa": quantidade_boa, "perdas": perdas,
                   "perda_motivo": perda_motivo, "estado": estado, "validade_manual": validade_manual,
                   "justificativa": justificativa, "anotacao": anotacao, "confirmar_perda_total": confirmar_perda_total}
     if pendente_justificativa:
         parametros["pendente_justificativa"] = pendente_justificativa
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         p = _em_andamento(producao_id)
@@ -188,11 +194,11 @@ def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="",
         hoje, motivo, custo = timezone.localdate(), f"Produção {p.id}", Decimal("0")
         pendente = (pendente_justificativa or "").strip() or p.pendente_justificativa
 
-        def consumir(lote, q):
+        def consumir(lote, q, mv=""):
             nonlocal custo
             Movimento.objects.create(tipo="consumo_producao", item=lote.item, lote=lote, quantidade=-q,
                                      quantidade_informada=q, unidade_informada=lote.item.unidade_base,
-                                     fator=Decimal("1"), motivo=motivo, operacao=op)
+                                     fator=Decimal("1"), motivo=motivo, motivo_vencido=mv, operacao=op)
             custo += q * lote.custo_unitario
 
         por_item = defaultdict(lambda: [Decimal("0"), defaultdict(Decimal)])  # item -> [total, {lote: q}]
@@ -202,10 +208,12 @@ def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="",
                 por_item[l.item][1][l.lote] += l.usado
         for item, (total, fixos) in por_item.items():
             for lote, q in fixos.items():
-                if (lote.validade and lote.validade < hoje) or saldo_lote(lote) < q:
+                mv = checar_vencido(lote, "", lote.validade, quando=hoje, motivo_vencido=motivo_vencido,
+                                    acao="usar na produção")
+                if saldo_lote(lote) < q:
                     raise RegraViolada(f"O lote escolhido de '{item.nome}' não tem {fmt_qtd(q, item.unidade_base)} disponíveis.")
                 if q > 0:
-                    consumir(lote, q)
+                    consumir(lote, q, mv)
             resto = total - sum(fixos.values())
             if resto > 0:  # depois dos fixados: o saldo já reflete o que eles consumiram
                 if not pendente:
@@ -241,12 +249,15 @@ def concluir_producao(*, producao_id, quantidade_boa, perdas=0, perda_motivo="",
     return executar("concluir_producao", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
 
 
-def conciliar_consumo(*, pendente_id, lote_id, autor, canal="web", chave=None) -> dict:
+def conciliar_consumo(*, pendente_id, lote_id, motivo_vencido="", autor, canal="web", chave=None) -> dict:
     """Vincula um consumo pendente a um lote (DEC-F2-033): baixa do lote e fecha o custo, uma única vez.
 
     O custo da produção (e do lote que ela gerou) passa a incluir o custo desse lote; quando não restar
-    pendência, o custo deixa de ser "pendente" (RN-25 a).
+    pendência, o custo deixa de ser "pendente" (RN-25 a). Lote vencido só com `motivo_vencido` (Plano 9).
     """
+    parametros = {"pendente_id": pendente_id, "lote_id": lote_id}
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         c = ConsumoPendente.objects.select_related("item", "producao__lote").filter(id=pendente_id).first()
@@ -257,14 +268,15 @@ def conciliar_consumo(*, pendente_id, lote_id, autor, canal="web", chave=None) -
         lote = Lote.objects.select_related("item").filter(id=lote_id).first()
         if lote is None or lote.item_id != c.item_id:
             raise RegraViolada(f"Esse lote não é de '{c.item.nome}'.")
-        if lote.validade and lote.validade < timezone.localdate():
-            raise RegraViolada("Lote vencido não pode ser consumido.")
+        mv = checar_vencido(lote, "", lote.validade, quando=timezone.localdate(), motivo_vencido=motivo_vencido,
+                            acao="consumir dele")
         disponivel = saldo_lote(lote)
         if disponivel < c.quantidade:
             raise RegraViolada(f"O lote só tem {fmt_qtd(disponivel, c.item.unidade_base)} de '{c.item.nome}'.")
         Movimento.objects.create(tipo="consumo_producao", item=c.item, lote=lote, quantidade=-c.quantidade,
                                  quantidade_informada=c.quantidade, unidade_informada=c.item.unidade_base,
-                                 fator=Decimal("1"), motivo=f"Conciliação do consumo pendente {c.id}", operacao=op)
+                                 fator=Decimal("1"), motivo=f"Conciliação do consumo pendente {c.id}",
+                                 motivo_vencido=mv, operacao=op)
         c.lote, c.conciliacao_operacao = lote, op
         c.custo = (c.quantidade * lote.custo_unitario).quantize(Decimal("0.01"), ROUND_HALF_UP)
         c.save(update_fields=["lote", "conciliacao_operacao", "custo"])
@@ -280,8 +292,7 @@ def conciliar_consumo(*, pendente_id, lote_id, autor, canal="web", chave=None) -
         return {"pendente_id": c.id, "lote_id": lote.id, "custo": c.custo, "producao_id": c.producao_id,
                 "custo_total": p.custo_total if p else None, "custo_pendente": p.custo_pendente if p else False}
 
-    return executar("conciliar_consumo", func, autor=autor, canal=canal, chave=chave,
-                    parametros={"pendente_id": pendente_id, "lote_id": lote_id})
+    return executar("conciliar_consumo", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
 
 
 def origem(lote) -> list:

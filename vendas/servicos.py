@@ -6,6 +6,7 @@ e vira venda na entrega, uma única vez. Preço, fator e custo ficam gravados na
 O sistema nunca cobra: venda a prazo e saldo de encomenda a prazo viram conta a receber (anotação).
 """
 
+from collections import defaultdict
 from datetime import time
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -14,6 +15,7 @@ from django.utils import timezone
 
 from cadastros.models import Cliente, Item
 from cadastros.servicos import _normal
+from estoque.lotes import checar_vencido, nome_lote, texto_vencido, vencida
 from estoque.models import ESTADOS, FORMAS, Lote, Movimento
 from estoque.servicos import alocar_fefo, alocar_porcoes, saldo_lote, validade_porcao
 from financeiro.servicos import abrir_conta_receber, cancelar_conta_da_venda
@@ -22,6 +24,7 @@ from nucleo.valores import CENTAVO, data, decimal, reais
 from web.templatetags.formato import dinheiro
 from web.templatetags.formato import quantidade as fmt_qtd
 
+from .lotes import Separador, _indicados_por_item, dia_da_venda, reservas_da_encomenda, separar_linha
 from .models import CONDICOES, DESTINOS, MODOS, TABELAS, Apresentacao, CanalVenda, Encomenda, ItemEncomenda, LinhaVenda, Reserva, Venda
 
 
@@ -165,18 +168,36 @@ def _ler_itens(itens, tabela) -> list[dict]:
         if preco < 0:
             raise RegraViolada(f"Item {i}: o preço não pode ser negativo.")
         lidas.append({"apresentacao": a, "quantidade": qtd, "unidades": qtd * a.unidades, "preco_tabela": tab,
-                      "preco": preco, "total": _rs(preco * qtd)})
+                      "preco": preco, "total": _rs(preco * qtd), "lotes": it.get("lotes") or None})
     return lidas
 
 
 # ---------- baixa de estoque (dentro de executar) ----------
 
-def _baixar(op, lote, estado, q, motivo) -> dict:
+def _baixar(op, lote, estado, q, motivo, motivo_vencido="") -> dict:
     Movimento.objects.create(tipo="saida_venda", item=lote.item, lote=lote, quantidade=-q, quantidade_informada=q,
                              unidade_informada=lote.item.unidade_base, fator=Decimal("1"), motivo=motivo,
-                             estado=estado, operacao=op)
-    return {"lote_id": lote.id, "item_id": lote.item_id, "estado": estado, "quantidade": q,
-            "custo": _rs(q * lote.custo_unitario)}
+                             estado=estado, motivo_vencido=motivo_vencido, operacao=op)
+    b = {"lote_id": lote.id, "item_id": lote.item_id, "estado": estado, "quantidade": q,
+         "custo": _rs(q * lote.custo_unitario)}
+    if motivo_vencido:
+        b["motivo_vencido"] = motivo_vencido
+    return b
+
+
+def _baixar_produto(op, sep, lote, estado, q, motivo) -> dict:
+    """Baixa de produto: porção vencida no dia da venda só com o motivo (o Separador já recusou sem ele)."""
+    vencido = vencida(validade_porcao(lote, estado), sep.quando)
+    return _baixar(op, lote, estado, q, motivo, sep.motivo_vencido if vencido else "")
+
+
+def _deixados_json(linha) -> list[dict]:
+    return [{"lote_id": d["lote_id"], "estado": d["estado"], "unidades": d["unidades"], "validade": d["validade"]}
+            for d in linha["deixados"]]
+
+
+def _avisos(linhas) -> list[str]:
+    return [a["texto"] for l in linhas for a in l["avisos"] if a["tipo"] in ("deixado", "vence_hoje", "vence_amanha")]
 
 
 def _baixar_embalagens(op, a, quantidade, motivo, hoje) -> list[dict]:
@@ -217,47 +238,67 @@ def _parcelas_saida(conta):
                       for p in conta.parcelas.order_by("numero")]
 
 
+def _lotes_da_linha(l, hoje) -> list[dict]:
+    lotes = Lote.objects.in_bulk([b["lote_id"] for b in l.baixas if b["item_id"] == l.apresentacao.produto_id])
+    return [{"lote_id": b["lote_id"], "nome": nome_lote(lotes[b["lote_id"]], hoje=hoje), "estado": b["estado"],
+             "unidades": b["quantidade"], "motivo_vencido": b.get("motivo_vencido", "")}
+            for b in l.baixas if b["lote_id"] in lotes and b["item_id"] == l.apresentacao.produto_id]
+
+
 def _linhas_saida(venda):
+    hoje = timezone.localdate()
     return [{"apresentacao_id": l.apresentacao_id, "apresentacao": str(l.apresentacao), "quantidade": l.quantidade,
              "unidades": l.quantidade * l.unidades_por, "preco": l.preco, "preco_tabela": l.preco_tabela,
-             "total": l.total} for l in venda.linhas.select_related("apresentacao__produto")]
+             "total": l.total, "lotes": _lotes_da_linha(l, hoje), "lotes_indicados": l.lotes_indicados,
+             "deixados": l.deixados} for l in venda.linhas.select_related("apresentacao__produto")]
 
 
 # ---------- venda direta ----------
 
 def registrar_venda(*, itens, tabela="varejo", cliente_id=None, condicao="a_vista", forma_pagamento="",
-                    parcelas=None, data_venda=None, autor, canal="web", chave=None) -> dict:
+                    parcelas=None, data_venda=None, motivo_vencido="", autor, canal="web", chave=None) -> dict:
     """Venda de balcão ou atacado (RF-VEN-01 a 04, FL-06): baixa cada apresentação em unidades do produto
     (FEFO pela porção na forma e conservação da apresentação, fora o reservado e o vencido) e as embalagens.
     Faltando estoque, recusa sem gravar (venda não aceita consumo pendente). À vista: entra na hora.
-    A prazo: precisa do cliente e das parcelas (soma = total) e vira conta a receber."""
+    A prazo: precisa do cliente e das parcelas (soma = total) e vira conta a receber.
+
+    Plano 9: cada item pode trazer `lotes` = [{lote_id, unidades}] (o atendente indicou de onde pegou; o que
+    faltar sai por FEFO). Lote vencido só sai indicado e com `motivo_vencido`. Com `data_venda` passada, a
+    validade é julgada naquele dia; data futura é recusada. Lote indicado que deixou para trás outro que vence
+    antes não trava: a venda grava e devolve o aviso em `avisos`."""
     parametros = {"itens": itens, "tabela": tabela, "cliente_id": cliente_id, "condicao": condicao,
                   "forma_pagamento": forma_pagamento, "parcelas": parcelas, "data_venda": data_venda}
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         _condicao(condicao)
         cliente = _cliente(cliente_id, "Venda a prazo precisa do cliente." if condicao == "a_prazo" else None)
         hoje = timezone.localdate()
-        quando = data(data_venda, "data_venda") or hoje
+        quando = dia_da_venda(data_venda, hoje=hoje)
         lidas = _ler_itens(itens, tabela)
         total = sum((l["total"] for l in lidas), Decimal("0"))
+        sep = Separador(quando=quando, hoje=hoje, motivo_vencido=motivo_vencido)
+        separadas = []
+        for i, l in enumerate(lidas, 1):  # aloca tudo antes de gravar: a separação é a mesma da consulta
+            s = separar_linha(sep, l["apresentacao"], l["unidades"], l["lotes"], i)
+            if s["falta"] > 0:
+                raise _falta_produto(l["apresentacao"], l["unidades"], s["falta"])
+            separadas.append(s)
         v = Venda.objects.create(cliente=cliente, data=quando, tabela=tabela, condicao=condicao,
                                  forma_pagamento=(forma_pagamento or "").strip(), total=total, custo=0,
                                  recebido_na_hora=total if condicao == "a_vista" else 0, operacao=op)
         motivo, custo = f"Venda {v.id}", Decimal("0")
-        for l in lidas:
+        for l, s in zip(lidas, separadas):
             a = l["apresentacao"]
-            alocacao, falta = alocar_porcoes(a.produto, Decimal(l["unidades"]), forma=a.forma, estado=a.estado,
-                                             hoje=hoje)
-            if falta > 0:
-                raise _falta_produto(a, l["unidades"], falta)
-            baixas = [_baixar(op, lote, a.estado, q, motivo) for lote, q in alocacao]
+            baixas = [_baixar_produto(op, sep, lote, a.estado, q, motivo) for lote, q in s["alocacao"]]
             baixas += _baixar_embalagens(op, a, l["quantidade"], motivo, hoje)
             c = sum((b["custo"] for b in baixas), Decimal("0"))
             custo += c
             LinhaVenda.objects.create(venda=v, apresentacao=a, quantidade=l["quantidade"], unidades_por=a.unidades,
                                       preco_tabela=l["preco_tabela"], preco=l["preco"], total=l["total"], custo=c,
-                                      baixas=_json(baixas))
+                                      baixas=_json(baixas), lotes_indicados=s["lotes_indicados"],
+                                      deixados=_json(_deixados_json(s)))
         v.custo = custo
         v.save(update_fields=["custo"])
         conta = None
@@ -265,19 +306,23 @@ def registrar_venda(*, itens, tabela="varejo", cliente_id=None, condicao="a_vist
             conta = abrir_conta_receber(op, venda=v, total=total, parcelas=parcelas,
                                         descricao=f"Venda {v.id} — {cliente}")
         conta_id, parc = _parcelas_saida(conta)
-        return {"venda_id": v.id, "cliente": str(cliente or ""), "condicao": condicao, "total": total,
-                "custo": custo, "recebido_na_hora": v.recebido_na_hora, "conta_id": conta_id, "parcelas": parc,
-                "linhas": _linhas_saida(v)}
+        return {"venda_id": v.id, "data": quando, "cliente": str(cliente or ""), "condicao": condicao,
+                "total": total, "custo": custo, "recebido_na_hora": v.recebido_na_hora, "conta_id": conta_id,
+                "parcelas": parc, "linhas": _linhas_saida(v), "avisos": _avisos(separadas)}
 
     return executar("registrar_venda", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
 
 
-def cancelar_venda(*, venda_id, motivo, destino="perda", autor, canal="web", chave=None) -> dict:
+def cancelar_venda(*, venda_id, motivo, destino="perda", motivo_vencido="", autor, canal="web",
+                   chave=None) -> dict:
     """Cancela ou registra a devolução total de uma venda (RF-VEN-09/10, FL-09). As unidades vão para perda
     por padrão (RN-36); com `destino="estoque"` voltam aos lotes de origem, se a porção não venceu
     (embalagens não voltam). O recebível em aberto é cancelado; o que o cliente já pagou (à vista, sinal
-    e recebimentos) fica anotado em `valor_devolvido`."""
+    e recebimentos) fica anotado em `valor_devolvido`. Porção vencida só volta ao estoque com `motivo_vencido`
+    (volta vencida: entra na conferência do vencido)."""
     parametros = {"venda_id": venda_id, "motivo": motivo, "destino": destino}
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         v = Venda.objects.select_related("encomenda").filter(id=venda_id).first()
@@ -298,14 +343,16 @@ def cancelar_venda(*, venda_id, motivo, destino="perda", autor, canal="web", cha
                         continue  # embalagem usada não volta
                     lote = Lote.objects.select_related("item").get(id=b["lote_id"])
                     validade = validade_porcao(lote, b["estado"])
-                    if validade and validade < hoje:
-                        raise RegraViolada(f"O lote {lote.codigo or 'sem lote'} de '{lote.item.nome}' venceu: "
-                                           "a devolução vai para perda (RN-36).")
+                    mv = checar_vencido(
+                        lote, b["estado"], validade, quando=hoje, motivo_vencido=motivo_vencido,
+                        regra=lambda: f"O {nome_lote(lote)} de '{lote.item.nome}' venceu: a devolução vai para perda "
+                                      f"(RN-36). Venceu em {validade:%d/%m}; para voltar ao estoque mesmo assim, "
+                                      "informe o motivo.")
                     q = Decimal(b["quantidade"])
                     Movimento.objects.create(tipo="devolucao_cliente", item=lote.item, lote=lote, quantidade=q,
                                              quantidade_informada=q, unidade_informada="un", fator=Decimal("1"),
                                              motivo=f"Devolução da venda {v.id}: {texto}", estado=b["estado"],
-                                             validade=validade, operacao=op)
+                                             validade=validade, motivo_vencido=mv, operacao=op)
                     devolvidas += q
         recebido = Decimal("0")
         conta = getattr(v, "conta", None)
@@ -469,50 +516,94 @@ def cancelar_encomenda(*, encomenda_id, motivo, devolver_sinal=True, autor, cana
     return executar("cancelar_encomenda", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
 
 
+def _fechar_reservas(op, reservas, alocacao) -> None:
+    """Entrega com lote indicado: reserva coberta pelo que saiu da porção dela vira "baixada"; a que não saiu
+    (o atendente pegou de outro lote) é liberada, com o motivo."""
+    tomado = defaultdict(Decimal)
+    for lote, q in alocacao:
+        tomado[lote.id] += q
+    for r in reservas:
+        if tomado[r.lote_id] >= r.quantidade:
+            tomado[r.lote_id] -= r.quantidade
+            r.situacao, r.fim_operacao = "baixada", op
+        else:
+            r.situacao, r.fim_operacao, r.motivo = "liberada", op, "na entrega saiu de outro lote"
+        r.save(update_fields=["situacao", "fim_operacao", "motivo"])
+
+
 def entregar_encomenda(*, encomenda_id, condicao="a_vista", forma_pagamento="", parcelas=None, data_entrega=None,
-                       autor, canal="web", chave=None) -> dict:
+                       lotes=None, motivo_vencido="", autor, canal="web", chave=None) -> dict:
     """Entrega ou retirada (RF-VEN-08): só com tudo reservado e dentro da validade; as reservas viram saída
     por venda e as embalagens são baixadas. Vira uma venda, uma única vez. O saldo (total − sinal) entra
-    na hora (à vista) ou vira conta a receber (a prazo, parcelas somando o saldo)."""
+    na hora (à vista) ou vira conta a receber (a prazo, parcelas somando o saldo).
+
+    Plano 9: `lotes` = [{item_encomenda_id, lotes: [{lote_id, unidades}]}] diz de onde o atendente pegou cada
+    item (pode usar o reservado da própria encomenda; o que faltar sai por FEFO); as reservas não usadas são
+    liberadas. Reserva ou lote vencido no dia da entrega só sai com `motivo_vencido`."""
     parametros = {"encomenda_id": encomenda_id, "condicao": condicao, "forma_pagamento": forma_pagamento,
                   "parcelas": parcelas, "data_entrega": data_entrega}
+    if lotes:
+        parametros["lotes"] = lotes
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         e = _aberta(encomenda_id, lock=True)
         _condicao(condicao)
         hoje = timezone.localdate()
-        quando = data(data_entrega, "data_entrega") or hoje
+        quando = dia_da_venda(data_entrega, "data_entrega", hoje=hoje)
+        indicados = _indicados_por_item(lotes)
+        itens_e = list(e.itens.select_related("apresentacao__produto", "apresentacao__embalagem"))
+        if set(indicados) - {ie.id for ie in itens_e}:
+            raise RegraViolada("Os lotes indicados citam um item que não é desta encomenda.")
+        sep = Separador(quando=quando, hoje=hoje, usar_reservas=reservas_da_encomenda(e), motivo_vencido=motivo_vencido)
+        planos = []
+        for ie in itens_e:  # aloca tudo antes de gravar
+            a = ie.apresentacao
+            reservas = list(ie.reservas.filter(situacao="ativa").select_related("lote__item").order_by("id"))
+            if ie.id in indicados:
+                sp = separar_linha(sep, a, ie.unidades, indicados[ie.id])
+                if sp["falta"] > 0:
+                    raise _falta_produto(a, ie.unidades, sp["falta"])
+                planos.append((ie, reservas, sp))
+                continue
+            tem = sum((r.quantidade for r in reservas), Decimal("0"))
+            if tem < ie.unidades:
+                raise RegraViolada(f"Falta reservar {_un(ie.unidades - tem)} de '{a.produto.nome}' {a.forma} "
+                                   f"{a.estado}. Complete a reserva antes de entregar.")
+            for r in reservas:
+                validade = validade_porcao(r.lote, r.estado)
+                checar_vencido(r.lote, r.estado, validade, quando=quando, motivo_vencido=motivo_vencido,
+                               regra=lambda: f"{texto_vencido(r.lote, r.estado, validade)} Complete a reserva com "
+                                             "outro lote ou, para entregar dele mesmo assim, informe o motivo.")
+                if saldo_lote(r.lote, r.estado) - sep.usado[(r.lote_id, r.estado)] < r.quantidade:
+                    raise RegraViolada(f"O {nome_lote(r.lote)} de '{a.produto.nome}' não tem mais "
+                                       f"{_un(r.quantidade)} em {r.estado}.")
+                sep._pegar(r.lote, r.estado, r.quantidade)
+            planos.append((ie, reservas, {"alocacao": [(r.lote, r.quantidade) for r in reservas], "avisos": [],
+                                          "lotes_indicados": False, "deixados": []}))
         saldo = e.total - e.sinal
         cond = condicao if saldo > 0 else "a_vista"
         v = Venda.objects.create(cliente=e.cliente, data=quando, tabela=e.tabela, condicao=cond,
                                  forma_pagamento=(forma_pagamento or "").strip(), total=e.total, custo=0,
                                  recebido_na_hora=saldo if cond == "a_vista" else 0, encomenda=e, operacao=op)
         motivo, custo = f"Venda {v.id} (encomenda {e.id})", Decimal("0")
-        for ie in e.itens.select_related("apresentacao__produto", "apresentacao__embalagem"):
+        for ie, reservas, sp in planos:
             a = ie.apresentacao
-            reservas = list(ie.reservas.filter(situacao="ativa").select_related("lote__item"))
-            tem = sum((r.quantidade for r in reservas), Decimal("0"))
-            if tem < ie.unidades:
-                raise RegraViolada(f"Falta reservar {_un(ie.unidades - tem)} de '{a.produto.nome}' {a.forma} "
-                                   f"{a.estado}. Complete a reserva antes de entregar.")
-            baixas = []
-            for r in reservas:
-                validade = validade_porcao(r.lote, r.estado)
-                if validade and validade < hoje:
-                    raise RegraViolada(f"O lote {r.lote.codigo or 'sem lote'} reservado de '{a.produto.nome}' "
-                                       "venceu. Complete a reserva com outro lote antes de entregar.")
-                if saldo_lote(r.lote, r.estado) < r.quantidade:
-                    raise RegraViolada(f"O lote {r.lote.codigo or 'sem lote'} de '{a.produto.nome}' não tem mais "
-                                       f"{_un(r.quantidade)} em {r.estado}.")
-                baixas.append(_baixar(op, r.lote, r.estado, r.quantidade, motivo))
-                r.situacao, r.fim_operacao = "baixada", op
-                r.save(update_fields=["situacao", "fim_operacao"])
+            baixas = [_baixar_produto(op, sep, lote, a.estado, q, motivo) for lote, q in sp["alocacao"]]
+            if sp["lotes_indicados"]:
+                _fechar_reservas(op, reservas, sp["alocacao"])
+            else:
+                for r in reservas:
+                    r.situacao, r.fim_operacao = "baixada", op
+                    r.save(update_fields=["situacao", "fim_operacao"])
             baixas += _baixar_embalagens(op, a, ie.quantidade, motivo, hoje)
             c = sum((b["custo"] for b in baixas), Decimal("0"))
             custo += c
             LinhaVenda.objects.create(venda=v, apresentacao=a, quantidade=ie.quantidade, unidades_por=ie.unidades_por,
                                       preco_tabela=ie.preco_tabela, preco=ie.preco, total=ie.total, custo=c,
-                                      baixas=_json(baixas))
+                                      baixas=_json(baixas), lotes_indicados=sp["lotes_indicados"],
+                                      deixados=_json(_deixados_json(sp)))
         v.custo = custo
         v.save(update_fields=["custo"])
         conta = None
@@ -524,6 +615,7 @@ def entregar_encomenda(*, encomenda_id, condicao="a_vista", forma_pagamento="", 
         conta_id, parc = _parcelas_saida(conta)
         return {"venda_id": v.id, "encomenda_id": e.id, "cliente": str(e.cliente), "condicao": cond,
                 "total": e.total, "sinal": e.sinal, "saldo": saldo, "recebido_na_hora": v.recebido_na_hora,
-                "custo": custo, "conta_id": conta_id, "parcelas": parc, "linhas": _linhas_saida(v)}
+                "custo": custo, "conta_id": conta_id, "parcelas": parc, "linhas": _linhas_saida(v),
+                "avisos": _avisos([sp for _, _, sp in planos])}
 
     return executar("entregar_encomenda", func, autor=autor, canal=canal, chave=chave, parametros=parametros)

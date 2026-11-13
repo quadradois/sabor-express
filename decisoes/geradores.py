@@ -12,12 +12,15 @@ from django.utils import timezone
 
 from cadastros.models import Item
 from compras.consultas import compras_em_aberto
+from estoque.lotes import dia_producao, nome_lote
+from estoque.models import Lote
 from estoque.servicos import alocar_porcoes, consumos_pendentes, itens_abaixo_do_minimo, porcoes, validade_porcao
 from financeiro.consultas import (avisos_de_ajuste, contas_a_vencer, contas_vencidas, despesas_sem_valor,
                                   receber_vencidas)
 from financeiro.despesas import gerar_despesas_do_mes
 from producao.models import LinhaPreparo, Producao
 from vendas.consultas import encomendas, sobras_fritas
+from vendas.lotes import lotes_deixados
 from vendas.models import Reserva
 from web.templatetags.formato import dinheiro, quantidade
 
@@ -49,12 +52,43 @@ def _pct(r: Decimal) -> str:
     return f"{(r * 100).quantize(Decimal('1'), ROUND_HALF_UP)}%"
 
 
+def _conferencia(p, lote, hoje) -> dict:
+    """As três respostas da conferência do vencido e o serviço de cada uma (para tela e agente)."""
+    vendido = lote.item.tipo == "produto"
+    base = {"lote_id": p["lote_id"], "estado": p["estado"]}
+    return {
+        "ja_saiu": {"resposta": "já foram vendidas" if vendido else "já foram usadas",
+                    "servico": "registrar_venda" if vendido else "ajustar_contagem",
+                    "como": ("registre a venda com a data em que aconteceu, indicando este lote "
+                             "(itens[].lotes e data_venda)") if vendido else "conte o que sobrou e ajuste"},
+        "estao_aqui": {"resposta": "estão aqui", "servico": "registrar_perda",
+                       "como": "diga o destino e o motivo (descarte, consumo da equipe, doação...)",
+                       "parametros": {**base, "quantidade": p["saldo"]}},
+        "nao_sei": {"resposta": "não sei", "servico": "ajustar_contagem",
+                    "como": "conte quantas há de fato; o sistema ajusta o saldo", "parametros": base},
+    }
+
+
 def lotes_vencidos(hoje):
-    return [{"assunto": f"lote_vencido:{p['lote_id']}:{p['estado']}",
-             "texto": f"{p['item']} venceu em {_data(p['validade'])}: {quantidade(p['saldo'], p['unidade_base'])} "
-                      f"no lote {p['codigo']}{_estado(p['estado'])}. Lote vencido só pode ser descartado.",
-             "detalhes": p}
-            for p in porcoes(ate=hoje - timedelta(days=1), hoje=hoje)]
+    """Conferência do vencido (Plano 9): porção com saldo que venceu pergunta se ainda está lá. Um item por porção
+    (o assunto não muda de um dia para o outro: a caixa não repete a pergunta todo dia); some quando o saldo zera
+    (venda com a data real, destino com motivo ou contagem)."""
+    saida = []
+    vencidas = porcoes(ate=hoje - timedelta(days=1), hoje=hoje)
+    lotes = Lote.objects.select_related("item").in_bulk({p["lote_id"] for p in vencidas})
+    for p in vencidas:
+        lote = lotes[p["lote_id"]]
+        nome = nome_lote(lote, hoje=hoje)
+        saiu = "vendidas" if lote.item.tipo == "produto" else "usadas"
+        saida.append({
+            "assunto": f"lote_vencido:{p['lote_id']}:{p['estado']}",
+            "texto": f"{p['item']} venceu em {_data(p['validade'])}: {quantidade(p['saldo'], p['unidade_base'])} "
+                     f"no lote {p['codigo']}{_estado(p['estado'])} ({nome}) constam no estoque. Ainda estão aí? "
+                     f"Se já foram {saiu}, registre com a data em que aconteceu; se estão aqui, diga o destino com o "
+                     "motivo (descarte, consumo da equipe...); se não sabe, conte e ajuste.",
+            "detalhes": {**p, "nome": nome, "dia_producao": dia_producao(lote),
+                         "conferencia": _conferencia(p, lote, hoje)}})
+    return saida
 
 
 def lotes_vencendo(hoje):
@@ -262,9 +296,21 @@ def sobras_fritas_(hoje):
             for p in sobras_fritas(hoje=hoje, ate_ontem=True)]
 
 
+def lotes_deixados_(hoje):
+    """Lote deixado para trás numa venda com lote indicado (Plano 9): lembra de vender esse primeiro enquanto ele
+    não entra no aviso de validade (lotes_vencendo/lotes_vencidos já falam dele daí em diante: sem aviso em dobro)."""
+    return [{"assunto": f"lote_deixado:{d['lote_id']}:{d['estado']}",
+             "texto": f"Na venda {d['venda_id']} ({_data(d['data_venda'])}) o {d['item']} saiu de um lote mais novo e "
+                      f"ficaram {quantidade(d['saldo'], 'un')} do {d['nome']}{_estado(d['estado'])}, que vence em "
+                      f"{_data(d['validade'])}. Venda esse primeiro.",
+             "detalhes": d}
+            for d in lotes_deixados(hoje=hoje, dias_validade=DIAS_VALIDADE)]
+
+
 GERADORES = {
     "lotes_vencidos": lotes_vencidos,
     "lotes_vencendo": lotes_vencendo,
+    "lotes_deixados": lotes_deixados_,
     "estoque_baixo": estoque_baixo,
     "contas_vencidas": contas_vencidas_,
     "contas_a_vencer": contas_a_vencer_,
