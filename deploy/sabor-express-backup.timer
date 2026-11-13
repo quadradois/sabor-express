@@ -1,0 +1,11 @@
+# Exemplo — copiar para ~/.config/systemd/user/ (veja docs/backup.md)
+[Unit]
+Description=Backup diário do Sabor Express (23h)
+
+[Timer]
+OnCalendar=*-*-* 23:00:00
+# Se o computador estava desligado na hora, faz o backup assim que ligar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

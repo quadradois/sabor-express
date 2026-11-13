@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'compras',
     'financeiro',
     'agente',
+    'backup',
 ]
 
 MIDDLEWARE = [
@@ -135,6 +136,11 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
+
+# Backup (app `backup`): pasta, e retenção (dias seguidos + um por mês).
+BACKUP_DIR = Path(os.environ.get("SABOR_BACKUP_DIR", "~/backups-sabor-express")).expanduser()
+BACKUP_RETENCAO_DIAS = int(os.environ.get("SABOR_BACKUP_DIAS", "14"))
+BACKUP_RETENCAO_MESES = int(os.environ.get("SABOR_BACKUP_MESES", "12"))
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'inicio'
 LOGOUT_REDIRECT_URL = 'login'
