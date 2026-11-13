@@ -1,0 +1,34 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Fritura — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Fritura</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'sobras' %}">Sobras fritas</a></p>
+<form method="get" class="form">
+  <p><label>Qual salgado cru vai para o óleo? <select name="produto" onchange="this.form.submit()"><option value="">—</option>{% for id, nome in produtos %}<option value="{{ id }}" {% if produto == id|stringformat:"s" %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <noscript><button type="submit">Ver lotes</button></noscript>
+</form>
+{% if produto %}
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="produto" value="{{ produto }}">
+  <h2>De qual lote</h2>
+  {% for s in porcoes %}<p class="bloco"><label><input type="radio" name="porcao" value="{{ s.lote_id }}|{{ s.estado }}" {% if p.porcao == s.lote_id|stringformat:"s"|add:"|"|add:s.estado %}checked{% elif not p.porcao and forloop.first %}checked{% endif %}>
+    lote {{ s.codigo }} · {{ s.estado|conservacao|lower }} · {{ s.livre|numero }} un livres · vence {{ s.validade|date:"d/m/Y"|default:"sem validade" }} · custo {{ s.custo_unitario|dinheiro }}/un{% if forloop.first %} <span class="mudo">(vence primeiro)</span>{% endif %}</label></p>
+  {% empty %}<p>Nenhum lote cru livre deste salgado.</p>{% endfor %}
+  {% if porcoes %}
+  <p><label>Quantas foram fritas <input name="quantidade" value="{{ p.quantidade|default:'' }}" inputmode="numeric"></label></p>
+  <p><label>Quantas saíram boas <input name="boas" value="{{ p.boas|default:'' }}" inputmode="numeric"></label></p>
+  <p><label>Motivo das perdas (se alguma se perdeu) <input name="perda_motivo" value="{{ p.perda_motivo|default:'' }}"></label></p>
+  <p><label>Guardar o frito como <select name="estado_destino">{% for v, nome in estados %}<option value="{{ v }}" {% if p.estado_destino == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <p><label><input type="checkbox" name="confirmar_perda_total" value="1" {% if p.confirmar_perda_total %}checked{% endif %}> Nenhuma saiu boa: confirmo a perda total</label></p>
+  <details class="cancelar"><summary>Validade manual (só se o salgado não tem validade cadastrada)</summary>
+    <p><label>Validade <input type="date" name="validade_manual" value="{{ p.validade_manual|default:'' }}"></label></p>
+    <p><label>Justificativa <input name="justificativa" value="{{ p.justificativa|default:'' }}"></label></p></details>
+  <button type="submit">Registrar fritura</button>
+  {% endif %}
+</form>
+{% endif %}
+<h2>Fritadas de hoje</h2>
+<ul class="linhas">{% for f in frituras %}<li><span class="nome">{{ f.produto }}</span> {{ f.fritas }} fritas · {{ f.boas }} boas · {{ f.perdas }} perda(s) · {{ f.custo_unitario|default:0|dinheiro }}/un</li>{% empty %}<li>Nenhuma fritura registrada hoje.</li>{% endfor %}</ul>
+{% endblock %}

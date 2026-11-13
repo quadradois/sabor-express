@@ -1,0 +1,8 @@
+{# pagamento da venda ou da entrega: à vista (forma) ou a prazo (parcelas); `p` = o que foi digitado #}
+<h2>Pagamento</h2>
+<p><label><input type="radio" name="condicao" value="a_vista" {% if p.condicao != "a_prazo" %}checked{% endif %}> À vista</label>
+   <label><input type="radio" name="condicao" value="a_prazo" {% if p.condicao == "a_prazo" %}checked{% endif %}> A prazo (fiado, vira conta a receber)</label></p>
+<p><label>À vista — forma (pix, dinheiro, cartão...) <input name="forma_pagamento" value="{{ p.forma_pagamento|default:'' }}"></label></p>
+<p><label>A prazo — número de parcelas <input name="parcelas_n" value="{{ p.parcelas_n|default:'1' }}" inputmode="numeric"></label></p>
+<p><label>A prazo — primeiro vencimento <input type="date" name="primeiro_vencimento" value="{{ p.primeiro_vencimento|default:'' }}"></label></p>
+<p><label>A prazo — dias entre parcelas <input name="intervalo" value="{{ p.intervalo|default:'30' }}" inputmode="numeric"></label></p>

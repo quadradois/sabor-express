@@ -15,7 +15,8 @@
 
 <section class="bloco"><h2>Validade</h2>
   <p>{% if t.lotes_vencidos %}<span class="falta">{{ t.lotes_vencidos }} lote(s) vencido(s): {{ r.validade.valor_vencido|dinheiro }}</span>{% else %}Nada vencido.{% endif %}</p>
-  {% for p in r.validade.vencidos %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> · {{ p.saldo|quantidade:p.unidade_base }} · venceu {{ p.validade|date:"d/m" }}</p>{% endfor %}
+  {% for p in r.validade.vencidos %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> · {{ p.saldo|quantidade:p.unidade_base }} · venceu {{ p.validade|date:"d/m/Y" }}</p>
+  {% include "web/_descartar.html" with lote_id=p.lote_id estado=p.estado saldo=p.saldo next=request.path %}{% endfor %}
   <p>{% if t.lotes_vencendo %}{{ t.lotes_vencendo }} lote(s) vencendo em até {{ r.validade.dias }} dias: {{ r.validade.valor_vencendo|dinheiro }}{% else %}Nada vencendo em {{ r.validade.dias }} dias.{% endif %}</p>
   {% for p in r.validade.vencendo %}<p><a href="{% url 'lote' p.lote_id %}">{{ p.item }}</a> · {{ p.saldo|quantidade:p.unidade_base }} · vence {{ p.validade|date:"d/m" }}</p>{% endfor %}</section>
 
@@ -40,12 +41,43 @@
     {% for pid in custo_pendente %}<a href="{% url 'producao' pid %}">#{{ pid }}</a> {% endfor %}</p>{% endif %}
   <p><a href="{% url 'producao_nova' %}">Nova produção</a></p></section>
 
+<section class="bloco"><h2><a href="{% url 'vendas' %}">Vendas de hoje</a></h2>
+  <p>{% if t.vendas_hoje %}{{ t.vendas_hoje }} venda(s): <strong>{{ t.valor_vendas_hoje|dinheiro }}</strong>
+    (entrou {{ r.vendas.hoje.recebido_na_hora|dinheiro }}, a prazo {{ r.vendas.hoje.a_prazo|dinheiro }}){% else %}Nenhuma venda hoje.{% endif %}</p>
+  <p class="acoes"><a href="{% url 'vender' %}">Vender</a> <a href="{% url 'vendas' %}">Vendas do dia</a></p></section>
+
+<section class="bloco"><h2><a href="{% url 'encomendas' %}">Encomendas</a></h2>
+  <p>{{ t.encomendas_hoje }} para hoje, {{ t.encomendas_proximas }} nos próximos {{ r.encomendas.dias }} dias{% if t.encomendas_atrasadas %}, <span class="falta">{{ t.encomendas_atrasadas }} atrasada(s)</span>{% endif %}{% if t.encomendas_sem_estoque %}, <span class="falta">{{ t.encomendas_sem_estoque }} sem estoque completo</span>{% endif %}.</p>
+  {% for e in r.encomendas.atrasadas %}<p><a href="{% url 'encomenda' e.encomenda_id %}">#{{ e.encomenda_id }} {{ e.cliente }}</a> · {{ e.entrega_data|date:"d/m/Y" }} <span class="falta">atrasada</span>{% if e.encomenda_id in sem_estoque %} <span class="falta">falta {{ e.falta|numero }} un</span>{% endif %}</p>{% endfor %}
+  {% for e in r.encomendas.proximas %}<p><a href="{% url 'encomenda' e.encomenda_id %}">#{{ e.encomenda_id }} {{ e.cliente }}</a> · {{ e.entrega_data|date:"d/m/Y" }}{% if e.entrega_hora %} {{ e.entrega_hora|time:"H:i" }}{% endif %} · {% if e.encomenda_id in sem_estoque %}<span class="falta">falta {{ e.falta|numero }} un</span>{% else %}pronta{% endif %}</p>{% endfor %}
+  {% for n in r.encomendas.necessidade %}{% if forloop.first %}<p><strong>Falta produzir:</strong></p>{% endif %}<p>{{ n.produto }} ({{ n.forma|forma_nome|lower }}): <span class="falta">{{ n.a_produzir|numero }} un</span></p>{% endfor %}
+  <p class="acoes"><a href="{% url 'encomenda_nova' %}">Nova encomenda</a> <a href="{% url 'necessidade' %}">O que falta produzir</a></p></section>
+
+<section class="bloco"><h2><a href="{% url 'receber' %}">A receber</a></h2>
+  <p>{% if t.receber_vencidas %}<span class="falta">{{ t.receber_vencidas }} parcela(s) vencida(s): {{ r.receber.total_vencido|dinheiro }}</span>{% else %}Nada vencido.{% endif %}</p>
+  <p>{{ t.receber_a_vencer }} parcela(s) a vencer em {{ r.receber.dias }} dias: {{ r.receber.total_a_vencer|dinheiro }}</p>
+  <p>Total a receber: <strong>{{ r.receber.total_a_receber|dinheiro }}</strong></p>
+  <p><a href="{% url 'receber' %}">Ver contas a receber</a></p></section>
+
+<section class="bloco"><h2><a href="{% url 'sobras' %}">Sobras fritas</a></h2>
+  {% for s in r.sobras_fritas %}<p><a href="{% url 'lote' s.lote_id %}">{{ s.item }}</a> · {{ s.saldo|quantidade:s.unidade_base }} · frito em {{ s.frito_em|date:"d/m/Y" }}</p>{% empty %}<p>Nenhuma sobra frita.</p>{% endfor %}
+  <p class="acoes"><a href="{% url 'sobras' %}">Ver sobras</a> <a href="{% url 'fritura' %}">Registrar fritura</a></p></section>
+
 <section class="bloco"><h2>Pendências</h2>
   <p><a href="{% url 'consumos' %}">{{ t.consumos_pendentes }} consumo(s) pendente(s)</a></p>
   <p><a href="{% url 'avisos' %}">{{ t.avisos_de_ajuste }} aviso(s) de ajuste</a></p>
   <p><a href="{% url 'historico' %}">{{ t.operacoes_hoje }} operação(ões) feita(s) hoje</a></p></section>
 
 <nav class="menu">
+  <a href="{% url 'vender' %}">Vender</a>
+  <a href="{% url 'vendas' %}">Vendas do dia</a>
+  <a href="{% url 'encomendas' %}">Encomendas</a>
+  <a href="{% url 'necessidade' %}">O que falta produzir</a>
+  <a href="{% url 'fritura' %}">Fritura</a>
+  <a href="{% url 'sobras' %}">Sobras fritas</a>
+  <a href="{% url 'receber' %}">Contas a receber</a>
+  <a href="{% url 'clientes' %}">Clientes</a>
+  <a href="{% url 'precos' %}">Preços</a>
   <a href="{% url 'caixa' %}">Caixa de decisões</a>
   <a href="{% url 'historico' %}">Histórico de operações</a>
   <a href="{% url 'receita' %}">Gerar receita</a>

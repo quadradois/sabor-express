@@ -1,0 +1,25 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Encomendas — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Encomendas</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'encomenda_nova' %}">Nova encomenda</a> <a href="{% url 'necessidade' %}">O que falta produzir</a>
+  <a href="{% url 'encomendas' %}?periodo=hoje">Só hoje</a></p>
+<form method="get" class="form">
+  <p><label>Situação <select name="situacao">{% for v, nome in situacoes.items %}<option value="{{ v }}" {% if v == situacao %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Entrega de <input type="date" name="de" value="{{ de|date:'Y-m-d' }}"></label></p>
+  <p><label>até <input type="date" name="ate" value="{{ ate|date:'Y-m-d' }}"></label></p>
+  <button type="submit">Filtrar</button>
+</form>
+<ul class="linhas">
+{% for e in lista %}<li><a class="nome" href="{% url 'encomenda' e.encomenda_id %}">#{{ e.encomenda_id }} {{ e.cliente }}</a>
+  <span>{{ e.entrega_data|date:"d/m/Y" }}{% if e.entrega_hora %} {{ e.entrega_hora|time:"H:i" }}{% endif %}{% if e.dias < 0 and e.situacao == "aberta" or e.dias < 0 and e.situacao == "pronta" %} <strong class="falta">atrasada</strong>{% endif %}</span>
+  <span>{{ e.total|dinheiro }}</span>
+  {% if e.situacao == "pronta" %}<strong class="ok">pronta</strong>
+  {% elif e.situacao == "aberta" %}<strong class="falta">falta {{ e.falta|numero }} un</strong>
+  {% elif e.situacao == "cancelada" %}<strong class="falta">cancelada</strong>
+  {% else %}<span>entregue</span>{% endif %}</li>
+{% empty %}<li>Nenhuma encomenda neste filtro.</li>{% endfor %}
+</ul>
+{% endblock %}

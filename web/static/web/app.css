@@ -42,3 +42,8 @@ table { display: block; overflow-x: auto; }
 @media print { header, .acoes, .erro { display: none; } .etiqueta { break-inside: avoid; } }
 .aviso { background: #fef3c7; color: #78350f; padding: 8px; border-radius: 4px; }
 .bloco select, .bloco input[name^=quantidade], .bloco input[name^=unidade], .bloco input[name^=valor] { width: 100%; margin: 2px 0; }
+.mudo { color: #6b7280; }
+.qtd { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.qtd button { min-width: 56px; min-height: 56px; font-size: 1.6em; border: 0; border-radius: 6px; background: #eee; }
+.qtd input { width: 5em; text-align: center; font-size: 1.4em; min-height: 56px; }
+.item-venda p { margin: 4px 0; }

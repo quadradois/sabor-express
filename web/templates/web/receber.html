@@ -1,0 +1,28 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Contas a receber — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Contas a receber{% if nome_cliente %} <small>{{ nome_cliente }}</small>{% endif %}</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'clientes' %}">Clientes</a> <a href="{% url 'vender' %}">Vender</a>{% if cliente %} <a href="{% url 'receber' %}">Ver todos</a>{% endif %}</p>
+{% if cliente %}
+<h2>Em aberto</h2>
+{% for p in filtrado %}<section class="bloco">{% include "web/_parcela_receber.html" with next=request.get_full_path %}</section>{% empty %}<p>Este cliente não deve nada.</p>{% endfor %}
+{% else %}
+<h2>Vencidas</h2>
+{% for p in vencidas %}<section class="bloco">{% include "web/_parcela_receber.html" with next=request.path %}</section>{% empty %}<p>Nada vencido.</p>{% endfor %}
+<h2>A vencer (7 dias)</h2>
+{% for p in a_vencer %}<section class="bloco">{% include "web/_parcela_receber.html" with next=request.path %}</section>{% empty %}<p>Nada a vencer nos próximos 7 dias.</p>{% endfor %}
+<h2>Quanto cada cliente deve</h2>
+<ul class="linhas">{% for d in devedores %}<li><a class="nome" href="{% url 'receber' %}?cliente={{ d.cliente_id }}">{{ d.cliente }}</a> <strong>{{ d.devido|dinheiro }}</strong>{% if d.vencido %} <span class="falta">vencido {{ d.vencido|dinheiro }}</span>{% endif %}</li>{% empty %}<li>Ninguém está devendo.</li>{% endfor %}</ul>
+{% endif %}
+<h2>Recebimentos {% if cliente %}dos últimos 90 dias{% else %}dos últimos 30 dias{% endif %}</h2>
+{% for pg in recebimentos %}<section class="bloco"><p>{{ pg.data|date:"d/m/Y" }} · {{ pg.cliente }} · {{ pg.descricao }} · {{ pg.valor_pago|dinheiro }}{% if pg.diferenca %} ({{ pg.diferenca_tipo }} {{ pg.diferenca|dinheiro }}){% endif %}</p>
+  <details class="cancelar"><summary>Estornar recebimento</summary>
+  <form method="post" action="{% url 'estornar_recebimento_cliente' %}" class="form">{% csrf_token %}{% chave %}
+    <input type="hidden" name="pagamento" value="{{ pg.pagamento_id }}">
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <p><label>Motivo <input name="motivo"></label></p>
+    <button type="submit">Estornar</button>
+  </form></details></section>{% empty %}<p>Nenhum recebimento recente.</p>{% endfor %}
+{% endblock %}
