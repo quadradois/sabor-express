@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from django.utils import timezone
 
+from estoque.lotes import checar_vencido, texto_vencido
 from estoque.models import ESTADOS, Lote, Movimento
 from estoque.servicos import calcular_validade, livre_porcao, saldo_lote, validade_porcao
 from nucleo.operacoes import RegraViolada, executar
@@ -17,15 +18,18 @@ from .models import Fritura
 
 
 def registrar_fritura(*, lote_id, quantidade, boas, estado="", estado_destino="fresco", perda_motivo="",
-                      validade_manual=None, justificativa="", confirmar_perda_total=False,
+                      validade_manual=None, justificativa="", confirmar_perda_total=False, motivo_vencido="",
                       autor, canal="web", chave=None) -> dict:
     """Frita `quantidade` unidades da porção (lote cru + `estado`) e gera um lote frito com as `boas`
     (RF-FRI-01), no `estado_destino` e com a validade do critério de "frito" (RN-27; sem critério, manual
     e justificada). Custo do lote frito = (custo do cru × fritas + óleo de referência × fritas) ÷ boas
-    (RF-FRI-02, CA-24). Não frita o vencido (FL-04 E1) nem o reservado para encomendas."""
+    (RF-FRI-02, CA-24). Não frita o reservado para encomendas. Vencido (FL-04 E1) só com `motivo_vencido`
+    (Plano 9: aviso com motivo); o motivo fica no movimento de consumo."""
     parametros = {"lote_id": lote_id, "quantidade": quantidade, "boas": boas, "estado": estado,
                   "estado_destino": estado_destino, "perda_motivo": perda_motivo, "validade_manual": validade_manual,
                   "justificativa": justificativa, "confirmar_perda_total": confirmar_perda_total}
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         hoje = timezone.localdate()
@@ -52,8 +56,9 @@ def registrar_fritura(*, lote_id, quantidade, boas, estado="", estado_destino="f
         if b == 0 and not confirmar_perda_total:
             raise RegraViolada("Nenhuma unidade boa: confirme a perda total.")
         v = validade_porcao(lote, estado)
-        if v and v < hoje:
-            raise RegraViolada("Lote vencido não pode ser frito; só descartado.")
+        mv = checar_vencido(lote, estado, v, quando=hoje, motivo_vencido=motivo_vencido,
+                            regra=lambda: f"{texto_vencido(lote, estado, v)} Lote vencido não pode ser frito sem um "
+                                          "motivo: descarte ou, para fritar mesmo assim, informe o motivo.")
         if q > saldo_lote(lote, estado):
             raise RegraViolada(f"Só há {fmt_qtd(saldo_lote(lote, estado), 'un')} desse lote em {estado}.")
         if q > livre_porcao(lote, estado):
@@ -65,7 +70,8 @@ def registrar_fritura(*, lote_id, quantidade, boas, estado="", estado_destino="f
                                    estado=estado_destino, custo_total=custo, operacao=op)
         motivo = f"Fritura {f.id}"
         Movimento.objects.create(tipo="consumo_fritura", item=produto, lote=lote, quantidade=-q, quantidade_informada=q,
-                                 unidade_informada="un", fator=Decimal("1"), motivo=motivo, estado=estado, operacao=op)
+                                 unidade_informada="un", fator=Decimal("1"), motivo=motivo, estado=estado, motivo_vencido=mv,
+                                 operacao=op)
         validade, manual = None, False
         if b > 0:
             validade, manual = calcular_validade(produto, "frito", estado_destino, hoje=hoje, manual=validade_manual,

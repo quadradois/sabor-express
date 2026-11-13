@@ -97,6 +97,10 @@ class LinhaVenda(models.Model):
     custo = models.DecimalField(max_digits=12, decimal_places=2)
     # [{"lote_id", "item_id", "estado", "quantidade", "custo"}] — o que saiu de cada lote (produto e embalagem)
     baixas = models.JSONField(default=list)
+    # Plano 9: o atendente indicou de qual lote pegou (sem isso, FEFO automático)
+    lotes_indicados = models.BooleanField(default=False)
+    # porções que vencem antes e ficaram para trás: [{"lote_id", "estado", "unidades", "validade"}]
+    deixados = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["id"]

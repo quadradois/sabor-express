@@ -10,7 +10,7 @@ from nucleo.operacoes import RegraViolada, executar
 
 from web.templatetags.formato import quantidade as fmt_qtd
 
-from .models import ESTADOS, ConsumoPendente, CriterioValidade, Lote, Movimento
+from .models import DESTINOS_PERDA, ESTADOS, ConsumoPendente, CriterioValidade, Lote, Movimento
 
 
 def saldo(item) -> Decimal:
@@ -221,10 +221,14 @@ def calcular_validade(produto, forma: str, estado: str, *, hoje, manual, justifi
     return manual, True
 
 
-def transferir_estado(*, lote_id, quantidade, de, para, validade_manual=None, justificativa="",
+def transferir_estado(*, lote_id, quantidade, de, para, validade_manual=None, justificativa="", motivo_vencido="",
                       autor, canal="web", chave=None) -> dict:
+    """Muda a conservação de parte de uma porção (a validade nova vem do critério). Porção vencida só muda com
+    `motivo_vencido` (Plano 9) e continua vencida: a transferência não dá validade nova a quem já venceu."""
     parametros = {"lote_id": lote_id, "quantidade": quantidade, "de": de, "para": para,
                   "validade_manual": validade_manual, "justificativa": justificativa}
+    if motivo_vencido:
+        parametros["motivo_vencido"] = motivo_vencido
 
     def func(op):
         hoje = timezone.localdate()
@@ -238,34 +242,44 @@ def transferir_estado(*, lote_id, quantidade, de, para, validade_manual=None, ju
             lote = Lote.objects.select_related("item").get(id=lote_id)
         except Lote.DoesNotExist:
             raise RegraViolada("Lote não encontrado.")
+        from .lotes import checar_vencido, texto_vencido
+
         v = validade_porcao(lote, de)
-        if v and v < hoje:
-            raise RegraViolada("Lote vencido só aceita descarte.")
+        mv = checar_vencido(lote, de, v, quando=hoje, motivo_vencido=motivo_vencido,
+                            regra=lambda: f"{texto_vencido(lote, de, v)} Lote vencido só aceita descarte, a menos que "
+                                          "se informe o motivo para mudar a conservação mesmo assim.")
         if quantidade > saldo_lote(lote, de):
             raise RegraViolada(f"Só há {fmt_qtd(saldo_lote(lote, de), lote.item.unidade_base)} em {de}.")
         if quantidade > livre_porcao(lote, de):
             raise RegraViolada(f"Só {fmt_qtd(livre_porcao(lote, de), lote.item.unidade_base)} em {de} não estão "
                                "reservadas para encomendas.")
-        nova, manual = calcular_validade(lote.item, lote.forma, para, hoje=hoje, manual=validade_manual,
-                                         justificativa=justificativa)
+        if mv:  # vencido continua vencido
+            nova, manual = v, False
+        else:
+            nova, manual = calcular_validade(lote.item, lote.forma, para, hoje=hoje, manual=validade_manual,
+                                             justificativa=justificativa)
         for estado, q, val, man in ((de, -quantidade, None, False), (para, quantidade, nova, manual)):
             Movimento.objects.create(tipo="transferencia_estado", item=lote.item, lote=lote, quantidade=q,
                                      quantidade_informada=q, unidade_informada="un", fator=Decimal("1"),
                                      motivo=f"{de} → {para}", estado=estado, validade=val,
-                                     validade_manual=man, operacao=op)
+                                     validade_manual=man, motivo_vencido=mv, operacao=op)
         return {"lote_id": lote.id, "validade": nova.isoformat(), "validade_manual": manual}
 
     return executar("transferir_estado", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
 
 
-def registrar_perda(*, lote_id, estado="", quantidade, unidade="", motivo, autor, canal="web", chave=None) -> dict:
+def registrar_perda(*, lote_id, estado="", quantidade, unidade="", motivo, destino="perda", autor, canal="web",
+                    chave=None) -> dict:
     """Baixa com motivo (RF-EST-02 perda/descarte): sobra de frito, quebra, vencido (RF-EST-10, RN-19).
 
     Não passa do saldo da porção. Fora do vencido, não toca no reservado; descartar porção vencida
     libera as reservas dela (FL-07 A3: o sistema avisa para reservar de outro lote).
-    `quantidade` na `unidade` informada (padrão: a unidade base do item)."""
+    `quantidade` na `unidade` informada (padrão: a unidade base do item). `destino` (Plano 9): perda,
+    descarte, consumo da equipe ou doação — todas são baixa com valor (entram nas perdas do relatório)."""
     parametros = {"lote_id": lote_id, "estado": estado, "quantidade": quantidade, "unidade": unidade,
                   "motivo": motivo}
+    if destino != "perda":
+        parametros["destino"] = destino
 
     def func(op):
         from nucleo.valores import decimal
@@ -273,6 +287,8 @@ def registrar_perda(*, lote_id, estado="", quantidade, unidade="", motivo, autor
         texto = (motivo or "").strip()
         if not texto:
             raise RegraViolada("Informe o motivo da perda.")
+        if destino not in dict(DESTINOS_PERDA):
+            raise RegraViolada("Destino inválido: use perda, descarte, consumo da equipe ou doação.")
         lote = Lote.objects.select_related("item").filter(id=lote_id).first()
         if lote is None:
             raise RegraViolada("Lote não encontrado.")
@@ -297,10 +313,57 @@ def registrar_perda(*, lote_id, estado="", quantidade, unidade="", motivo, autor
                                "encomendas. Cancele a encomenda antes de dar a perda.")
         m = Movimento.objects.create(tipo="perda", item=lote.item, lote=lote, quantidade=-qtd,
                                      quantidade_informada=decimal(quantidade, "quantidade"), unidade_informada=un,
-                                     fator=f, motivo=texto, estado=estado, operacao=op)
-        return {"movimento_id": m.id, "lote_id": lote.id, "item": lote.item.nome, "quantidade": qtd,
+                                     fator=f, motivo=texto, estado=estado, destino=destino, operacao=op)
+        return {"movimento_id": m.id, "lote_id": lote.id, "item": lote.item.nome, "quantidade": qtd, "destino": destino,
                 "unidade_base": base, "vencido": vencido, "reservas_liberadas": liberadas,
                 "valor": (qtd * lote.custo_unitario).quantize(Decimal("0.01"), ROUND_HALF_UP),
                 "saldo": saldo_lote(lote, estado)}
 
     return executar("registrar_perda", func, autor=autor, canal=canal, chave=chave, parametros=parametros)
+
+
+def ajustar_contagem(*, lote_id, estado="", contado, motivo, autor, canal="web", chave=None) -> dict:
+    """Ajuste por contagem (Plano 9, "não sei" da conferência do vencido): diz quanto há de fato na porção e o
+    sistema lança a diferença como movimento `ajuste_contagem`, com o motivo. Nunca deixa saldo negativo
+    (contado ≥ 0). Achou menos do que o reservado: libera as reservas mais novas até caber (a encomenda volta a
+    pedir reserva). Achou mais: entra com a validade e o custo da porção. Contagem igual ao saldo não lança
+    movimento, mas fica na trilha."""
+    parametros = {"lote_id": lote_id, "estado": estado, "contado": contado, "motivo": motivo}
+
+    def func(op):
+        from nucleo.valores import decimal
+
+        texto = (motivo or "").strip()
+        if not texto:
+            raise RegraViolada("Informe o motivo do ajuste (ex.: contagem do vencido).")
+        if estado not in dict(ESTADOS) and estado != "":
+            raise RegraViolada("Estado inválido.")
+        lote = Lote.objects.select_related("item").filter(id=lote_id).first()
+        if lote is None:
+            raise RegraViolada("Lote não encontrado.")
+        q = decimal(contado, "contado").quantize(Decimal("0.001"), ROUND_HALF_UP)
+        if q < 0:
+            raise RegraViolada("A contagem não pode ser negativa.")
+        base = lote.item.unidade_base
+        antes = saldo_lote(lote, estado)
+        diferenca = q - antes
+        liberadas = []
+        if diferenca != 0:
+            Movimento.objects.create(tipo="ajuste_contagem", item=lote.item, lote=lote, quantidade=diferenca,
+                                     quantidade_informada=diferenca, unidade_informada=base, fator=Decimal("1"),
+                                     motivo=f"Contagem: {texto}", estado=estado,
+                                     validade=validade_porcao(lote, estado) if diferenca > 0 else None, operacao=op)
+            sobra = q
+            for r in _reservas(lote=lote, estado=estado).order_by("id"):
+                if r.quantidade <= sobra:
+                    sobra -= r.quantidade
+                    continue
+                r.situacao, r.fim_operacao, r.motivo = "liberada", op, "contagem achou menos no lote"
+                r.save(update_fields=["situacao", "fim_operacao", "motivo"])
+                liberadas.append(r.id)
+        return {"lote_id": lote.id, "estado": estado, "item": lote.item.nome, "unidade_base": base,
+                "antes": antes, "contado": q, "diferenca": diferenca,
+                "valor": (diferenca * lote.custo_unitario).quantize(Decimal("0.01"), ROUND_HALF_UP),
+                "reservas_liberadas": liberadas}
+
+    return executar("ajustar_contagem", func, autor=autor, canal=canal, chave=chave, parametros=parametros)

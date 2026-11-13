@@ -110,7 +110,8 @@ def _perdas(de, ate, producao) -> dict:
         g["itens"][(m.item.nome, m.item.unidade_base)] += q
         lista.append({"movimento_id": m.id, "data": timezone.localtime(m.criado_em).date(), "item_id": m.item_id,
                       "item": m.item.nome, "unidade_base": m.item.unidade_base, "lote_id": m.lote_id,
-                      "estado": m.estado, "quantidade": q, "valor": valor, "motivo": m.motivo})
+                      "estado": m.estado, "quantidade": q, "valor": valor, "motivo": m.motivo,
+                      "destino": m.destino or "perda"})
     canc = list(_no_periodo(Venda.objects.filter(situacao="cancelada", destino="perda"),
                             "cancelamento_operacao__criado_em", de, ate))
     valor_mov = _soma(lista, "valor")

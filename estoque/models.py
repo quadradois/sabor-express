@@ -3,6 +3,9 @@ from django.db import models
 
 ESTADOS = [("fresco", "Fresco"), ("resfriado", "Resfriado"), ("congelado", "Congelado")]
 FORMAS = [("cru", "Cru"), ("frito", "Frito")]
+# para onde foi o que saiu sem venda (Plano 9: "estão aqui" na conferência do vencido); todas são baixa com valor
+DESTINOS_PERDA = [("perda", "Perda"), ("descarte", "Descarte"), ("consumo_equipe", "Consumo da equipe"),
+                  ("doacao", "Doação")]
 
 
 class Lote(models.Model):
@@ -32,6 +35,9 @@ class Movimento(models.Model):
     validade = models.DateField(null=True, blank=True)
     validade_manual = models.BooleanField(default=False)
     operacao = models.ForeignKey("nucleo.RegistroOperacao", null=True, on_delete=models.PROTECT)
+    # Plano 9: porção vencida só sai com motivo (aviso com motivo, não trava); vazio = não estava vencida
+    motivo_vencido = models.CharField(max_length=200, blank=True, default="")
+    destino = models.CharField(max_length=20, choices=DESTINOS_PERDA, blank=True, default="")  # só em perda
     criado_em = models.DateTimeField(auto_now_add=True)
 
 
