@@ -1,0 +1,8 @@
+# Exemplo — copiar para ~/.config/systemd/user/ (veja docs/backup.md)
+[Unit]
+Description=Backup diário do Sabor Express
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/quadradois/Sabor-Express
+ExecStart=/home/quadradois/.local/bin/uv run python manage.py backup
