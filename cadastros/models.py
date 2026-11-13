@@ -20,6 +20,9 @@ class Item(models.Model):
                               limit_choices_to={"tipo": "produto"})
     peso_g = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
     oleo_ref_un = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)  # R$ por unidade frita
+    # R$ por unidade produzida de mão de obra, gás, energia etc. (RF-CUS-05): só entra no custo estimado da
+    # ficha, mostrado à parte; vazio = sem referência (o custo estimado diz que não inclui indiretos)
+    indireto_ref_un = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
 
     def __str__(self):
         return self.nome
