@@ -118,3 +118,20 @@ def pontos(v):
 @register.filter
 def get_item(dicionario, chave):
     return dicionario.get(chave, chave)
+
+
+@register.filter
+def reais(v):
+    """Valor para preencher campo de formulário em reais: vírgula e duas casas (812,40); desconhecido -> vazio."""
+    if v is None or isinstance(v, str):  # texto já digitado volta como veio
+        return v or ""
+    return _virgula(v, 2).replace(".", "")
+
+
+@register.filter
+def ref4(v):
+    """Referência por unidade para campo de formulário (até 4 casas, sem zeros à toa): 0,7416 / 0,05; vazio se None."""
+    if v is None or isinstance(v, str):
+        return v or ""
+    txt = _virgula(v, 4).replace(".", "")
+    return txt.rstrip("0").rstrip(",") if "," in txt else txt

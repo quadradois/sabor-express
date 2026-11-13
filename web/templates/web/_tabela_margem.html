@@ -8,6 +8,8 @@
   {% else %}<p>Custo {{ a.custo|din }} (salgado {{ a.custo_salgado|din }} + embalagem {{ a.custo_embalagem|din }})</p>
     <p>Varejo {{ a.preco_varejo|din }}: margem <strong>{{ a.margem_varejo|din }}</strong> ({{ a.margem_varejo_pct|pct }})
     {% if a.preco_atacado %}<br>Atacado {{ a.preco_atacado|din }}: margem <strong>{{ a.margem_atacado|din }}</strong> ({{ a.margem_atacado_pct|pct }}){% endif %}</p>
+    <p><strong>Com indiretos</strong> (mão de obra, energia e gás de referência {% if a.indiretos is None %}<span class="falta">não cadastrados</span>{% else %}{{ a.indiretos|din }}{% endif %}):
+    {% if a.indiretos is None %}sem como calcular — <a href="{% url 'referencias' %}">cadastrar a referência</a>{% else %}varejo <strong>{{ a.margem_varejo_com_indiretos|din }}</strong> ({{ a.margem_varejo_com_indiretos_pct|pct }}){% if a.preco_atacado %} · atacado <strong>{{ a.margem_atacado_com_indiretos|din }}</strong> ({{ a.margem_atacado_com_indiretos_pct|pct }}){% endif %}{% endif %}</p>
     {% if a.custo_un_ultimo_lote is not None %}<p class="mudo">Último lote produzido custou {{ a.custo_un_ultimo_lote|custo4 }} por unidade (só informação).</p>{% endif %}{% endif %}
   <p class="mudo">Não inclui: {{ a.nao_inclui|join:", " }}.</p>
 </section>{% empty %}<p>Nenhuma apresentação cadastrada.</p>{% endfor %}

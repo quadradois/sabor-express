@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Referências do tamanho — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Referências de cada tamanho</h1>
+{% include "web/_custos_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">Quanto, em média, cada salgado gasta de <strong>óleo</strong> (na fritura) e de <strong>indiretos</strong> (mão de obra, energia e gás). São números de referência, por unidade, em reais. Em branco = sem referência (o sistema avisa em vez de contar zero). Para conferir se o indireto está certo, veja o <a href="{% url 'estudo_preco' %}#indireto-real">estudo de preço</a>.</p>
+{% for p in produtos %}<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="produto" value="{{ p.id }}">
+  <p><strong>{{ p.nome }}</strong></p>
+  <p><label>Óleo por unidade (R$) <input name="oleo_ref_un" inputmode="decimal" value="{{ p.oleo_ref_un|ref4 }}"></label></p>
+  <p><label>Indiretos por unidade (R$) <input name="indireto_ref_un" inputmode="decimal" value="{{ p.indireto_ref_un|ref4 }}"></label></p>
+  <button type="submit">Salvar {{ p.nome }}</button></form></section>
+{% empty %}<p>Nenhum tamanho cadastrado.</p>{% endfor %}
+{% endblock %}

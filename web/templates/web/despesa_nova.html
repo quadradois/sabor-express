@@ -1,0 +1,20 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Lançar despesa — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Lançar despesa</h1>
+{% include "web/_despesas_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">Para o que não se repete todo mês (a diarista, o conserto do forno). As contas fixas (luz, internet) ficam em <a href="{% url 'despesas_mensais' %}">despesas mensais</a>.</p>
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Do que é a despesa <input name="descricao" value="{{ d.descricao|default:'' }}" required></label></p>
+  <p><label>Categoria <select name="categoria" required><option value="">Escolha…</option>{% for c in categorias %}<option value="{{ c.categoria_id }}"{% if d.categoria == c.categoria_id|stringformat:"s" %} selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Valor (R$) <input name="valor" inputmode="decimal" value="{{ d.valor|default:'' }}" required></label></p>
+  <p><label><input type="radio" name="paga" value="sim" {% if d.paga != "nao" %}checked{% endif %}> Já paguei</label>
+     <label><input type="radio" name="paga" value="nao" {% if d.paga == "nao" %}checked{% endif %}> Vou pagar (tem vencimento)</label></p>
+  <p><label>Se já pagou — data do pagamento <input type="date" name="data_pagamento" value="{{ data_pg }}"></label></p>
+  <p><label>Se vai pagar — vencimento <input type="date" name="vencimento" value="{{ d.vencimento|default:'' }}"></label></p>
+  <p><label>Forma (pix, dinheiro...) <input name="forma" value="{{ d.forma|default:'' }}"></label></p>
+  <button type="submit">Lançar despesa</button>
+</form>
+{% endblock %}

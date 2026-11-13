@@ -6,7 +6,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from cadastros.models import Item
@@ -15,6 +15,9 @@ from custos import fichas as cf
 from custos.relatorios import relatorio_periodo
 from nucleo.operacoes import RegraViolada
 
+from cadastros.servicos import salvar_referencias
+
+from .views_compras import _dec, _id, _kw
 from .views_vendas import _dia
 
 PERIODOS = {"hoje": "Hoje", "ontem": "Ontem", "semana": "Esta semana", "semana_passada": "Semana passada",
@@ -60,6 +63,24 @@ def _opcao(g, nome, validos, padrao):
 def custos(request):
     itens = Item.objects.filter(ativo=True).exclude(tipo="produto").order_by("nome")
     return render(request, "web/custos.html", {"produtos": cf.custos_estimados(), "itens": itens})
+
+
+@login_required
+def referencias(request):
+    """Óleo e indiretos de referência por unidade de cada tamanho (só pela tela; vazio = sem referência)."""
+    if request.method == "POST":
+        post = request.POST
+        try:
+            r = salvar_referencias(produto_id=_id(post.get("produto"), "Produto"),
+                                   oleo_ref_un=_dec(post.get("oleo_ref_un"), "Óleo"),
+                                   indireto_ref_un=_dec(post.get("indireto_ref_un"), "Indiretos"), **_kw(request))
+        except RegraViolada as e:
+            messages.error(request, str(e))
+        else:
+            messages.success(request, "Referências salvas.")
+        return redirect("referencias")
+    return render(request, "web/referencias.html", {
+        "produtos": Item.objects.filter(tipo="produto", ativo=True).order_by("nome")})
 
 
 @login_required
@@ -113,7 +134,8 @@ def margens(request):
               for g in detalhe["grupos"]]
     return render(request, "web/margens.html", {
         "p": p, "agrupar": agrupar, "comp": comp, "grupos": grupos, "periodos": PERIODOS,
-        "agrupamentos": AGRUPAMENTOS, "tabela": cc.margem_apresentacoes()})
+        "agrupamentos": AGRUPAMENTOS, "tabela": cc.margem_apresentacoes(),
+        "rotulo_ind": detalhe["rotulo_com_indiretos"]})
 
 
 @login_required
