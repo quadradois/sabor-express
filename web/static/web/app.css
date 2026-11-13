@@ -47,3 +47,7 @@ table { display: block; overflow-x: auto; }
 .qtd button { min-width: 56px; min-height: 56px; font-size: 1.6em; border: 0; border-radius: 6px; background: #eee; }
 .qtd input { width: 5em; text-align: center; font-size: 1.4em; min-height: 56px; }
 .item-venda p { margin: 4px 0; }
+.sub a { display: inline-block; min-height: 44px; padding: 10px 12px; margin: 2px 4px 2px 0; background: #eee; border-radius: 6px; text-decoration: none; color: inherit; }
+.rotulo { background: #e0e7ff; color: #312e81; padding: 2px 6px; border-radius: 4px; }
+.bloco table th, .bloco table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
+.bloco table td.num, .bloco table th.num { text-align: right; white-space: nowrap; }

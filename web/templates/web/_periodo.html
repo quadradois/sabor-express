@@ -1,0 +1,4 @@
+<p><label>Período <select name="periodo">{% for k, v in periodos.items %}<option value="{{ k }}"{% if p.periodo == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label></p>
+<p class="mudo">Ou escolha as datas (valem no lugar do período):</p>
+<p><label>De <input type="date" name="de" value="{% if not p.periodo %}{{ p.de|date:'Y-m-d' }}{% endif %}"></label></p>
+<p><label>Até <input type="date" name="ate" value="{% if not p.periodo %}{{ p.ate|date:'Y-m-d' }}{% endif %}"></label></p>

@@ -1,0 +1,4 @@
+{% load formato %}
+{% if f.linhas %}<section class="bloco"><h2>Fora da margem</h2>
+  <p class="aviso">{{ f.linhas }} linha(s) de venda ({{ f.receita|din }}) ficaram fora da conta da margem porque o custo não é confiável. A receita delas está nos totais; o lucro delas não foi estimado.</p>
+  <ul>{% for motivo, n in f.motivos.items %}<li>{{ n }} linha(s): {{ motivo }}</li>{% endfor %}</ul></section>{% endif %}

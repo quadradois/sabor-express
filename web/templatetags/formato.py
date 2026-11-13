@@ -75,3 +75,46 @@ def conservacao(estado):
 def forma_nome(forma):
     from estoque.models import FORMAS
     return dict(FORMAS).get(forma, forma)
+
+
+# ---------- custos e margens (Plano 7): None nunca vira zero ----------
+
+def _virgula(v, casas, sinal=False):
+    v = Decimal(v).quantize(Decimal(1).scaleb(-casas), rounding=ROUND_HALF_UP)
+    txt = f"{abs(v):,.{casas}f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    return f"{'-' if v < 0 else '+' if sinal and v > 0 else ''}{txt}"
+
+
+@register.filter
+def din(v):
+    """Dinheiro; valor desconhecido (None) aparece como "—", nunca como R$ 0,00."""
+    return "—" if v is None else dinheiro(v)
+
+
+@register.filter
+def custo4(v):
+    """Custo por unidade (4 casas): R$ 0,1500."""
+    return "—" if v is None else f"R$ {_virgula(v, 4)}"
+
+
+@register.filter
+def pct(v):
+    """Porcentagem com uma casa: 12,3%."""
+    return "—" if v is None else f"{_virgula(v, 1)}%"
+
+
+@register.filter
+def pctsinal(v):
+    """Variação com sinal: +5,0% / -2,5%."""
+    return "—" if v is None else f"{_virgula(v, 1, sinal=True)}%"
+
+
+@register.filter
+def pontos(v):
+    """Diferença entre duas porcentagens, em pontos: +2,1 pontos / -6,0 pontos."""
+    return "—" if v is None else f"{_virgula(v, 1, sinal=True)} pontos"
+
+
+@register.filter
+def get_item(dicionario, chave):
+    return dicionario.get(chave, chave)

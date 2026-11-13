@@ -1,0 +1,22 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Previsto × realizado — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>{{ r.produto }}: previsto × realizado</h1>
+{% include "web/_custos_nav.html" %}
+<p>Produção <a href="{% url 'producao' r.producao_id %}">#{{ r.producao_id }}</a> · {{ r.data|date:"d/m/Y" }} · {{ r.forma|forma_nome|lower }} · ficha versão {{ r.versao }}</p>
+<section class="bloco"><h2>Rendimento</h2>
+  <p>{{ r.boas }} boas de {{ r.unidades }} planejadas: <strong>{{ r.rendimento_pct|pct }}</strong>{% if r.perdas %} · {{ r.perdas }} perdida(s){% if r.perda_motivo %} ({{ r.perda_motivo }}){% endif %}{% endif %}</p></section>
+<section class="bloco"><h2>Custo</h2>
+  {% if r.custo_pendente %}<p class="falta">custo pendente: há consumo sem conciliar, o custo real ainda vai mudar</p>{% endif %}
+  {% if r.custo_previsto is None %}<p class="aviso">Sem custo previsto: falta compra de {% for f in r.faltando %}{{ f.item }}{% if not forloop.last %}, {% endif %}{% endfor %} até o dia da produção.</p>
+  <p>Custo real: {{ r.custo_real|din }} ({{ r.custo_unitario_real|custo4 }} por unidade boa)</p>
+  {% else %}<p>Previsto {{ r.custo_previsto|din }} · real <strong>{{ r.custo_real|din }}</strong> · desvio {{ r.desvio_custo|din }} ({{ r.desvio_custo_pct|pctsinal }})</p>
+  <p>Por unidade: previsto {{ r.custo_unitario_previsto|custo4 }} · real {{ r.custo_unitario_real|custo4 }} ({{ r.desvio_unitario_pct|pctsinal }})</p>{% endif %}
+  {% if r.forma == "frito" %}<p>Óleo: previsto {{ r.oleo_previsto|din }} · real {{ r.oleo_real|din }}</p>{% endif %}</section>
+<section class="bloco"><h2>Ingredientes</h2>
+  <table><tr><th>Item</th><th class="num">Previsto</th><th class="num">Usado</th><th class="num">Diferença</th><th class="num">Custo previsto</th><th class="num">Custo real</th></tr>
+  {% for i in r.itens %}<tr><td><a href="{% url 'evolucao_preco' i.item_id %}">{{ i.item }}</a></td><td class="num">{{ i.previsto|quantidade:i.unidade_base }}</td><td class="num">{{ i.usado|quantidade:i.unidade_base }}{% if i.pendente %} <span class="falta">+{{ i.pendente|quantidade:i.unidade_base }} pendente</span>{% endif %}</td>
+    <td class="num">{{ i.desvio_pct|pctsinal }}</td><td class="num">{{ i.custo_previsto|din }}</td><td class="num">{{ i.custo_real|din }}</td></tr>{% endfor %}</table></section>
+<p class="acoes"><a href="{% url 'previsto_realizado' %}">Voltar à lista</a></p>
+{% endblock %}

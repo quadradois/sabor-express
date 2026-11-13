@@ -1,0 +1,30 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Custo — Sabor Express{% endblock %}
+{% block conteudo %}
+{% include "web/_custos_nav.html" %}
+{% if erro %}<h1>{{ produto.nome }}</h1><p class="erro">Ficha com problema: {{ erro }}</p>
+{% else %}
+<h1>{{ c.produto }}</h1>
+<p class="mudo">Custo <strong>estimado</strong> de 1 unidade ({{ c.peso_g|quantidade:"g" }}), ficha "{{ c.ficha }}" versão {{ c.versao|default:"—" }}, pelo preço da última compra de cada item.</p>
+<section class="bloco">
+  {% if c.completo %}<p>Ingredientes: <strong>{{ c.ingredientes|custo4 }}</strong></p>
+  <p>Indiretos: {% if c.indiretos is None %}sem valor de referência{% else %}{{ c.indiretos|custo4 }}{% endif %} · Óleo: {% if c.oleo is None %}sem valor de referência{% else %}{{ c.oleo|custo4 }}{% endif %}</p>
+  <p>Cru (ingredientes + indiretos): <strong>{{ c.custo_cru|custo4 }}</strong></p>
+  <p>Frito (cru + óleo): <strong>{{ c.custo_frito|custo4 }}</strong></p>
+  {% else %}<p class="falta">incompleto: falta comprar {% for f in c.faltando %}{{ f.item }} ({{ f.motivo }}){% if not forloop.last %}, {% endif %}{% endfor %}</p>
+  <p>Só com o que tem preço: {{ c.ingredientes_conhecido|custo4 }} — não é o custo do produto.</p>{% endif %}
+  <p class="mudo">Inclui: {{ c.inclui|join:"; " }}.</p>
+  <p class="mudo">Não inclui: {{ c.nao_inclui|join:"; " }}.</p></section>
+<h2>De onde vem o custo</h2>
+{% for b in c.blocos %}<section class="bloco">
+  <p><strong>{% if b.ficha_id %}<a href="{% url 'custo_preparacao' b.ficha_id %}">{{ b.nome }}</a>{% else %}{{ b.nome }}{% endif %}</strong> · {{ b.gramas|quantidade:"g" }} · {% if b.custo is None %}<span class="falta">incompleto</span> (conhecido: {{ b.custo_conhecido|custo4 }}){% else %}{{ b.custo|custo4 }}{% endif %}</p>
+  <table><tr><th>Item</th><th class="num">Quantidade</th><th class="num">Referência</th><th>Compra</th><th class="num">Custo</th></tr>
+  {% for i in b.itens %}<tr><td><a href="{% url 'evolucao_preco' i.item_id %}">{{ i.item }}</a></td><td class="num">{{ i.quantidade|quantidade:i.unidade_base }}</td>
+    <td class="num">{{ i.referencia|custo4 }}/{{ i.unidade_base }}</td>
+    <td>{% if i.compra_id %}<a href="{% url 'compra' i.compra_id %}">#{{ i.compra_id }}</a> {{ i.data_compra|date:"d/m/Y" }}, {{ i.fornecedor }}{% else %}<span class="falta">nunca comprado</span>{% endif %}</td>
+    <td class="num">{{ i.custo|custo4 }}</td></tr>{% endfor %}</table></section>{% endfor %}
+<h2>Margem estimada dos preços de hoje</h2>
+{% include "web/_tabela_margem.html" with tabela=tabela %}
+{% endif %}
+{% endblock %}

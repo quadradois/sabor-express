@@ -1,0 +1,20 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Mais vendidos — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Mais vendidos <span class="rotulo">estimada</span></h1>
+{% include "web/_custos_nav.html" %}
+{% include "web/_mensagens.html" %}
+<form method="get" class="form">
+  {% include "web/_periodo.html" %}
+  <p><label>Ordenar por <select name="ordem">{% for k, v in ordens.items %}<option value="{{ k }}"{% if ordem == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label></p>
+  <button type="submit">Ver ranking</button></form>
+<section class="bloco"><h2>{{ p.rotulo }}</h2>
+  <table><tr><th>#</th><th>Produto</th><th class="num">Unidades</th><th class="num">Vendas</th><th class="num">Margem</th><th class="num">Margem %</th><th class="num">Parte</th><th class="num">Acumulado</th></tr>
+  {% for g in r.produtos %}<tr><td>{{ forloop.counter }}</td><td>{{ g.nome }}</td><td class="num">{{ g.unidades }}</td><td class="num">{{ g.receita|din }}</td>
+    <td class="num">{{ g.margem|din }}</td><td class="num">{{ g.margem_pct|pct }}</td><td class="num">{{ g.participacao_pct|pct }}</td><td class="num">{{ g.acumulado_pct|pct }}</td></tr>
+  {% empty %}<tr><td colspan="8">Nenhuma venda neste período.</td></tr>{% endfor %}</table>
+  <p class="mudo">Parte e acumulado: peso de cada produto no total por {{ ordens|get_item:ordem|lower }}. "—" na margem: custo não confiável em todas as vendas do produto (ficam no fim, fora da parte).</p></section>
+{% include "web/_estimada.html" with inclui=incl nao_inclui=nao %}
+{% include "web/_fora.html" with f=r.totais.fora %}
+{% endblock %}

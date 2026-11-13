@@ -4,7 +4,7 @@
 {% block conteudo %}
 <h1>Preços</h1>
 {% include "web/_mensagens.html" %}
-<p class="acoes"><a href="{% url 'preco_novo' %}">Novo preço</a> <a href="{% url 'vender' %}">Vender</a></p>
+<p class="acoes"><a href="{% url 'preco_novo' %}">Novo preço</a> <a href="{% url 'vender' %}">Vender</a> <a href="{% url 'margens' %}#tabela">Margem estimada dos preços</a></p>
 {% for a in lista %}{% ifchanged a.produto %}<h2>{{ a.produto }}</h2>{% endifchanged %}
 <p class="bloco"><a href="{% url 'preco' a.apresentacao_id %}"><strong>{{ a.nome }}</strong></a> ({{ a.forma|forma_nome|lower }}, {{ a.estado|conservacao|lower }}, {{ a.unidades }} un)
   {% if not a.ativo %}<strong class="falta">inativa</strong>{% endif %}<br>

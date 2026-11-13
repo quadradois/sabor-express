@@ -1,0 +1,18 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Preço de {{ r.item }} — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Preço de {{ r.item }}</h1>
+{% include "web/_custos_nav.html" %}
+{% include "web/_mensagens.html" %}
+<form method="get" class="form">
+  <p><label>De <input type="date" name="de" value="{{ de|date:'Y-m-d' }}"></label></p>
+  <p><label>Até <input type="date" name="ate" value="{{ ate|date:'Y-m-d' }}"></label></p>
+  <button type="submit">Ver</button></form>
+{% if r.compras %}<section class="bloco">
+  <p>Do primeiro ao último preço: {{ r.primeiro|custo4 }} → <strong>{{ r.ultimo|custo4 }}</strong> por {{ r.unidade_base }} ({{ r.variacao_pct|pctsinal }})</p>
+  <table><tr><th>Data</th><th>Fornecedor</th><th class="num">Custo por {{ r.unidade_base }}</th><th class="num">Mudou</th><th>Compra</th></tr>
+  {% for c in r.compras %}<tr><td>{{ c.data|date:"d/m/Y" }}</td><td>{{ c.fornecedor }}</td><td class="num">{{ c.custo_unitario|custo4 }}</td><td class="num">{{ c.variacao_pct|pctsinal }}</td><td><a href="{% url 'compra' c.compra_id %}">#{{ c.compra_id }}</a></td></tr>{% endfor %}</table></section>
+{% else %}<p>Nenhuma compra deste item{% if de or ate %} neste período{% endif %}. Entrada manual de estoque não conta como compra.</p>{% endif %}
+<p class="acoes"><a href="{% url 'custos' %}">Voltar aos custos</a></p>
+{% endblock %}
