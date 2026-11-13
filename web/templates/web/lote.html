@@ -3,7 +3,7 @@
 {% block titulo %}Lote {{ l.codigo }} — Sabor Express{% endblock %}
 {% block conteudo %}
 <h1>{{ l.item.nome }} <small>lote {{ l.codigo }}</small></h1>
-{% for m in messages %}<p class="{% if m.level_tag == 'error' %}erro{% else %}ok{% endif %}">{{ m }}</p>{% endfor %}
+{% include "web/_mensagens.html" %}
 <p>Forma: {{ l.get_forma_display|default:"—" }} — Fabricação: {{ l.criado_em|date:"d/m/Y" }} — Custo unitário: R$ {{ l.custo_unitario|floatformat:4 }}</p>
 
 <h2>Saldo por conservação</h2>
@@ -12,6 +12,8 @@
   {% for e in estados %}<tr><td>{{ e.conservacao }}</td><td>{{ e.quantidade|quantidade:l.item.unidade_base }}</td>
     <td>{{ e.validade|date:"d/m/Y"|default:"—" }}{% if e.validade_manual %} (informada manualmente){% endif %}</td>
     <td>{% if e.quantidade > 0 %}<a href="{% url 'etiquetas' l.id %}?estado={{ e.estado }}">Etiquetas</a>{% endif %}</td></tr>
+  {% if e.estado in vencidos %}<tr><td colspan="4"><strong class="falta">Vencido</strong>
+    {% include "web/_descartar.html" with lote_id=l.id estado=e.estado saldo=e.quantidade next=request.path %}</td></tr>{% endif %}
   {% empty %}<tr><td colspan="4">Sem saldo.</td></tr>{% endfor %}
 </table>
 

@@ -1,0 +1,20 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Sobras fritas — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Sobras fritas</h1>
+{% include "web/_mensagens.html" %}
+<p>Salgado frito que ainda está no estoque. O que não vai ser vendido sai como perda, com motivo.</p>
+{% for s in sobras %}<section class="bloco">
+  <p><strong>{{ s.item }}</strong> · lote <a href="{% url 'lote' s.lote_id %}">{{ s.codigo }}</a> · frito em {{ s.frito_em|date:"d/m/Y" }} · {{ s.estado|conservacao|lower }}</p>
+  <p>Sobraram {{ s.saldo|quantidade:s.unidade_base }}{% if s.reservado %} ({{ s.reservado|numero }} reservado para encomenda){% endif %} · vence {{ s.validade|date:"d/m/Y"|default:"sem validade" }}{% if s.vencido %} <strong class="falta">vencido</strong>{% endif %} · {{ s.valor|dinheiro }}</p>
+  <details class="cancelar"><summary>Perda</summary>
+  <form method="post" class="form">{% csrf_token %}{% chave %}
+    <input type="hidden" name="lote" value="{{ s.lote_id }}"><input type="hidden" name="estado" value="{{ s.estado }}">
+    <p><label>Quantas jogar fora <input name="quantidade" value="{{ s.saldo|numero }}" inputmode="decimal"></label></p>
+    <p><label>Motivo <input name="motivo" value="sobra do dia"></label></p>
+    <button type="submit">Registrar perda</button>
+  </form></details>
+</section>{% empty %}<p>Nenhuma sobra frita.</p>{% endfor %}
+<p><a href="{% url 'fritura' %}">Registrar fritura</a></p>
+{% endblock %}

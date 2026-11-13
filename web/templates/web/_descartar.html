@@ -1,0 +1,9 @@
+{% load formato %}
+<details class="cancelar"><summary>Descartar</summary>
+<form method="post" action="{% url 'descartar' lote_id %}" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="estado" value="{{ estado }}">
+  <input type="hidden" name="next" value="{{ next }}">
+  <p><label>Quantidade a descartar <input name="quantidade" value="{{ saldo|numero }}" inputmode="decimal"></label></p>
+  <p><label>Motivo <input name="motivo" value="vencido"></label></p>
+  <button type="submit">Descartar</button>
+</form></details>

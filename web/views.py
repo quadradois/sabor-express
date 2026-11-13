@@ -9,7 +9,7 @@ from django.urls import reverse
 from cadastros.servicos import criar_tamanho
 from estoque.etiquetas import dados_etiqueta, registrar_impressao
 from estoque.models import ESTADOS, Lote, Movimento
-from estoque.servicos import entrada_manual, saldo_lote, transferir_estado
+from estoque.servicos import entrada_manual, porcoes, saldo_lote, transferir_estado
 from fichas.escala import escalar
 from nucleo.operacoes import RegraViolada
 from producao.models import Producao
@@ -186,7 +186,9 @@ def lote(request, id):
     else:
         form = TransferenciaForm()
     estados = [dados_etiqueta(l, e) | {"estado": e} for e, _ in ESTADOS if saldo_lote(l, e) != 0]
-    return render(request, "web/lote.html", {"l": l, "estados": estados, "origem": origem(l), "form": form})
+    vencidos = {p["estado"] for p in porcoes(item=l.item_id) if p["lote_id"] == l.id and p["vencido"]}
+    return render(request, "web/lote.html", {"l": l, "estados": estados, "origem": origem(l), "form": form,
+                                             "vencidos": vencidos})
 
 
 COPIAS_MAX = 200  # uma página com milhares de etiquetas trava o navegador e a impressora

@@ -20,6 +20,8 @@ ORIGENS = {
     "contas_vencidas": "Conta vencida", "contas_a_vencer": "Conta a vencer",
     "recebimento_atrasado": "Compra que não chegou", "consumo_pendente": "Consumo pendente",
     "avisos_ajuste": "Aviso de ajuste", "ficha_rendimento": "Sugestão de ficha", "agente": "Pedido do agente",
+    "encomenda_sem_estoque": "Encomenda sem estoque", "receber_vencidas": "Cliente atrasado",
+    "sobras_fritas": "Sobra de frito",
 }
 SITUACOES = {"pendente": "Pendentes", "decididas": "Decididas", "aprovada": "Aprovadas", "recusada": "Recusadas",
              "expirada": "Expiradas", "sem_efeito": "Sem efeito"}
@@ -32,7 +34,13 @@ def _links(d):
     links = []
     if det.get("lote_id"):
         links.append(("Ver lote", ("lote", det["lote_id"])))
-    if det.get("compra_id"):
+    if d["origem"] == "encomenda_sem_estoque" and det.get("encomenda_id"):
+        links.append(("Ver encomenda", ("encomenda", det["encomenda_id"])))
+    elif d["origem"] == "sobras_fritas":
+        links.append(("Ver sobras", ("sobras",)))
+    if det.get("tipo") == "receber":  # parcela a receber: não é conta a pagar
+        links.append(("Ver contas a receber", ("receber",)))
+    elif det.get("compra_id"):
         links.append(("Ver compra", ("compra", det["compra_id"])))
     elif det.get("conta_id"):
         links.append(("Ver contas", ("contas",)))
@@ -100,6 +108,7 @@ def hoje(request):
     caixa_itens = [_enriquecer(d) for d in resumo["decisoes"]]
     return render(request, "web/inicio.html", {
         "r": resumo, "t": resumo["totais"], "backup": backup, "caixa": caixa_itens[:5],
+        "sem_estoque": set(resumo["encomendas"]["sem_estoque"]),
         "atrasadas": set(resumo["a_chegar"]["atrasadas"]), "custo_pendente": resumo["producoes"]["custo_pendente"]})
 
 

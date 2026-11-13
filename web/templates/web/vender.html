@@ -1,0 +1,18 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Vender — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Vender</h1>
+{% include "web/_mensagens.html" %}
+<p class="acoes"><a href="{% url 'vendas' %}">Vendas do dia</a> <a href="{% url 'encomenda_nova' %}">Nova encomenda</a>
+  <span>Hoje: {{ vendas_hoje.vendas }} venda(s), {{ vendas_hoje.total|dinheiro }}</span></p>
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <p><label>Tabela <select name="tabela">{% for v, nome in tabelas %}<option value="{{ v }}" {% if p.tabela == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <p><label>Cliente (obrigatório se for a prazo) <select name="cliente"><option value="">— balcão, sem cliente —</option>{% for c in clientes %}<option value="{{ c.cliente_id }}" {% if p.cliente == c.cliente_id|stringformat:"s" %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></label>
+     <a href="{% url 'cliente_novo' %}">cadastrar cliente</a></p>
+  <h2>O que saiu</h2>
+  {% include "web/_grade_itens.html" %}
+  {% include "web/_pagamento.html" %}
+  <button type="submit">Registrar venda</button>
+</form>
+{% endblock %}

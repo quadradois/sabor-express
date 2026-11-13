@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}O que falta produzir — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>O que falta produzir</h1>
+{% include "web/_mensagens.html" %}
+<p>Encomendas dos próximos dias que ainda não têm estoque reservado, menos o que já está livre no estoque.</p>
+{% for l in linhas %}<section class="bloco">
+  <p><strong>{{ l.produto }}</strong> ({{ l.forma|forma_nome|lower }}, {{ l.estado|conservacao|lower }})</p>
+  <p>Falta reservar {{ l.falta|numero }} un · livre no estoque {{ l.livre|numero }} un · <strong>produzir {{ l.a_produzir|numero }} un</strong></p>
+  <p class="mudo">Primeira entrega {{ l.primeira_entrega|date:"d/m/Y" }} · encomenda(s): {% for id in l.encomendas %}<a href="{% url 'encomenda' id %}">#{{ id }}</a> {% endfor %}</p>
+  {% if l.a_produzir > 0 %}<p class="acoes"><a href="{% url 'producao_nova' %}?produto={{ l.produto_id }}&unidades={{ l.a_produzir|numero }}&forma={{ l.forma }}">Começar produção</a></p>
+  {% else %}<p>Já há estoque livre: complete a reserva da encomenda.</p>{% endif %}
+</section>{% empty %}<p>Nada a produzir para as encomendas dos próximos dias.</p>{% endfor %}
+<p><a href="{% url 'encomendas' %}">Encomendas</a></p>
+{% endblock %}

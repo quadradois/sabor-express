@@ -1,0 +1,43 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Encomenda {{ e.encomenda_id }} — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Encomenda {{ e.encomenda_id }} <small>{{ e.cliente }}</small></h1>
+{% include "web/_mensagens.html" %}
+<p>{{ e.entrega_data|date:"d/m/Y" }}{% if e.entrega_hora %} às {{ e.entrega_hora|time:"H:i" }}{% endif %} · {% if e.modo == "entrega" %}entrega{% else %}retirada{% endif %}
+  {% if e.situacao == "pronta" %}<strong class="ok">pronta</strong>{% elif e.situacao == "aberta" %}<strong class="falta">falta reservar {{ e.falta|numero }} un</strong>
+  {% elif e.situacao == "entregue" %}<strong>entregue</strong>{% else %}<strong class="falta">cancelada</strong>{% endif %}</p>
+{% if e.observacao %}<p>Obs.: {{ e.observacao }}</p>{% endif %}
+<ul class="linhas">
+{% for i in e.itens %}<li><span class="nome">{{ i.quantidade }} × {{ i.apresentacao }}</span> {{ i.preco|dinheiro }} · {{ i.total|dinheiro }}
+  <span>reservado {{ i.reservado|numero }} de {{ i.unidades }} un</span>{% if i.falta %} <strong class="falta">falta {{ i.falta|numero }} un</strong>{% endif %}</li>{% endfor %}
+</ul>
+<p>Total <strong>{{ e.total|dinheiro }}</strong> · Sinal {{ e.sinal|dinheiro }}{% if e.sinal_forma %} ({{ e.sinal_forma }}){% endif %} · Saldo <strong>{{ e.saldo|dinheiro }}</strong></p>
+{% if e.venda_id %}<p>Virou a <a href="{% url 'vendas' %}">venda {{ e.venda_id }}</a>.</p>{% endif %}
+{% if e.situacao == "cancelada" %}<p>Motivo: {{ e.motivo_cancelamento }}{% if e.sinal_devolvido %} · sinal devolvido {{ e.sinal_devolvido|dinheiro }}{% endif %}</p>{% endif %}
+
+{% if e.situacao == "aberta" or e.situacao == "pronta" %}
+{% if e.falta %}<p class="aviso">Falta separar estoque. Se entrou salgado, complete a reserva; se não há, é preciso <a href="{% url 'necessidade' %}">produzir</a>.</p>{% endif %}
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="acao" value="completar">
+  <button type="submit">Completar reserva</button>
+</form>
+{% if e.situacao == "pronta" %}
+<h2>Entregar</h2>
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="acao" value="entregar">
+  <p>O saldo de {{ e.saldo|dinheiro }} entra agora ou vira conta a receber.</p>
+  {% include "web/_pagamento.html" %}
+  <button type="submit">Entregar e fechar a venda</button>
+</form>
+{% else %}<p>Para entregar, todos os itens precisam estar reservados.</p>{% endif %}
+<details class="cancelar" {% if p.acao == "cancelar" %}open{% endif %}><summary>Cancelar encomenda</summary>
+<form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="acao" value="cancelar">
+  <p><label>Motivo <input name="motivo" value="{% if p.acao == 'cancelar' %}{{ p.motivo }}{% endif %}"></label></p>
+  <p><label><input type="checkbox" name="devolver_sinal" value="1" checked> Devolver o sinal ao cliente</label></p>
+  <button type="submit">Cancelar esta encomenda</button>
+</form></details>
+{% endif %}
+<p><a href="{% url 'encomendas' %}">Voltar às encomendas</a></p>
+{% endblock %}
