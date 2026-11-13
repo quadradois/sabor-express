@@ -1,7 +1,7 @@
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from django.db.models import F, Min, Sum
+from django.db.models import F, Min, Q, Sum
 from django.utils import timezone
 
 from cadastros.models import Item
@@ -48,6 +48,53 @@ def alocar_fefo(item, quantidade: Decimal, *, hoje) -> list:
     if falta > 0:
         raise RegraViolada(f"Falta {fmt_qtd(falta, item.unidade_base)} de '{item.nome}' no estoque.")
     return saida
+
+
+def porcoes(*, item=None, ate=None, hoje=None) -> list[dict]:
+    """Porções com saldo (lote + conservação), da validade mais próxima para a mais longe.
+
+    A validade da porção é a da entrada mais antiga nela (`validade_porcao`) ou a do lote.
+    `ate` limita a validade (inclusive; porções sem validade ficam de fora). `valor` = saldo × custo do lote.
+    """
+    hoje = hoje or timezone.localdate()
+    qs = Movimento.objects.all() if item is None else Movimento.objects.filter(item=item)
+    grupos = (qs.values("lote", "estado")
+              .annotate(s=Sum("quantidade"), v=Min("validade", filter=Q(quantidade__gt=0))).filter(s__gt=0))
+    lotes = Lote.objects.select_related("item").in_bulk({g["lote"] for g in grupos})
+    saida = []
+    for g in grupos:
+        l = lotes[g["lote"]]
+        validade = g["v"] or l.validade
+        if ate is not None and (validade is None or validade > ate):
+            continue
+        saida.append({
+            "lote_id": l.id, "item_id": l.item_id, "item": l.item.nome, "unidade_base": l.item.unidade_base,
+            "codigo": l.codigo or "sem lote", "estado": g["estado"], "validade": validade,
+            "dias": None if validade is None else (validade - hoje).days,
+            "vencido": validade is not None and validade < hoje, "saldo": g["s"],
+            "valor": (g["s"] * l.custo_unitario).quantize(Decimal("0.01"), ROUND_HALF_UP),
+        })
+    saida.sort(key=lambda p: (p["validade"] is None, p["validade"] or hoje, p["item"], p["lote_id"]))
+    return saida
+
+
+def disponivel(item, *, hoje=None) -> Decimal:
+    """Disponível (RN-03) = saldo − vencido. Reservas entram com as encomendas (Plano 6);
+    a pendência de recebimento nunca está no saldo."""
+    vencido = sum((p["saldo"] for p in porcoes(item=item, ate=(hoje or timezone.localdate()) - timedelta(days=1),
+                                                hoje=hoje)), Decimal("0"))
+    return saldo(item) - vencido
+
+
+def itens_abaixo_do_minimo(*, hoje=None) -> list[dict]:
+    """Itens ativos com estoque mínimo e disponível abaixo dele (PRD: estoque baixo), do que mais falta."""
+    saida = []
+    for i in Item.objects.filter(ativo=True, estoque_minimo__gt=0).order_by("nome"):
+        d = disponivel(i, hoje=hoje)
+        if d < i.estoque_minimo:
+            saida.append({"item_id": i.id, "item": i.nome, "tipo": i.tipo, "unidade_base": i.unidade_base,
+                          "disponivel": d, "minimo": i.estoque_minimo, "falta": i.estoque_minimo - d})
+    return sorted(saida, key=lambda x: (-(x["falta"] / x["minimo"]), x["item"]))
 
 
 def consumos_pendentes(*, item_id=None, abertos=True) -> list[dict]:
