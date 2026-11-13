@@ -4,7 +4,8 @@ O agente (voz, Telegram, texto) conversa com o Sabor Express por um servidor
 [MCP](https://modelcontextprotocol.io) que roda **dentro** do projeto. As
 ferramentas ficam em `agente/ferramentas.py`; a lógica das consultas, em
 `agente/consultas.py` (a mesma que a API REST provisória `/api/agente/` usa);
-a das gravações, em `agente/acoes.py` e `agente/propostas.py`.
+a das gravações, em `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`
+e `agente/propostas.py`.
 O sistema faz todas as contas; o modelo só escolhe a ferramenta e fala o
 resultado.
 
@@ -149,6 +150,64 @@ confirmar de novo só refaz o recebimento.
 O trecho para o prompt do agente e um roteiro de teste por voz estão em
 [`agente-instrucoes-compras.md`](agente-instrucoes-compras.md).
 
+### Caixa de decisões, resumo do dia, histórico e backup
+
+Lógica em `agente/decisoes.py` (Plano 4, fase 2b), sobre as consultas e os
+serviços de `decisoes` e `backup.situacao` — nenhuma regra nova. O agente de
+voz **só fala quando alguém fala com ele**: não avisa sozinho. A rotina
+(`manage.py rotina_diaria`) enche a caixa; o agente a lê quando perguntado
+("o que tem para decidir?", "como está o dia?", "alguma novidade?", "o que foi
+feito hoje?", "quando foi o último backup?").
+
+**Fala curta:** o `texto` nunca lê lista longa. Com muitos itens, diz os
+totais, os **três** mais urgentes e quantos faltam ("E tem mais 4."); o resto
+fica nos dados (`itens`, `assuntos`, `operacoes`) para quando o dono pedir.
+Cada item da caixa é dito pelo **número** da decisão ("Número 12, para
+aprovar: ..."), para o dono responder "aprova a doze", "ciente da quinze".
+
+| Ferramenta | Nível | Parâmetros | O que faz |
+|---|---|---|---|
+| `ver_resumo_do_dia` | 0 | — | `resumo_do_dia()`: abre com a caixa ("Na caixa, 1 decisão para aprovar e 3 avisos."), depois até três assuntos do mais urgente (vencido, backup atrasado ou ausente, contas vencidas, validade perto, estoque baixo, contas a vencer, compras atrasadas, consumo e custo pendentes, avisos de ajuste, produções em andamento, compras a chegar) e "Tem mais N assuntos: ... Quer que eu fale?"; dia vazio: "Dia tranquilo: ...". `assuntos` traz todas as frases |
+| `ver_decisoes` | 0 | `tipo=""` (`decisao`, `aviso`), `origem=""` | pendentes da caixa: decisões antes dos avisos e, entre elas, pela urgência da origem; `origem` aceita o assunto falado ("vencido", "contas", "estoque baixo", "consumo pendente", "ficha"); desconhecido → `erro` + `opcoes` |
+| `ver_decisao` | 0 | `decisao_id` | uma decisão: texto, desde quando, último erro ao aprovar, ou quem decidiu, quando e o motivo |
+| `ver_historico` | 0 | `periodo="hoje"` (`ontem`, `semana`, `mes`, `AAAA-MM-DD`), `autor=""`, `canal=""` (`voz`, `tela`, `sistema`), `operacao=""`, `so_erros=false` | `historico_operacoes`: total, as três mais recentes (rótulo, hora, quem) e "E mais N"; `por_tipo` com a contagem por rótulo. Sem `canal`, a rotina automática (canal `sistema`) fica de fora; `operacao` casa com o rótulo ("compra", "pagamento", "peso") |
+| `ver_backup` | 0 | — | `situacao_backup()`: último backup (dia e hora), quantos há, se está atrasado (mais de 26 h) ou se não há nenhum. Não devolve o caminho da pasta |
+| `dar_ciencia` | 1 | `decisao_id` | `aprovar_decisao` num **aviso** ("Ciente do número 15: ... Saiu da caixa."); em decisão com operação → erro "precisa de aprovação" |
+| `recusar_decisao` | 1 | `decisao_id`, `motivo` | `recusar_decisao` com o motivo dito pelo dono ("Recusei o número 12 (...). Motivo: ..."); sem motivo → erro pedindo o porquê; aviso não se recusa |
+| `aprovar_decisao` | 2 | `decisao_id` | propõe aprovar: a aprovação (com a operação da decisão, hoje só `conciliar_consumo`) é **simulada** pelo núcleo e o `confirmar` repete o texto da decisão com os números ("Aprovar o número 12: ... Baixa do lote e custo de 5 reais; o custo da produção 3 fica fechado. Confirma?"); só `confirmar_proposta` grava. Aviso → erro "dê ciência" |
+
+- **Aprovar executa uma vez só:** a proposta chama
+  `decisoes.servicos.aprovar_decisao` com a chave da proposta, e o serviço roda
+  a operação com a chave da decisão. Confirmar de novo devolve o mesmo
+  resultado; pedir para aprovar de novo responde "já está aprovado".
+- **Recusa do núcleo na confirmação** (o lote foi usado entre a pergunta e o
+  "sim"): a decisão continua pendente, a proposta guarda o erro e a caixa passa
+  a dizer "Da última vez não deu para aprovar: ...".
+- Já decidida, expirada ou sem efeito → `erro` com a frase do que aconteceu
+  (quem decidiu e o motivo).
+- `dar_ciencia` e `recusar_decisao` seguem as chamadas repetidas do nível 1
+  (a mesma chamada em 6 segundos volta com `"repetida": true`).
+- O total de operações falado no resumo não conta a rotina automática.
+
+```
+usuário: "o que tem para decidir?"
+agente → ver_decisoes()
+       ← {"texto": "Na caixa, 1 decisão para aprovar e 2 avisos. Número 12, para aprovar: Consumo pendente
+                    de 1 kg de Farinha de trigo (produção 3): baixar do lote F1, que tem 10 kg. Número 9, aviso:
+                    Leite venceu em 11/11: ...", "itens": [...]}
+usuário: "aprova a doze"
+agente → aprovar_decisao(decisao_id=12)
+       ← {"confirmar": "Aprovar o número 12: ... Baixa do lote e custo de 5 reais. Confirma?", "proposta_id": 31}
+usuário: "sim"
+agente → confirmar_proposta(proposta_id=31)
+usuário: "ciente da nove"
+agente → dar_ciencia(decisao_id=9)
+       ← {"dito": "Ciente do número 9: Leite venceu em 11/11: ... Saiu da caixa."}
+```
+
+O trecho para o prompt do agente e um roteiro de teste por voz estão em
+[`agente-instrucoes-decisoes.md`](agente-instrucoes-decisoes.md).
+
 ### Fluxo de proposta (nível 2)
 
 ```
@@ -176,8 +235,9 @@ agente → confirmar_proposta(proposta_id=7)
   resultado. Recusada ou expirada → erro. Confirmada não pode ser recusada.
 - **Se o núcleo recusar na confirmação** (o estado mudou desde a proposta), a
   proposta continua pendente com o `erro` anotado, e a recusa fica na trilha.
-- As propostas aparecem no admin (só leitura). São a base da futura caixa de
-  decisões (Plano 4), que poderá confirmar pela tela com `agente.propostas.confirmar`.
+- As propostas aparecem no admin (só leitura). A caixa de decisões (Plano 4) é
+  outra coisa — vive dias e é criada pelo sistema —, mas aprovar uma decisão por
+  voz passa por uma proposta (`aprovar_decisao`).
 
 ### Chamadas repetidas (nível 1)
 
