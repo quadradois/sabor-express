@@ -92,11 +92,27 @@ def lotes_vencidos(hoje):
 
 
 def lotes_vencendo(hoje):
-    return [{"assunto": f"lote_vencendo:{p['lote_id']}:{p['estado']}:{p['validade']}",
-             "texto": f"{p['item']} vence {_quando(p['dias'])} ({_data(p['validade'])}): "
-                      f"{quantidade(p['saldo'], p['unidade_base'])} no lote {p['codigo']}{_estado(p['estado'])}.",
-             "detalhes": p}
-            for p in porcoes(ate=hoje + timedelta(days=DIAS_VALIDADE), hoje=hoje) if not p["vencido"]]
+    """Aviso de validade perto. No último dia o aviso vira pergunta (decisão do dono, Plano 9): ainda dá tempo de
+    agir, então pergunta o que fazer; a conferência "ainda estão aí?" fica para o dia seguinte (lotes_vencidos).
+    O assunto do último dia é outro, para a pergunta aparecer mesmo com ciência dada ao aviso dos dias anteriores."""
+    saida = []
+    perto = [p for p in porcoes(ate=hoje + timedelta(days=DIAS_VALIDADE), hoje=hoje) if not p["vencido"]]
+    lotes = Lote.objects.select_related("item").in_bulk({p["lote_id"] for p in perto if p["dias"] == 0})
+    for p in perto:
+        texto = (f"{p['item']} vence {_quando(p['dias'])} ({_data(p['validade'])}): "
+                 f"{quantidade(p['saldo'], p['unidade_base'])} no lote {p['codigo']}{_estado(p['estado'])}")
+        if p["dias"]:
+            saida.append({"assunto": f"lote_vencendo:{p['lote_id']}:{p['estado']}:{p['validade']}",
+                          "texto": texto + ".", "detalhes": p})
+            continue
+        lote = lotes[p["lote_id"]]
+        nome = nome_lote(lote, hoje=hoje)
+        agir = "vender" if lote.item.tipo == "produto" else "usar"
+        saida.append({"assunto": f"lote_vence_hoje:{p['lote_id']}:{p['estado']}:{p['validade']}",
+                      "texto": f"{texto} ({nome}). É o último dia: o que vai fazer com isso? Ainda dá para {agir} "
+                               "hoje; a partir de amanhã só sai com motivo.",
+                      "detalhes": {**p, "nome": nome, "dia_producao": dia_producao(lote), "ultimo_dia": True}})
+    return saida
 
 
 def estoque_baixo(hoje):

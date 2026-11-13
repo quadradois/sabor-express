@@ -203,6 +203,23 @@ def test_validade_vencidos_vencendo_e_disponivel():
     assert "Leite vence amanhã" in vencendo["texto"] and "500 mL no lote L2" in vencendo["texto"]
 
 
+def test_ultimo_dia_de_validade_vira_pergunta_mesmo_com_ciencia_do_aviso_anterior():
+    leite = Item.objects.create(nome="Leite", tipo="ingrediente", unidade_base="mL", controla_validade=True)
+    amanha = hoje() + timedelta(days=1)
+    entrada_manual(item_id=leite.id, quantidade=D("500"), unidade="mL", custo_total=D("3"), motivo="compra",
+                   lote_codigo="L2", validade=amanha, autor="dono")
+    rodar_rotina()
+    [aviso] = caixa("lotes_vencendo")
+    assert aviso["texto"].endswith("no lote L2.") and "último dia" not in aviso["texto"]
+    aprovar_decisao(decisao_id=aviso["decisao_id"], autor="dono")
+    assert caixa("lotes_vencendo") == []
+    rodar_rotina(hoje=amanha)
+    [pergunta] = caixa("lotes_vencendo")
+    assert "Leite vence hoje" in pergunta["texto"] and "o que vai fazer com isso?" in pergunta["texto"]
+    assert "Ainda dá para usar hoje; a partir de amanhã só sai com motivo." in pergunta["texto"]
+    assert pergunta["detalhes"]["ultimo_dia"] is True
+
+
 def test_contas_vencidas_e_a_vencer_e_pagamento_tira_da_caixa(atacadao, farinha):
     venc = [hoje() - timedelta(days=2), hoje() + timedelta(days=1), hoje() + timedelta(days=20)]
     registrar_compra(fornecedor_id=atacadao, data_compra=hoje(), total=D("300"), condicao="a_prazo",
