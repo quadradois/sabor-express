@@ -1,0 +1,23 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Custos — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Custo dos produtos</h1>
+{% include "web/_custos_nav.html" %}
+<p class="mudo">Custo <strong>estimado</strong> de uma unidade, pela ficha e pelo preço da última compra de cada ingrediente. Não inclui despesas, tributos nem perdas da produção.</p>
+{% for c in produtos %}<section class="bloco">
+  {% if c.erro %}<p><strong>{{ c.produto }}</strong></p><p class="erro">Ficha com problema: {{ c.erro }}</p>
+  {% else %}<p><a href="{% url 'custo_produto' c.produto_id %}"><strong>{{ c.produto }}</strong></a>
+    {% if c.completo %}<br>Ingredientes <strong>{{ c.ingredientes|custo4 }}</strong>
+      · indiretos {% if c.indiretos is None %}não cadastrados{% else %}{{ c.indiretos|custo4 }}{% endif %}
+      · óleo {% if c.oleo is None %}não cadastrado{% else %}{{ c.oleo|custo4 }}{% endif %}
+      <br>Cru (ingredientes + indiretos): <strong>{{ c.custo_cru|custo4 }}</strong> · Frito (cru + óleo): <strong>{{ c.custo_frito|custo4 }}</strong>
+    {% else %}<br><span class="falta">incompleto: falta comprar {% for f in c.faltando %}{{ f.item }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      <br class="mudo"><span class="mudo">Só com o que tem preço: {{ c.ingredientes_conhecido|custo4 }} (não é o custo do produto)</span>{% endif %}</p>{% endif %}
+</section>{% empty %}<p>Nenhum produto com ficha.</p>{% endfor %}
+<section class="bloco"><h2>Como o preço de um item mudou</h2>
+  <form method="get" action="{% url 'custos' %}" id="escolher-item" class="form">
+    <p><label>Item <select onchange="if(this.value)location.href=this.value">
+      <option value="">Escolha…</option>{% for i in itens %}<option value="{% url 'evolucao_preco' i.id %}">{{ i.nome }}</option>{% endfor %}</select></label></p></form>
+  <noscript><ul>{% for i in itens %}<li><a href="{% url 'evolucao_preco' i.id %}">{{ i.nome }}</a></li>{% endfor %}</ul></noscript></section>
+{% endblock %}

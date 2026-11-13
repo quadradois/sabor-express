@@ -1,0 +1,31 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Margens — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Margens <span class="rotulo">estimada</span></h1>
+{% include "web/_custos_nav.html" %}
+{% include "web/_mensagens.html" %}
+<form method="get" class="form">
+  {% include "web/_periodo.html" %}
+  <p><label>Agrupar por <select name="agrupar">{% for k, v in agrupamentos.items %}<option value="{{ k }}"{% if agrupar == k %} selected{% endif %}>{{ v }}</option>{% endfor %}</select></label></p>
+  <button type="submit">Ver margens</button></form>
+{% include "web/_estimada.html" with inclui=comp.inclui nao_inclui=comp.nao_inclui %}
+<section class="bloco"><h2>{{ p.rotulo }}</h2>
+  {% with a=comp.atual b=comp.anterior v=comp.variacao %}
+  <p>{{ a.vendas }} venda(s): <strong>{{ a.receita|din }}</strong> · desconto dado {{ a.desconto|din }} · custo {{ a.custo|din }}</p>
+  {% if a.margem is None %}<p class="aviso">Sem margem para estimar neste período: nenhuma venda com custo confiável.</p>
+  {% else %}<p>Margem estimada: <strong>{{ a.margem|din }}</strong> = <strong>{{ a.margem_pct|pct }}</strong> das vendas com custo</p>{% endif %}
+  <p class="mudo">Período anterior ({{ comp.de_anterior|date:"d/m" }} a {{ comp.ate_anterior|date:"d/m" }}): vendas {{ b.receita|din }}, margem {{ b.margem_pct|pct }}.</p>
+  <p>{% if v.pontos is None %}Sem como comparar a margem com o período anterior.{% else %}Margem {{ v.pontos|pontos }} em relação ao período anterior{% endif %}
+    · vendas {{ v.receita_pct|pctsinal }}</p>{% endwith %}</section>
+{% include "web/_fora.html" with f=comp.atual.fora %}
+<section class="bloco"><h2>Por {{ agrupamentos|get_item:agrupar|lower }}</h2>
+  <table><tr><th>{{ agrupamentos|get_item:agrupar }}</th><th class="num">Vendas</th><th class="num">Desconto</th><th class="num">Custo</th><th class="num">Margem</th><th class="num">Margem %</th><th class="num">Antes</th><th class="num">Variação</th></tr>
+  {% for g in grupos %}<tr><td>{% if agrupar == "dia" %}{{ g.nome|date:"d/m" }}{% else %}{{ g.nome }}{% endif %}</td><td class="num">{{ g.receita|din }}</td><td class="num">{{ g.desconto|din }}</td><td class="num">{{ g.custo|din }}</td>
+    <td class="num">{{ g.margem|din }}</td><td class="num">{{ g.margem_pct|pct }}</td><td class="num">{{ g.margem_pct_anterior|pct }}</td><td class="num">{{ g.pontos|pontos }}</td></tr>
+  {% empty %}<tr><td colspan="8">Nenhuma venda neste período.</td></tr>{% endfor %}</table>
+  <p class="mudo">"—" na margem: todas as vendas dessa linha ficaram fora da conta (custo não confiável).</p></section>
+<section class="bloco" id="tabela"><h2>Margem estimada dos preços de hoje</h2>
+  <p class="mudo">Preço de tabela atual menos o custo atual (ficha e última compra). Não é o que foi vendido.</p>
+  {% include "web/_tabela_margem.html" with tabela=tabela %}</section>
+{% endblock %}

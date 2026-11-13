@@ -2,7 +2,7 @@ from django.contrib.auth import views as auth
 from django.urls import path
 
 from . import (views, views_compras as vc, views_decisoes as vd, views_fritura as vf, views_receber as vr,
-               views_vendas as vv)
+               views_vendas as vv, views_custos as vcu)
 
 urlpatterns = [
     path("", vd.hoje, name="inicio"),
@@ -48,6 +48,15 @@ urlpatterns = [
     path("receber/", vr.receber, name="receber"),
     path("receber/anotar/", vr.anotar_recebimento, name="anotar_recebimento"),
     path("receber/estornar/", vr.estornar_recebimento, name="estornar_recebimento_cliente"),
+    path("custos/", vcu.custos, name="custos"),
+    path("custos/preparacao/<int:id>/", vcu.custo_preparacao, name="custo_preparacao"),
+    path("custos/<int:id>/", vcu.custo_produto, name="custo_produto"),
+    path("itens/<int:id>/precos/", vcu.evolucao_preco, name="evolucao_preco"),
+    path("margens/", vcu.margens, name="margens"),
+    path("ranking/", vcu.ranking, name="ranking"),
+    path("previsto-realizado/", vcu.previsto_realizado, name="previsto_realizado"),
+    path("previsto-realizado/<int:id>/", vcu.previsto_realizado_producao, name="previsto_producao"),
+    path("relatorio/", vcu.relatorio, name="relatorio"),
     path("entrar/", auth.LoginView.as_view(), name="login"),
     path("sair/", auth.LogoutView.as_view(), name="logout"),
 ]

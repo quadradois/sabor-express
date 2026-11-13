@@ -17,6 +17,7 @@
 <p>Custo total: R$ {{ p.custo_total|floatformat:2 }}{% if p.custo_unitario is not None %} — por unidade: R$ {{ p.custo_unitario|floatformat:4 }}{% endif %}</p>
 {% if p.lote %}<p>Lote: <a href="{% url 'lote' p.lote_id %}">{{ p.lote.codigo }}</a>
  — <a href="{% url 'etiquetas' p.lote_id %}?estado={{ estado_inicial }}">Etiquetas</a></p>{% else %}<p>Perda total: nenhum lote gerado.</p>{% endif %}
+<p><a href="{% url 'previsto_producao' p.id %}">Previsto × realizado desta produção</a></p>
 {% if p.anotacao %}<p>Como foi: {{ p.anotacao }}</p>{% endif %}
 
 {% elif p.status == "cancelada" %}

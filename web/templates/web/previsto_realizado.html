@@ -1,0 +1,29 @@
+{% extends "web/base.html" %}
+{% load formato %}
+{% block titulo %}Previsto × realizado — Sabor Express{% endblock %}
+{% block conteudo %}
+<h1>Previsto × realizado</h1>
+{% include "web/_custos_nav.html" %}
+{% include "web/_mensagens.html" %}
+<p class="mudo">Previsto: a ficha com o preço de cada ingrediente no dia da produção. Realizado: o que foi usado e o custo gravado. Rendimento = unidades boas ÷ planejadas.</p>
+<form method="get" class="form">
+  {% include "web/_periodo.html" %}
+  <p><label>Produto <select name="produto"><option value="">Todos</option>{% for x in produtos %}<option value="{{ x.id }}"{% if produto == x.id %} selected{% endif %}>{{ x.nome }}</option>{% endfor %}</select></label></p>
+  <button type="submit">Ver</button></form>
+<h2>{{ p.rotulo }}</h2>
+{% for g in r.por_produto %}<section class="bloco">
+  <p><strong>{{ g.produto }}</strong> · {{ g.producoes }} produção(ões) · {{ g.boas }} boas de {{ g.unidades }} planejadas ({{ g.perdas }} perdidas) · rendimento <strong>{{ g.rendimento_pct|pct }}</strong></p>
+  {% if g.comparadas %}<p>Custo previsto {{ g.custo_previsto|din }} · real {{ g.custo_real|din }} · desvio {{ g.desvio_custo|din }} ({{ g.desvio_custo_pct|pctsinal }})
+    <br>Por unidade: previsto {{ g.custo_unitario_previsto|custo4 }} · real {{ g.custo_unitario_real|custo4 }}
+    {% if g.comparadas != g.producoes %}<br class="mudo"><span class="mudo">Custo comparado em {{ g.comparadas }} de {{ g.producoes }} produções.</span>{% endif %}</p>
+  {% else %}<p class="aviso">Custo sem comparação: nenhuma produção com custo fechado e preço de todos os ingredientes.</p>{% endif %}
+</section>{% endfor %}
+{% if r.fora.custo_pendente or r.fora.sem_previsto %}<section class="bloco"><h2>Fora da comparação de custo</h2>
+  {% if r.fora.custo_pendente %}<p>Custo pendente (consumo ainda sem conciliar): {% for i in r.fora.custo_pendente %}<a href="{% url 'previsto_producao' i %}">#{{ i }}</a> {% endfor %}</p>{% endif %}
+  {% if r.fora.sem_previsto %}<p>Sem previsto (ingrediente sem compra até o dia da produção): {% for i in r.fora.sem_previsto %}<a href="{% url 'previsto_producao' i %}">#{{ i }}</a> {% endfor %}</p>{% endif %}
+  <p class="mudo">Elas contam nas unidades e no rendimento, mas não no custo: comparar custo parcial com previsto inteiro daria um desvio falso.</p></section>{% endif %}
+<h2>Produções</h2>
+{% for d in r.producoes %}<p class="bloco"><a href="{% url 'previsto_producao' d.producao_id %}"><strong>#{{ d.producao_id }} {{ d.produto }}</strong></a> · {{ d.data|date:"d/m/Y" }} · {{ d.forma|forma_nome|lower }}
+  <br>{{ d.boas }} boas de {{ d.unidades }} · rendimento {{ d.rendimento_pct|pct }} · previsto {{ d.custo_previsto|din }} · real {{ d.custo_real|din }}{% if d.custo_pendente %} <span class="falta">custo pendente</span>{% endif %}</p>
+{% empty %}<p>Nenhuma produção concluída neste período.</p>{% endfor %}
+{% endblock %}
