@@ -81,10 +81,13 @@ def possiveis_duplicatas(*, fornecedor_id, data_compra, total, documento="") -> 
             for c in sorted(achadas.values(), key=lambda c: c.id)]
 
 
-def ultimo_custo(item_id) -> dict | None:
-    """Custo de referência (RN-23): custo unitário da última compra aprovada do item; None se nunca comprado."""
-    l = (LinhaCompra.objects.select_related("compra__fornecedor").exclude(compra__status="cancelada")
-         .filter(item_id=item_id).order_by("-compra__data", "-compra_id", "-id").first())
+def ultimo_custo(item_id, *, ate=None) -> dict | None:
+    """Custo de referência (RN-23): custo unitário da última compra aprovada do item; None se nunca comprado.
+    `ate` (data, inclusive) dá a referência que valia naquele dia (custo previsto de uma produção passada)."""
+    qs = LinhaCompra.objects.select_related("compra__fornecedor").exclude(compra__status="cancelada")
+    if ate:
+        qs = qs.filter(compra__data__lte=ate)
+    l = qs.filter(item_id=item_id).order_by("-compra__data", "-compra_id", "-id").first()
     if l is None:
         return None
     return {"custo_unitario": l.custo_unitario, "compra_id": l.compra_id, "data": l.compra.data,

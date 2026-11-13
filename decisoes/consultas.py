@@ -93,7 +93,8 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
                   dias_encomendas=DIAS_ENCOMENDAS) -> dict:
     """O retrato do dia, para a tela Hoje e para "como está o dia?". Não grava nada.
 
-    `contas` são as a pagar; `receber`, as a receber. `encomendas.proximas` vai de hoje até hoje +
+    `totais.operacoes_hoje` conta as operações feitas hoje pela cozinha (tela, agente), sem a rotina da caixa
+    (canal "sistema"), que fica em `operacoes_rotina_hoje`. `contas` são as a pagar; `receber`, as a receber. `encomendas.proximas` vai de hoje até hoje +
     `dias_encomendas` (as de hoje também estão em `encomendas.hoje`); `sem_estoque` são as próximas com
     algo ainda sem reserva, e `necessidade` diz o que falta produzir para elas.
     """
@@ -152,7 +153,9 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
             "consumos_pendentes": len(pendentes), "avisos_de_ajuste": len(avisos),
             "decisoes_pendentes": sum(d["tipo"] == "decisao" for d in caixa),
             "avisos_pendentes": sum(d["tipo"] == "aviso" for d in caixa),
-            "operacoes_hoje": len(feitas),
+            # sem a rotina (canal "sistema"): cada rodada grava uma operação por gerador
+            "operacoes_hoje": sum(r["canal"] != "sistema" for r in feitas),
+            "operacoes_rotina_hoje": sum(r["canal"] == "sistema" for r in feitas),
             "vendas_hoje": v_hoje["vendas"], "valor_vendas_hoje": v_hoje["total"],
             "encomendas_hoje": len(de_hoje), "encomendas_proximas": len(proximas),
             "encomendas_atrasadas": len(atrasadas), "encomendas_sem_estoque": len(sem_estoque),
