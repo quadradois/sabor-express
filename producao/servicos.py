@@ -285,6 +285,11 @@ def conciliar_consumo(*, pendente_id, lote_id, autor, canal="web", chave=None) -
 
 
 def origem(lote) -> list:
+    """De onde veio o lote (RF-EST-12): lotes consumidos na produção ou, se frito, o lote cru da fritura."""
+    from .models import Fritura
+
+    if (f := Fritura.objects.filter(lote=lote).select_related("lote_origem").first()) is not None:
+        return [(f.lote_origem, Decimal(f.quantidade))]
     entrada = Movimento.objects.filter(lote=lote, tipo="entrada_producao").first()
     if entrada is None:
         return []

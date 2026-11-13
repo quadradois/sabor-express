@@ -12,15 +12,18 @@ from django.utils import timezone
 
 from compras.consultas import compras_em_aberto
 from estoque.servicos import consumos_pendentes, itens_abaixo_do_minimo, porcoes
-from financeiro.consultas import avisos_de_ajuste, contas_a_vencer, contas_vencidas, parcelas_em_aberto
+from financeiro.consultas import (avisos_de_ajuste, contas_a_vencer, contas_vencidas, parcelas_em_aberto,
+                                  receber_a_vencer, receber_em_aberto, receber_vencidas)
 from nucleo.models import RegistroOperacao
 from producao.models import Producao
+from vendas.consultas import encomendas, necessidade_producao, sobras_fritas, vendas_do_dia
 
 from .models import Decisao
 
 DIAS_VALIDADE = 3  # "vence logo": de hoje até daqui a 3 dias (como a consulta de validades do agente)
 DIAS_CONTAS = 7  # contas a vencer na semana (como a tela Hoje)
 DIAS_RECEBIMENTO = 7  # compra com recebimento pendente há 7 dias ou mais é "atrasada"
+DIAS_ENCOMENDAS = 3  # encomendas e necessidade de produção: de hoje até daqui a 3 dias
 
 
 def _ultimo_erro(d):
@@ -86,10 +89,13 @@ def _soma(linhas, campo) -> Decimal:
     return sum((l[campo] for l in linhas), Decimal("0"))
 
 
-def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CONTAS) -> dict:
+def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CONTAS,
+                  dias_encomendas=DIAS_ENCOMENDAS) -> dict:
     """O retrato do dia, para a tela Hoje e para "como está o dia?". Não grava nada.
 
-    Encomendas e vendas entram quando existirem (Plano 6).
+    `contas` são as a pagar; `receber`, as a receber. `encomendas.proximas` vai de hoje até hoje +
+    `dias_encomendas` (as de hoje também estão em `encomendas.hoje`); `sem_estoque` são as próximas com
+    algo ainda sem reserva, e `necessidade` diz o que falta produzir para elas.
     """
     hoje = hoje or timezone.localdate()
     validade = porcoes(ate=hoje + timedelta(days=dias_validade), hoje=hoje)
@@ -107,6 +113,13 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
     avisos = avisos_de_ajuste()
     caixa = decisoes()
     feitas = historico_operacoes(de=hoje, ate=hoje, status="sucesso", limite=None)
+    v_hoje = vendas_do_dia(hoje=hoje)["totais"]
+    proximas = encomendas(de=hoje, ate=hoje + timedelta(days=dias_encomendas), hoje=hoje)
+    atrasadas = encomendas(ate=hoje - timedelta(days=1), hoje=hoje)  # abertas com o dia já passado
+    de_hoje = [e for e in proximas if e["entrega_data"] == hoje]
+    sem_estoque = [e["encomenda_id"] for e in atrasadas + proximas if e["falta"] > 0]
+    r_vencidas, r_a_vencer = receber_vencidas(hoje=hoje), receber_a_vencer(dias=dias_contas, hoje=hoje)
+    sobras = sobras_fritas(hoje=hoje)
     return {
         "hoje": hoje,
         "validade": {"dias": dias_validade, "vencidos": vencidos, "vencendo": vencendo,
@@ -121,6 +134,14 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
         "consumos_pendentes": pendentes,
         "avisos_de_ajuste": avisos,
         "decisoes": caixa,
+        "vendas": {"hoje": v_hoje},
+        "encomendas": {"dias": dias_encomendas, "hoje": de_hoje, "proximas": proximas, "atrasadas": atrasadas,
+                       "sem_estoque": sem_estoque,
+                       "necessidade": necessidade_producao(dias=dias_encomendas, hoje=hoje)},
+        "receber": {"dias": dias_contas, "vencidas": r_vencidas, "a_vencer": r_a_vencer,
+                    "total_vencido": _soma(r_vencidas, "saldo"), "total_a_vencer": _soma(r_a_vencer, "saldo"),
+                    "total_a_receber": _soma(receber_em_aberto(hoje=hoje), "saldo")},
+        "sobras_fritas": sobras,
         "totais": {
             "lotes_vencidos": len(vencidos), "lotes_vencendo": len(vencendo),
             "itens_abaixo_do_minimo": len(baixo),
@@ -132,6 +153,12 @@ def resumo_do_dia(*, hoje=None, dias_validade=DIAS_VALIDADE, dias_contas=DIAS_CO
             "decisoes_pendentes": sum(d["tipo"] == "decisao" for d in caixa),
             "avisos_pendentes": sum(d["tipo"] == "aviso" for d in caixa),
             "operacoes_hoje": len(feitas),
+            "vendas_hoje": v_hoje["vendas"], "valor_vendas_hoje": v_hoje["total"],
+            "encomendas_hoje": len(de_hoje), "encomendas_proximas": len(proximas),
+            "encomendas_atrasadas": len(atrasadas), "encomendas_sem_estoque": len(sem_estoque),
+            "receber_vencidas": len(r_vencidas), "valor_receber_vencidas": _soma(r_vencidas, "saldo"),
+            "receber_a_vencer": len(r_a_vencer), "valor_receber_a_vencer": _soma(r_a_vencer, "saldo"),
+            "sobras_fritas": len(sobras),
         },
     }
 
@@ -153,6 +180,13 @@ ROTULOS = {
     "criar_decisao": "Item posto na caixa de decisões", "aprovar_decisao": "Decisão aprovada",
     "recusar_decisao": "Decisão recusada", "expirar_decisoes": "Decisões expiradas",
     "gerar_decisoes": "Rotina da caixa de decisões",
+    "salvar_cliente": "Cliente salvo", "salvar_apresentacao": "Preço/apresentação salvo",
+    "registrar_venda": "Venda registrada", "cancelar_venda": "Venda cancelada",
+    "criar_encomenda": "Encomenda criada", "completar_reserva": "Reserva de encomenda completada",
+    "cancelar_encomenda": "Encomenda cancelada", "entregar_encomenda": "Encomenda entregue",
+    "registrar_fritura": "Fritura registrada", "registrar_perda": "Perda registrada",
+    "registrar_recebimento": "Recebimento de cliente anotado",
+    "estornar_recebimento_cliente": "Recebimento de cliente estornado",
 }
 
 

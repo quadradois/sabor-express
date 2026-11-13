@@ -35,6 +35,11 @@ def _normal(s: str) -> str:
     return "".join(c for c in s if not unicodedata.combining(c)).strip()
 
 
+def _repetido(modelo, nome, excluir_id):
+    alvo = _normal(nome)
+    return next((x for x in modelo.objects.exclude(id=excluir_id).order_by("id") if _normal(x.nome) == alvo), None)
+
+
 def salvar_fornecedor(*, nome, documento="", contato="", ativo=True, fornecedor_id=None,
                       autor: str, canal: str = "web", chave: str | None = None) -> dict:
     """Cria (sem `fornecedor_id`) ou altera um fornecedor. Fornecedor com compras não é apagado: inativa-se."""
@@ -44,10 +49,7 @@ def salvar_fornecedor(*, nome, documento="", contato="", ativo=True, fornecedor_
         n = (nome or "").strip()
         if not n:
             raise RegraViolada("Informe o nome do fornecedor.")
-        alvo = _normal(n)
-        outro = next((f for f in Fornecedor.objects.exclude(id=fornecedor_id).order_by("id")
-                      if _normal(f.nome) == alvo), None)
-        if outro:
+        if outro := _repetido(Fornecedor, n, fornecedor_id):
             raise RegraViolada(f"Já existe o fornecedor '{outro.nome}'.")
         if fornecedor_id is None:
             f = Fornecedor(nome=n)
@@ -62,3 +64,29 @@ def salvar_fornecedor(*, nome, documento="", contato="", ativo=True, fornecedor_
     return executar("salvar_fornecedor", func, autor=autor, canal=canal, chave=chave,
                     parametros={"fornecedor_id": fornecedor_id, "nome": nome, "documento": documento,
                                 "contato": contato, "ativo": ativo})
+
+
+def salvar_cliente(*, nome, contato="", ativo=True, cliente_id=None,
+                   autor: str, canal: str = "web", chave: str | None = None) -> dict:
+    """Cria (sem `cliente_id`) ou altera um cliente. Nome não se repete, ignorando acento e caixa.
+    Cliente com vendas não é apagado: inativa-se."""
+    from .models import Cliente
+
+    def func(op):
+        n = (nome or "").strip()
+        if not n:
+            raise RegraViolada("Informe o nome do cliente.")
+        if outro := _repetido(Cliente, n, cliente_id):
+            raise RegraViolada(f"Já existe o cliente '{outro.nome}'.")
+        if cliente_id is None:
+            c = Cliente(nome=n)
+        else:
+            c = Cliente.objects.filter(id=cliente_id).first()
+            if c is None:
+                raise RegraViolada("Cliente não encontrado.")
+        c.nome, c.contato, c.ativo = n, (contato or "").strip(), bool(ativo)
+        c.save()
+        return {"cliente_id": c.id, "nome": c.nome}
+
+    return executar("salvar_cliente", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"cliente_id": cliente_id, "nome": nome, "contato": contato, "ativo": ativo})

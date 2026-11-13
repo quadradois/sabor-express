@@ -54,3 +54,25 @@ class Cronometro(models.Model):
     nome = models.CharField(max_length=120)
     fim = models.DateTimeField()
     parado_em = models.DateTimeField(null=True, blank=True)
+
+
+class Fritura(models.Model):
+    """Registro rápido de fritura (RF-FRI-01): unidades cruas de um lote viram um lote frito novo,
+    vinculado ao de origem. Custo = cru consumido + óleo de referência por unidade frita (RF-FRI-02)."""
+
+    lote_origem = models.ForeignKey("estoque.Lote", on_delete=models.PROTECT, related_name="frituras")
+    estado_origem = models.CharField(max_length=20)
+    quantidade = models.PositiveIntegerField()  # unidades fritas (consumidas do cru)
+    boas = models.PositiveIntegerField()
+    perda_motivo = models.CharField(max_length=200, blank=True)
+    lote = models.OneToOneField("estoque.Lote", null=True, blank=True, on_delete=models.PROTECT,
+                                related_name="fritura")
+    estado = models.CharField(max_length=20)  # conservação do frito (em geral fresco)
+    custo_total = models.DecimalField(max_digits=14, decimal_places=2)
+    custo_unitario = models.DecimalField(max_digits=14, decimal_places=4, null=True, blank=True)
+    operacao = models.ForeignKey("nucleo.RegistroOperacao", on_delete=models.PROTECT)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def perdas(self):
+        return self.quantidade - self.boas

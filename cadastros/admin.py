@@ -3,7 +3,7 @@ from django.contrib import admin
 from estoque.models import Movimento
 from nucleo.admin_executar import AdminViaExecutar
 
-from .models import Conversao, Fornecedor, Item
+from .models import Cliente, Conversao, Fornecedor, Item
 
 
 class ConversaoInline(admin.TabularInline):
@@ -25,3 +25,8 @@ class ItemAdmin(AdminViaExecutar, admin.ModelAdmin):
 @admin.register(Fornecedor)
 class FornecedorAdmin(AdminViaExecutar, admin.ModelAdmin):
     list_display = ("nome", "documento", "contato", "ativo")
+
+
+@admin.register(Cliente)
+class ClienteAdmin(AdminViaExecutar, admin.ModelAdmin):
+    list_display = ("nome", "contato", "ativo")
