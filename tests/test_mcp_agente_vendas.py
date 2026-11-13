@@ -130,9 +130,10 @@ def test_alcada_das_ferramentas_de_vendas():
     assert (nivel["cadastrar_cliente"], nivel["completar_reserva"]) == (1, 1)
     # dinheiro e estoque saindo esperam o "sim" (Q1, Q11); preço não muda por voz (Q10)
     assert {n: nivel[n] for n in NIVEL_2} == dict.fromkeys(NIVEL_2, 2)
-    assert {n for n in nivel if "preco" in n} == {"ver_precos", "ultimo_preco"}  # nenhuma muda preço
+    # nenhuma muda preço
+    assert {n for n in nivel if "preco" in n} == {"ver_precos", "ultimo_preco", "ver_evolucao_preco"}
     t = ferramentas()
-    assert len(t) == 70
+    assert len(t) == 77
     assert {n for n in LEITURA if t[n].annotations.readOnlyHint} == LEITURA
     assert "$ref" not in json.dumps(t["registrar_venda"].inputSchema)
     assert t["registrar_venda"].inputSchema["properties"]["itens"]["items"]["required"] == ["produto", "quantidade"]

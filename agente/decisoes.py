@@ -325,9 +325,8 @@ def ver_resumo_do_dia():
         if resto:
             texto += (f" Tem mais {_n(len(resto), 'assunto')}: {_juntar([x['rotulo'] for x in resto])}. "
                       "Quer que eu fale?")
-    # o total do núcleo conta também a rotina automática; a fala conta só o que pessoas e o agente fizeram
-    feitas = sum(h["canal"] != "sistema" for h in dc.historico_operacoes(de=r["hoje"], ate=r["hoje"],
-                                                                         status="sucesso", limite=None))
+    # o núcleo já conta sem a rotina automática (Plano 7): só o que pessoas e o agente fizeram
+    feitas = t["operacoes_hoje"]
     if feitas:
         texto += f" Hoje já foram feitas {_n(feitas, 'operação', 'operações')} no sistema."
     return {"hoje": r["hoje"].isoformat(), "texto": texto, "assuntos": assuntos,

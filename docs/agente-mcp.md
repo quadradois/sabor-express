@@ -5,7 +5,8 @@ O agente (voz, Telegram, texto) conversa com o Sabor Express por um servidor
 ferramentas ficam em `agente/ferramentas.py`; a lógica das consultas, em
 `agente/consultas.py` (a mesma que a API REST provisória `/api/agente/` usa);
 a das gravações, em `agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`,
-`agente/vendas.py` e `agente/propostas.py`. São 70 ferramentas.
+`agente/vendas.py` e `agente/propostas.py`; as de custos, margens e relatórios
+(só leitura), em `agente/custos.py`. São 77 ferramentas.
 O sistema faz todas as contas; o modelo só escolhe a ferramenta e fala o
 resultado.
 
@@ -187,7 +188,9 @@ aprovar: ..."), para o dono responder "aprova a doze", "ciente da quinze".
   (quem decidiu e o motivo).
 - `dar_ciencia` e `recusar_decisao` seguem as chamadas repetidas do nível 1
   (a mesma chamada em 6 segundos volta com `"repetida": true`).
-- O total de operações falado no resumo não conta a rotina automática.
+- O total de operações falado no resumo não conta a rotina automática (desde o
+  Plano 7 o próprio `resumo_do_dia()["totais"]["operacoes_hoje"]` já vem sem a
+  rotina; o agente usa esse número).
 
 ```
 usuário: "o que tem para decidir?"
@@ -235,7 +238,8 @@ próxima chamada (`encomenda_id`, `venda_id`, `parcela_id`, `pagamento_id`).
   ou `vencimento`); as parcelas são divididas pelo sistema.
 - Dias falados: `hoje`, `amanhã`, `depois de amanhã`, dia da semana ("sábado" =
   o próximo, hoje incluído) ou `AAAA-MM-DD`; hora `15:30` ou `15h`.
-- `ver_vendas` não devolve margem (o agente não opina sobre margem).
+- `ver_vendas` não devolve margem: a margem (sempre **estimada**) fica só em
+  `ver_margem` e nas outras ferramentas de custos (Plano 7, abaixo).
 
 | Ferramenta | Nível | Parâmetros | O que faz |
 |---|---|---|---|
@@ -291,6 +295,59 @@ original continua em `texto_decisao` de `ver_decisao`.
 
 O trecho para o prompt do agente e um roteiro de teste por voz estão em
 [`agente-instrucoes-vendas.md`](agente-instrucoes-vendas.md).
+
+### Custos, margens e relatórios
+
+Lógica em `agente/custos.py` (Plano 7, fase 2b), sobre `custos.fichas`,
+`custos.consultas` e `custos.relatorios` — nenhuma regra nova e **nenhuma
+gravação**: as sete são de leitura (nível 0). O modelo de voz não faz conta
+(design A3): toda diferença, porcentagem e ponto vem pronto no `texto`, e os
+números estruturados vêm ao lado (Decimal como número, datas ISO).
+
+- **Sempre estimado:** toda margem é dita "margem estimada" e o resultado do
+  período "estimado, antes das despesas", com o que não inclui (RF-CUS-06,
+  CA-33). A palavra "lucro" não aparece em nenhum `texto`.
+- **Dado faltante nunca vira zero:** ingrediente nunca comprado deixa o custo
+  incompleto ("falta o preço de Queijo; nunca foi comprado"); venda com custo
+  duvidoso fica **fora da margem** e o `texto` diz quantos itens, quanto e por
+  quê; produção sem compra até o dia ou com custo pendente fica fora da
+  comparação de custo.
+- **Períodos falados:** `hoje`, `ontem`, `semana` ("esta semana"), `semana
+  passada`, `mes` ("este mês"), `mes passado`, `ultimos 7 dias`, `ultimos 30
+  dias` (os de `custos.consultas.intervalo`); outro → `erro` com as opções. A
+  comparação é com o **mesmo trecho** do período anterior
+  (`intervalo_anterior`: semana de segunda a hoje × a semana passada de
+  segunda ao mesmo dia).
+- **Fala curta:** no máximo três grupos, produtos ou apresentações no `texto`;
+  o resto fica nos dados.
+- **Preço, óleo e indiretos não mudam por voz**, e nenhuma ferramenta sugere
+  preço (o PRD não define a regra).
+
+| Ferramenta | Nível | Parâmetros | O que faz |
+|---|---|---|---|
+| `ver_custo` | 0 | `produto` (nome falado do tamanho, ou de uma preparação) | `custo_estimado` (ou `custo_preparacao`): ingredientes, indiretos, cru e frito por unidade, pela última compra de cada ingrediente, e o que não inclui; `partes` com cada preparação e item. Incompleto → diz o que falta, sem número. Dois tamanhos → `opcoes` |
+| `ver_margem` | 0 | `periodo="semana"`, `agrupar="produto"` (`apresentacao`, `cliente`, `tabela`, `dia`), `comparar=true` | `intervalo` + `comparar_margens` com `intervalo_anterior` (ou `margens` sem comparar): margem estimada em %, em reais, variação em **pontos**, descontos, o que ficou fora e os três maiores grupos |
+| `ver_margem_tabela` | 0 | `produto=""` | `margem_apresentacoes`: custo estimado de cada jeito de vender e a margem estimada no varejo e no atacado pelo preço de tabela de hoje; sem custo → o que falta |
+| `ver_mais_vendidos` | 0 | `periodo="mes"`, `ordem="receita"` (`unidades`, `margem`; "lucro" vira `margem`) | `ranking_produtos`: os três primeiros com a participação no total; na ordem margem, quantos ficaram fora |
+| `ver_previsto_realizado` | 0 | `producao_id?`, `periodo="semana"`, `produto=""` | `previsto_realizado_producao` (uma) ou `previsto_realizado` (período): rendimento, custo previsto × real (diferença em reais e %), custo por unidade boa e os ingredientes que passaram do previsto; o que ficou fora da comparação |
+| `ver_relatorio` | 0 | `periodo="mes"` | `relatorio_periodo`: vendas e margem estimada, perdas com valor, resultado estimado antes das despesas (e % da receita), produção, compras, dinheiro anotado, contas em aberto hoje, o que não desconta e as ressalvas |
+| `ver_evolucao_preco` | 0 | `item` | `evolucao_preco`: preço por quilo/litro/unidade da última compra × a anterior e desde a primeira, em % |
+
+```
+usuário: "qual a minha margem esta semana? caiu?"
+agente → ver_margem(periodo="semana")
+       ← {"texto": "Margem estimada nesta semana: 88 por cento, 44 reais sobre 50 reais de vendas com custo.
+                    Em relação ao mesmo trecho da semana passada, caiu 6 pontos; era 94 por cento. ... É margem
+                    estimada: não inclui tributos sobre a venda, despesas comerciais e operacionais, indiretos
+                    de fabricação e ajuste de óleo.", "totais": {...}, "variacao": {"pontos": -6.0, ...}}
+usuário: "quanto me custa uma bolinha de queijo?"
+agente → ver_custo(produto="bolinha de queijo")
+       ← {"texto": "O custo estimado de Bolinha de queijo 20 g está incompleto: falta o preço de Queijo; nunca
+                    foi comprado. Sem esse preço não dá para dizer o custo.", "completo": false, ...}
+```
+
+O trecho para o prompt do agente e um roteiro de teste por voz estão em
+[`agente-instrucoes-custos.md`](agente-instrucoes-custos.md).
 
 ### Fluxo de proposta (nível 2)
 
