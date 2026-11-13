@@ -11,7 +11,7 @@ nível 1 grava direto e devolve `dito` (o que foi feito); nível 2 não grava,
 devolve `confirmar` + `proposta_id` e só `confirmar_proposta` executa; o nível
 3 ("nunca") não tem ferramenta e o núcleo recusa. Toda gravação passa por
 `nucleo.operacoes.executar` com canal="agente". A lógica está em
-`agente/acoes.py` e `agente/propostas.py`.
+`agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py` e `agente/propostas.py`.
 """
 
 import functools
@@ -24,7 +24,7 @@ from django.db import close_old_connections
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from . import acoes, compras, consultas
+from . import acoes, compras, consultas, decisoes
 from .consultas import ConsultaInvalida
 from nucleo.operacoes import RegraViolada
 
@@ -39,7 +39,9 @@ INSTRUCOES = (
     "mudar o pedido, chame recusar_proposta. Nunca confirme por conta própria. "
     "Se vier 'repetida', a mesma chamada já tinha sido feita há instantes e não foi gravada de novo. "
     "Dinheiro: o sistema nunca paga nada; registrar_pagamento só anota que o dono pagou. "
-    "Valores falados chegam em reais (ex.: 90 ou 12.5)."
+    "Valores falados chegam em reais (ex.: 90 ou 12.5). "
+    "Caixa de decisões: cada item tem um número (decisao_id), que é o que o dono diz (\"aprova a doze\"); "
+    "aprovar uma decisão sempre passa pelo 'confirmar'; recusar exige o motivo dito pelo dono."
 )
 
 AUTOR = "agente-mcp"
@@ -219,6 +221,42 @@ def ver_producao(producao_id: int) -> dict:
     return consultas.producao(producao_id)
 
 
+@leitura
+def ver_resumo_do_dia() -> dict:
+    """"Como está o dia?", "alguma novidade?": o retrato do dia (vencidos, estoque baixo, contas, compras a chegar,
+    produções, caixa de decisões, backup atrasado). O 'texto' traz os totais e os três assuntos mais urgentes."""
+    return decisoes.ver_resumo_do_dia()
+
+
+@leitura
+def ver_decisoes(tipo: str = "", origem: str = "") -> dict:
+    """"O que tem para decidir?": itens pendentes da caixa, cada um com o número para o dono citar. Decisões para
+    aprovar vêm antes dos avisos. 'tipo': decisao, aviso ou vazio (todos). 'origem' filtra pelo assunto falado
+    (ex.: "vencido", "contas", "estoque baixo", "consumo pendente", "ficha")."""
+    return decisoes.ver_decisoes(tipo, origem)
+
+
+@leitura
+def ver_decisao(decisao_id: int) -> dict:
+    """Uma decisão da caixa em detalhe, pelo número: o texto, desde quando está lá, quem decidiu e o motivo."""
+    return decisoes.ver_decisao(decisao_id)
+
+
+@leitura
+def ver_historico(periodo: str = "hoje", autor: str = "", canal: str = "", operacao: str = "",
+                  so_erros: bool = False) -> dict:
+    """"O que foi feito hoje?": operações gravadas no sistema, das mais recentes. 'periodo': hoje, ontem, semana,
+    mes ou AAAA-MM-DD. 'autor' (quem fez), 'canal' (voz, tela ou sistema; sem canal, a rotina automática fica de
+    fora) e 'operacao' (ex.: "compra", "pagamento", "produção") filtram. 'so_erros' mostra as tentativas recusadas."""
+    return decisoes.ver_historico(periodo, autor, canal, operacao, so_erros)
+
+
+@leitura
+def ver_backup() -> dict:
+    """"Quando foi o último backup?": data e hora do último backup, quantos há guardados e se está atrasado."""
+    return decisoes.ver_backup()
+
+
 # --- nível 1: faz e repete -------------------------------------------------
 # Sem producao_id, valem para a única produção em andamento.
 
@@ -280,6 +318,20 @@ def resolver_aviso(observacao: str, aviso_id: int | None = None) -> dict:
     """Anota o que o dono fez com um aviso de ajuste (ex.: "o fornecedor abateu no boleto").
     Sem 'aviso_id', vale para o único aviso em aberto."""
     return compras.resolver_aviso(observacao=observacao, aviso_id=aviso_id, autor=AUTOR, canal=CANAL)
+
+
+@escrita(1)
+def dar_ciencia(decisao_id: int) -> dict:
+    """Dá ciência a um AVISO da caixa (o dono disse "ciente", "já vi", "ok" para um aviso): sai da caixa.
+    Não serve para decisão com operação (use aprovar_decisao)."""
+    return decisoes.dar_ciencia(decisao_id=decisao_id, autor=AUTOR, canal=CANAL)
+
+
+@escrita(1)
+def recusar_decisao(decisao_id: int, motivo: str) -> dict:
+    """Recusa uma decisão da caixa com o motivo dito pelo dono (ex.: "vou comprar amanhã"). Motivo obrigatório:
+    sem ele, pergunte por quê. Aviso não se recusa (use dar_ciencia)."""
+    return decisoes.recusar_decisao(decisao_id=decisao_id, motivo=motivo, autor=AUTOR, canal=CANAL)
 
 
 # --- nível 2: repete e espera o sim ----------------------------------------
@@ -459,6 +511,13 @@ def conciliar_consumo(item: str = "", pendente_id: int | None = None, lote_id: i
     que vence primeiro com saldo suficiente. Não grava: pede confirmação."""
     return compras.propor_conciliar_consumo(item=item, pendente_id=pendente_id, lote_id=lote_id,
                                             autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def aprovar_decisao(decisao_id: int) -> dict:
+    """Propõe aprovar uma decisão da caixa pelo número ("aprova a doze"): a operação dela é simulada e o texto
+    volta em 'confirmar' com os números. Não grava: só confirmar_proposta, depois do sim, executa (uma vez só)."""
+    return decisoes.propor_aprovar_decisao(decisao_id=decisao_id, autor=AUTOR, canal=CANAL)
 
 
 @escrita(2)

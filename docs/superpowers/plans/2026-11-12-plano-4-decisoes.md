@@ -25,7 +25,7 @@ O design previa um agente de texto (tela e Telegram) com uma **fila de tarefas**
 |---|---|---|---|
 | **1 — Núcleo** | esta sessão | modelo, migração, serviços sobre `executar()`, geradores, comando, consultas, admin, testes | **feita** (Tasks 1–6) |
 | **2a — Telas** | sessão paralela, só `web/` | caixa de decisões, "Hoje" com o resumo, histórico de operações (Tasks 7–9) | a fazer |
-| **2b — Ferramentas MCP** | sessão paralela, só `agente/` e `docs/` do agente | ferramentas de leitura e decisão, instruções do agente de voz (Tasks 10–12) | a fazer |
+| **2b — Ferramentas MCP** | sessão paralela, só `agente/` e `docs/` do agente | ferramentas de leitura e decisão, instruções do agente de voz (Tasks 10–12) | **feita** (mais `ver_backup`) |
 
 As fases 2a e 2b não mexem em modelo nem em serviço; se precisarem de algo do núcleo, pedem à coordenação. O contrato estável está no fim deste documento.
 
@@ -136,20 +136,20 @@ Padrão das telas existentes: login obrigatório, `{% chave %}` em todo POST, `R
 Padrão de `agente/ferramentas.py` (nível 0 lê, 1 faz e repete, 2 cria `Proposta` simulada e espera o "sim"). Na voz, o agente **não lê ids**: diz "a primeira", "a do queijo", e guarda o id para a chamada.
 
 ### Task 10: Leitura (nível 0)
-- [ ] `ver_resumo_do_dia` → `resumo_do_dia()` (o agente fala primeiro os totais, depois o que o dono pedir).
-- [ ] `ver_decisoes(tipo="")` → `decisoes(tipo=…)`; `ver_decisao(decisao_id)` → `detalhe_decisao`.
-- [ ] `ver_historico(periodo="hoje", autor="", canal="", operacao="")` → `historico_operacoes` (resposta curta: rótulo + hora + quem).
+- [x] `ver_resumo_do_dia` → `resumo_do_dia()` (o agente fala primeiro os totais, depois o que o dono pedir).
+- [x] `ver_decisoes(tipo="")` → `decisoes(tipo=…)`; `ver_decisao(decisao_id)` → `detalhe_decisao`.
+- [x] `ver_historico(periodo="hoje", autor="", canal="", operacao="")` → `historico_operacoes` (resposta curta: rótulo + hora + quem).
 
 ### Task 11: Decidir
-- [ ] `dar_ciencia(decisao_id)` nível 1 → `aprovar_decisao` em aviso; recusa decisão com operação ("isso precisa de aprovação").
-- [ ] `aprovar_decisao(decisao_id)` nível 2 → `propostas.propor("aprovar_decisao", …)`; o resumo repete o texto da decisão e os números da simulação; só `confirmar_proposta` grava. Registrar `aprovar_decisao` em `agente.propostas.OPERACOES`.
-- [ ] `recusar_decisao(decisao_id, motivo)` nível 1 → `recusar_decisao` (repete o que entendeu).
-- [ ] Testes no padrão de `tests/test_mcp_agente_escrita.py`: aprovar por voz não grava sem o "sim"; confirmar grava uma vez; ciência e recusa gravam e repetem.
+- [x] `dar_ciencia(decisao_id)` nível 1 → `aprovar_decisao` em aviso; recusa decisão com operação ("isso precisa de aprovação").
+- [x] `aprovar_decisao(decisao_id)` nível 2 → `propostas.propor("aprovar_decisao", …)`; o resumo repete o texto da decisão e os números da simulação; só `confirmar_proposta` grava. Registrar `aprovar_decisao` em `agente.propostas.OPERACOES`.
+- [x] `recusar_decisao(decisao_id, motivo)` nível 1 → `recusar_decisao` (repete o que entendeu).
+- [x] Testes no padrão de `tests/test_mcp_agente_escrita.py`: aprovar por voz não grava sem o "sim"; confirmar grava uma vez; ciência e recusa gravam e repetem.
 
 ### Task 12: Instruções do agente de voz
-- [ ] `docs/agente-instrucoes-decisoes.md` (no padrão de `docs/agente-instrucoes-compras.md`): "o que tem para decidir?" → `ver_decisoes`, diga quantas decisões e quantos avisos e leia **uma por vez**, decisões primeiro; "como está o dia?" → `ver_resumo_do_dia`, totais primeiro e no máximo três assuntos por fala; "o que foi feito hoje?" → `ver_historico`; nunca aprovar sem ter lido a decisão em voz alta naquela conversa; ao recusar, pergunte o motivo.
-- [ ] `docs/agente-mcp.md`: tabela das ferramentas novas.
-- [ ] Opcional: `agente.consultas.estoque` e `validades` passam a usar `estoque.servicos.disponivel`/`porcoes` (ver pendências).
+- [x] `docs/agente-instrucoes-decisoes.md` (no padrão de `docs/agente-instrucoes-compras.md`): "o que tem para decidir?" → `ver_decisoes`, diga quantas decisões e quantos avisos e leia **uma por vez**, decisões primeiro; "como está o dia?" → `ver_resumo_do_dia`, totais primeiro e no máximo três assuntos por fala; "o que foi feito hoje?" → `ver_historico`; nunca aprovar sem ter lido a decisão em voz alta naquela conversa; ao recusar, pergunte o motivo.
+- [x] `docs/agente-mcp.md`: tabela das ferramentas novas.
+- [ ] Opcional (não feito; ver `2026-11-12-plano-4-pendencias-agente.md`): `agente.consultas.estoque` e `validades` passam a usar `estoque.servicos.disponivel`/`porcoes` (ver pendências).
 
 ---
 
