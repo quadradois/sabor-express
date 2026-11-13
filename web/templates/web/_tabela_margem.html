@@ -1,0 +1,13 @@
+{% load formato %}
+{% for a in tabela %}<section class="bloco">
+  <p><strong>{{ a.descricao }}</strong> <span class="rotulo">{{ a.rotulo }}</span></p>
+  {% if a.erro == "Produto não encontrado." %}<p class="falta">Produto sem ficha: não dá para estimar o custo.</p>
+  {% elif a.erro %}<p class="erro">Ficha com problema: {{ a.erro }}</p>
+  {% elif not a.completo %}<p class="falta">incompleto: falta comprar {% for f in a.faltando %}{{ f.item }} ({{ f.motivo }}){% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    <p class="mudo">Preço: varejo {{ a.preco_varejo|din }}{% if a.preco_atacado %} · atacado {{ a.preco_atacado|din }}{% endif %} — sem custo completo não dá para estimar a margem.</p>
+  {% else %}<p>Custo {{ a.custo|din }} (salgado {{ a.custo_salgado|din }} + embalagem {{ a.custo_embalagem|din }})</p>
+    <p>Varejo {{ a.preco_varejo|din }}: margem <strong>{{ a.margem_varejo|din }}</strong> ({{ a.margem_varejo_pct|pct }})
+    {% if a.preco_atacado %}<br>Atacado {{ a.preco_atacado|din }}: margem <strong>{{ a.margem_atacado|din }}</strong> ({{ a.margem_atacado_pct|pct }}){% endif %}</p>
+    {% if a.custo_un_ultimo_lote is not None %}<p class="mudo">Último lote produzido custou {{ a.custo_un_ultimo_lote|custo4 }} por unidade (só informação).</p>{% endif %}{% endif %}
+  <p class="mudo">Não inclui: {{ a.nao_inclui|join:", " }}.</p>
+</section>{% empty %}<p>Nenhuma apresentação cadastrada.</p>{% endfor %}
