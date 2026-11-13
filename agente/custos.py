@@ -1,4 +1,4 @@
-"""Custos, margens e relatórios pelo agente de voz (Plano 7, fase 2b) — só leitura (nível 0).
+"""Custos, margens, relatórios e estudo de preço pelo agente de voz (Planos 7 e 8, fase 2b) — só leitura (nível 0).
 
 Mesmo padrão de `vendas.py`: produto, preparação e item chegam pelo nome falado e são resolvidos aqui
 (ambíguo vira `ConsultaInvalida` com `opcoes`); o período é falado ("semana", "mês passado") e vira datas
@@ -6,9 +6,12 @@ por `custos.consultas.intervalo`. Cada ferramenta devolve os números do núcleo
 ISO) e um `texto` curto pronto para falar, com dinheiro por extenso e porcentagens e pontos já calculados.
 
 O modelo de voz não faz conta nenhuma (design A3): toda diferença, porcentagem e ponto vem pronto de
-`custos.fichas`, `custos.consultas` e `custos.relatorios`. Toda margem é dita "estimada" e todo resultado
-"estimado, antes das despesas" (RF-CUS-06, CA-33); o que ficou fora da margem é dito com o motivo; dado
-faltante é dito como faltante, nunca como zero. Nenhuma ferramenta daqui grava nada.
+`custos.fichas`, `custos.consultas`, `custos.relatorios` e `custos.precos`. Toda margem é dita "estimada" e o
+resultado "estimado", antes e depois das despesas (RF-CUS-06, CA-33); a margem com indiretos é dita como tal,
+separada da margem só de ingredientes; o que ficou fora é dito com o motivo; dado faltante (despesa sem valor,
+taxa não informada) é dito como faltante, nunca como zero. Estudo e simulação de preço (Plano 8) não escolhem
+margem nem gravam preço: a simulação é sempre dita "simulação" e o preço só muda pela tela. Nenhuma ferramenta
+daqui grava nada.
 """
 
 import re
@@ -17,12 +20,14 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from cadastros.models import Item
 from custos import consultas as cc
+from custos import precos
 from custos.fichas import custo_estimado, custo_preparacao
 from custos.relatorios import relatorio_periodo
 from fichas.models import Ficha
 
-from .compras import _POR, MESES, _item, _juntar, _n, qtd, quando, reais
+from .compras import _POR, MESES, _item, _juntar, _n, mes_falado, qtd, quando, reais
 from .consultas import ConsultaInvalida, _casa, _filtrar, _inteiro, _normal, escolher
+from .acoes import _decimal
 from .vendas import _num, _un
 
 ZERO = Decimal("0")
@@ -246,8 +251,20 @@ def _fora_txt(fora) -> str:
 
 def _totais(t) -> dict:
     return {k: t[k] for k in ("vendas", "linhas", "unidades", "receita", "receita_tabela", "desconto",
-                              "receita_com_custo", "custo", "margem", "margem_pct")} | {
+                              "receita_com_custo", "custo", "margem", "margem_pct", "indiretos",
+                              "margem_com_indiretos", "margem_com_indiretos_pct", "linhas_sem_indireto")} | {
         "fora": {"linhas": t["fora"]["linhas"], "receita": t["fora"]["receita"], "motivos": t["fora"]["motivos"]}}
+
+
+def _com_indiretos_txt(t) -> str:
+    """A margem com indiretos (Plano 8): é outra margem, e o texto diz qual é."""
+    if t.get("margem_com_indiretos_pct") is not None:
+        return (f" Com os indiretos de referência por salgado (mão de obra, energia e gás), a margem estimada fica "
+                f"em {_pct(t['margem_com_indiretos_pct'])}, {reais(t['margem_com_indiretos'])}.")
+    if t.get("linhas_sem_indireto"):
+        return (f" A margem com indiretos não dá para dizer: {_n(t['linhas_sem_indireto'], 'item de venda')} de "
+                "produto sem indireto de referência cadastrado.")
+    return ""
 
 
 def _grupo_txt(g, comparar) -> str:
@@ -302,7 +319,10 @@ def ver_margem(periodo="semana", agrupar="produto", comparar=True):
                       + (f"; e mais {sobra} nos dados" if sobra > 0 else "") + ".")
     if t["vendas"] or (comparar and antes["margem_pct"] is not None):
         texto += " " + estimada
+    if t["vendas"] and t["margem_pct"] is not None:
+        texto += _com_indiretos_txt(t)
     saida = {"periodo": chave, "de": de, "ate": ate, "agrupar": agrupar, "rotulo": "estimada",
+             "rotulo_com_indiretos": cc.ROTULO_INDIRETOS,
              "inclui": cc.INCLUI_MARGEM, "nao_inclui": cc.NAO_INCLUI_MARGEM, "totais": _totais(t),
              "grupos": [{k: g.get(k) for k in ("chave", "nome", "receita", "receita_anterior", "margem",
                                                  "margem_pct", "margem_pct_anterior", "pontos") if k in g}
@@ -329,6 +349,11 @@ def _apres_txt(a) -> str:
         t += f", margem estimada de {_pct(a['margem_varejo_pct'])}, {reais(a['margem_varejo'])}"
     if a["preco_atacado"] is not None and a["margem_atacado_pct"] is not None:
         t += f"; no atacado, {reais(a['preco_atacado'])}, {_pct(a['margem_atacado_pct'])}"
+    if a.get("margem_varejo_com_indiretos_pct") is not None:
+        t += (f"; com os indiretos de referência, {_rs(a['indiretos'])}, a margem estimada no varejo fica em "
+              f"{_pct(a['margem_varejo_com_indiretos_pct'])}")
+        if a["preco_atacado"] is not None and a.get("margem_atacado_com_indiretos_pct") is not None:
+            t += f" e no atacado em {_pct(a['margem_atacado_com_indiretos_pct'])}"
     return t
 
 
@@ -347,11 +372,16 @@ def ver_margem_tabela(produto=""):
         texto = ("; ".join(frases[:MAX_FALADOS]) + (f"; e mais {sobra} nos dados" if sobra > 0 else "") + ". "
                  "Margem estimada pelo preço de tabela de hoje e pela última compra de cada ingrediente; "
                  "não inclui indiretos, perdas da produção, tributos nem despesas.")
+        if any(a.get("margem_varejo_com_indiretos_pct") is not None for a in lista):
+            texto += (" A margem com indiretos é outra: desconta também os indiretos de referência por salgado "
+                      "(mão de obra, energia e gás).")
     return _json({"rotulo": "estimada", "apresentacoes": [
         {k: a[k] for k in ("apresentacao_id", "produto", "nome", "forma", "estado", "unidades", "preco_varejo",
                            "preco_atacado", "custo_salgado", "custo_embalagem", "custo", "completo", "faltando",
                            "erro", "margem_varejo", "margem_varejo_pct", "margem_atacado", "margem_atacado_pct",
-                           "nao_inclui")} for a in lista], "texto": texto})
+                           "indiretos", "custo_com_indiretos", "margem_varejo_com_indiretos",
+                           "margem_varejo_com_indiretos_pct", "margem_atacado_com_indiretos",
+                           "margem_atacado_com_indiretos_pct", "nao_inclui")} for a in lista], "texto": texto})
 
 
 # --- ver_mais_vendidos -------------------------------------------------------------------
@@ -511,6 +541,68 @@ def ver_previsto_realizado(producao_id=None, periodo="semana", produto=""):
         "por_produto": r["por_produto"], "fora": r["fora"], "texto": texto})
 
 
+# --- ver_relatorio e ver_resultado: antes e depois das despesas ---------------------------
+
+def _faltando_despesa_txt(faltando) -> str:
+    """"falta o valor de Internet de novembro"."""
+    return "falta o valor de " + _juntar([f"{f['despesa']} de {mes_falado(f['competencia'])}" for f in faltando])
+
+
+def _sem_despesa(r) -> bool:
+    desp = r["despesas"]
+    return not desp["por_categoria"] and not desp["faltando"]
+
+
+def _depois_txt(r) -> str:
+    """O resultado depois das despesas (Plano 8), com o que falta e o que ainda é previsto. Nunca "lucro"."""
+    desp, dd = r["despesas"], r["depois_das_despesas"]
+    if _sem_despesa(r):
+        return ("Nenhuma despesa lançada no período: sem as despesas, não dá para dizer o resultado depois "
+                "delas.")
+    t = f"Despesas do período: {reais(desp['total'])}"
+    if desp["rateado"]:
+        t += ", com as mensais pela parte dos dias do período"
+    t += ". Resultado estimado depois das despesas: "
+    t += (f"negativo em {reais(abs(dd['resultado']))}" if dd["resultado"] < 0 else reais(dd["resultado"]))
+    if dd["resultado_pct"] is not None:
+        t += f", {_pct(dd['resultado_pct'])} da receita"
+    t += "."
+    if not dd["completo"]:
+        t += f" Ainda incompleto: {_faltando_despesa_txt(dd['faltando'])}; o resultado de verdade é menor que este."
+    previstas = [m["despesa"] for m in desp["mensais"] if m["situacao"] in ("aberta", "parcial")]
+    if previstas:
+        t += f" Ainda sem pagamento anotado, pelo valor lançado: {_juntar(previstas)}."
+    return t
+
+
+def _despesas_dados(desp) -> dict:
+    return {"total": desp["total"], "indiretas": desp["indiretas"], "completo": desp["completo"],
+            "rateado": desp["rateado"], "faltando": desp["faltando"], "ressalvas": desp["ressalvas"],
+            "por_categoria": [{k: g[k] for k in ("categoria", "indireta", "valor", "lancamentos", "completo")}
+                              for g in desp["por_categoria"]]}
+
+
+def ver_resultado(periodo="mes"):
+    chave, de, ate = _periodo(periodo)
+    r = relatorio_periodo(de=de, ate=ate)
+    res, dd, t = r["resultado"], r["depois_das_despesas"], r["vendas"]["totais"]
+    faixa = "" if de == ate else f", {_faixa(de, ate)}"
+    partes = [f"{_cap(_dito(chave))}{faixa}, tudo estimado."]
+    if t["vendas"]:
+        partes.append(f"Vendas: {reais(t['receita'])}. Resultado antes das despesas: {reais(res['resultado'])}.")
+    else:
+        partes.append("Nenhuma venda concluída no período.")
+    partes.append(_depois_txt(r))
+    if not _sem_despesa(r):
+        partes.append("Por categoria: " + "; ".join(f"{g['categoria']}, {reais(g['valor'])}"
+                                                    for g in r["despesas"]["por_categoria"][:MAX_FALADOS])
+                      + (f"; e mais {len(r['despesas']['por_categoria']) - MAX_FALADOS}"
+                         if len(r["despesas"]["por_categoria"]) > MAX_FALADOS else "") + ".")
+    return _json({"periodo": chave, "de": de, "ate": ate, "rotulo": dd["rotulo"], "receita": res["receita"],
+                  "resultado_antes": res["resultado"], "despesas": _despesas_dados(r["despesas"]),
+                  "depois_das_despesas": dd, "texto": " ".join(partes)})
+
+
 # --- ver_relatorio ----------------------------------------------------------------------
 
 def ver_relatorio(periodo="mes"):
@@ -519,7 +611,7 @@ def ver_relatorio(periodo="mes"):
     v, res, pr, pe, d, pos = r["vendas"], r["resultado"], r["producao"], r["perdas"], r["dinheiro"], r["posicao"]
     t = v["totais"]
     faixa = "" if de == ate else f", {_faixa(de, ate)}"
-    partes = [f"{_cap(_dito(chave))}{faixa}, tudo estimado e antes das despesas."]
+    partes = [f"{_cap(_dito(chave))}{faixa}, tudo estimado."]
     if t["vendas"]:
         venda = f"Vendas: {_n(t['vendas'], 'venda')}, {reais(t['receita'])}"
         if t["margem_pct"] is not None:
@@ -549,6 +641,7 @@ def ver_relatorio(periodo="mes"):
     if contas:
         partes.append(f"Hoje, em aberto: {_juntar(contas)}.")
     partes.append(f"O resultado não desconta {_nao_inclui(res['nao_inclui'])}.")
+    partes.append(_depois_txt(r))
     if r["ressalvas"]:
         partes.append("Ressalva: " + " ".join(r["ressalvas"]))
     return _json({"periodo": chave, "de": de, "ate": ate, "dias": r["dias"], "rotulo": "estimado",
@@ -562,7 +655,8 @@ def ver_relatorio(periodo="mes"):
                                                 "unidades_fritura")}
                   | {"vendas_canceladas": pe["vendas_canceladas"]["valor"]},
                   "compras": {"compras": r["compras"]["compras"], "total": r["compras"]["total"]},
-                  "dinheiro": d, "posicao": pos, "resultado": res, "ressalvas": r["ressalvas"],
+                  "dinheiro": d, "posicao": pos, "resultado": res, "despesas": _despesas_dados(r["despesas"]),
+                  "depois_das_despesas": r["depois_das_despesas"], "ressalvas": r["ressalvas"],
                   "texto": " ".join(partes)})
 
 
@@ -597,3 +691,215 @@ def ver_evolucao_preco(item):
     return _json({"item_id": i.id, "item": i.nome, "unidade_base": i.unidade_base, "por": por,
                   "compras": [{**c, "preco": preco(c)} for c in compras[-20:]], "primeiro": e["primeiro"],
                   "ultimo": e["ultimo"], "variacao_pct": e["variacao_pct"], "texto": texto})
+
+
+# --- estudo de preço, simulação, ponto de equilíbrio e indireto real (Plano 8) ---------------------
+# Só leitura. O sistema não escolhe margem e não grava preço: a simulação usa o preço ou a sobra que o dono
+# disser e é sempre dita "simulação"; o preço só muda pela tela.
+
+def _canal_dito(nome) -> str:
+    """"Balcão — dinheiro" → "balcão, dinheiro" (o travessão não se fala)."""
+    nome = nome.replace(" — ", ", ")
+    return nome[:1].lower() + nome[1:]
+
+
+def _canais(canal) -> list[dict]:
+    """Os canais ativos que casam com o nome falado ("balcão" casa dinheiro e pix; "crédito", o cartão)."""
+    lista = precos.canais_venda()
+    if not (canal or "").strip():
+        return lista
+    achados = [c for c in lista if _casa(canal, c["nome"])]
+    if not achados:
+        raise ConsultaInvalida(f"Nenhum canal de venda com o nome '{canal}'.", 404,
+                               opcoes=[c["nome"] for c in lista])
+    return achados
+
+
+def _canal_unico(canal):
+    """Um canal para simular: vários com a mesma taxa (balcão dinheiro e pix) dão no mesmo, vale o primeiro."""
+    if not (canal or "").strip():
+        return None
+    achados = _canais(canal)
+    if len({c["taxa_pct"] for c in achados}) > 1:
+        raise ConsultaInvalida(f"Mais de um canal com '{canal}'; pergunte qual.", 409,
+                               opcoes=[c["nome"] for c in achados])
+    return achados[0]["canal_id"]
+
+
+def _sobra_txt(c, unidades) -> str:
+    if c["taxa_pct"] is None:
+        return "taxa não informada, sem conta"
+    if c["sobra"] is None:
+        if c["contribuicao"] is None:
+            return "sem conta"
+        return f"sem indiretos de referência; antes deles ficam {reais(c['contribuicao'])}"
+    if c["sobra"] < 0:
+        t = f"não sobra: fica negativo em {reais(abs(c['sobra']))}"
+    else:
+        t = f"sobram {reais(c['sobra'])}, {_pct(c['sobra_pct'])} do preço"
+        if unidades > 1 and c["sobra_un"] is not None:
+            t += f", {_rs(c['sobra_un'])} por salgado"
+    if c["taxa"]:
+        t += f", já descontada a taxa de {_rs(c['taxa'])}"
+    return t
+
+
+def _estudo_txt(a, canais) -> str:
+    nome = f"{a['nome']} de {a['produto']}, {a['forma']}"
+    if a["preco"] is None:
+        return f"{nome}: sem preço de {a['tabela']}"
+    if a["cmv"] is None:
+        motivo = (_faltando_txt([f for f in a["faltando"] if f["motivo"] != "sem indiretos de referência por unidade"])
+                  or a["erro"].rstrip(".") or "custo incompleto")
+        return f"{nome}, a {reais(a['preco'])}: sem CMV, {motivo}"
+    t = f"{nome}, a {reais(a['preco'])}: CMV de {_rs(a['cmv'])}, {_pct(a['cmv_pct'])} do preço"
+    t += (f"; indiretos de referência, {_rs(a['indiretos'])}" if a["indiretos"] is not None
+          else "; sem indiretos de referência")
+    grupos = {}
+    for c in a["por_canal"]:
+        if c["canal_id"] in canais:
+            grupos.setdefault(c["taxa_pct"] if c["taxa_pct"] is not None else "sem", []).append(c)
+    t += ". " + _cap("; ".join(f"no {_juntar([_canal_dito(c['canal']) for c in cs])}, "
+                               f"{_sobra_txt(cs[0], a['unidades'])}" for cs in grupos.values()))
+    return t
+
+
+def ver_estudo_preco(produto="", canal="", tabela="varejo"):
+    from .vendas import _filtrar_por_produto, _tabela
+
+    tabela = _tabela(tabela)
+    e = precos.estudo_preco(tabela=tabela)
+    lista = _filtrar_por_produto(e["apresentacoes"], produto, lambda a: f"{a['produto']} {a['nome']} {a['forma']}")
+    canais = {c["canal_id"] for c in _canais(canal)}
+    if (produto or "").strip() and not lista:
+        raise ConsultaInvalida(f"Nenhum preço de tabela para '{produto}'.", 404)
+    if not lista:
+        texto = "Não há preço de tabela cadastrado."
+    else:
+        frases = [_estudo_txt(a, canais) for a in lista]
+        sobra = len(frases) - MAX_FALADOS
+        texto = (". ".join(frases[:MAX_FALADOS]) + (f". E mais {sobra} nos dados" if sobra > 0 else "")
+                 + ". Estudo estimado pelo custo de hoje, pela última compra de cada ingrediente; o preço da tabela "
+                   "não muda.")
+    return _json({"tabela": tabela, "rotulo": "estimado", "observacao": e["observacao"],
+                  "apresentacoes": [{**a, "por_canal": [c for c in a["por_canal"] if c["canal_id"] in canais]}
+                                    for a in lista], "texto": texto})
+
+
+def _apresentacao_dita(produto, apresentacao="", forma="", conservacao=""):
+    from .vendas import _apresentacao
+
+    if not (produto or "").strip():
+        raise ConsultaInvalida("Diga o produto (ex.: coxinha, caixa com 25 de coxinha).")
+    return _apresentacao({"produto": produto, "apresentacao": apresentacao, "forma": forma,
+                          "conservacao": conservacao})
+
+
+def _pct_dito(v):
+    if v in (None, ""):
+        return None
+    t = _normal(str(v)).replace("%", "").replace("por cento", "").strip()
+    return _decimal(t, "sobra_pct")
+
+
+def simular_preco(produto, apresentacao="", preco=None, sobra_pct=None, canal="", tabela="varejo", forma="",
+                  conservacao=""):
+    from .vendas import _tabela
+
+    apr = _apresentacao_dita(produto, apresentacao, forma, conservacao)
+    pct = _pct_dito(sobra_pct)
+    p = None if preco in (None, "", 0) else _decimal(preco, "preco")
+    s = precos.simular_preco(apresentacao_id=apr.id, preco=p, sobra_pct=pct, canal_id=_canal_unico(canal),
+                             tabela=_tabela(tabela))
+    nome = f"{apr.nome} de {apr.produto.nome}, {apr.forma}"
+    canal_txt = _canal_dito(s["canal"])
+    if s["sobra_pct_pedida"] is None:
+        texto = f"Simulação, o preço da tabela não muda: {nome} a {reais(s['preco'])} no {canal_txt}."
+    else:
+        texto = (f"Simulação, o preço da tabela não muda: para sobrar {_pct(s['sobra_pct_pedida'])} do preço no "
+                 f"{canal_txt}, o sistema calcula {nome} a {reais(s['preco'])}"
+                 + (f", {_rs(s['preco_un'])} por salgado" if s["unidades"] > 1 else "") + ".")
+    texto += f" CMV de {_rs(s['cmv'])}, {_pct(s['cmv_pct'])} do preço"
+    if s["inclui_indiretos"]:
+        texto += f"; indiretos de referência, {_rs(s['indiretos'])}"
+    if s["taxa"]:
+        texto += f"; taxa do canal, {_rs(s['taxa'])}"
+    if s["sobra"] < 0:
+        texto += f"; não sobra: fica negativo em {reais(abs(s['sobra']))}."
+    else:
+        texto += f"; sobram {reais(s['sobra'])}, {_pct(s['sobra_pct'])} do preço"
+        if s["sobra_pct_pedida"] is not None and s["sobra_pct"] != s["sobra_pct_pedida"]:
+            texto += " (o preço foi arredondado ao centavo)"
+        texto += (f", {_rs(s['sobra_un'])} por salgado." if s["unidades"] > 1 else ".")
+    if not s["inclui_indiretos"]:
+        texto += " Sem indiretos de referência: a sobra não desconta mão de obra, energia e gás."
+    if s["preco_atual"] is not None:
+        dif = s["diferenca_preco_atual"]
+        texto += f" Hoje a tabela está em {reais(s['preco_atual'])}"
+        texto += ("." if not dif else f": este preço fica {reais(abs(dif))} {'acima' if dif > 0 else 'abaixo'}.")
+    texto += " É só uma simulação: o preço só muda pela tela, e quem decide é o dono."
+    return _json({**s, "produto": apr.produto.nome, "apresentacao": apr.nome, "texto": texto})
+
+
+def ver_ponto_equilibrio(produto, apresentacao="", canal="", mes="", forma="", conservacao="", tabela="varejo"):
+    from .despesas import _competencia
+    from .vendas import _plural, _tabela
+
+    apr = _apresentacao_dita(produto, apresentacao, forma, conservacao)
+    comp = _competencia(mes)
+    p = precos.ponto_equilibrio(apresentacao_id=apr.id, competencia=comp, canal_id=_canal_unico(canal),
+                                tabela=_tabela(tabela))
+    nome_mes = mes_falado(p["competencia"])
+    if not p["despesas"]:
+        texto = (f"Nenhuma despesa com valor em {nome_mes}: sem as despesas, não há ponto de equilíbrio para "
+                 "dizer.")
+    else:
+        texto = (f"Estimativa, como se todas as vendas fossem {apr.nome} de {apr.produto.nome}, {apr.forma}, a "
+                 f"{reais(p['preco'])} no {_canal_dito(p['canal'])}: cada venda deixa {reais(p['contribuicao'])} "
+                 f"depois do CMV e da taxa; as despesas de {nome_mes} somam {reais(p['despesas'])}. Para pagar as "
+                 f"despesas, seria preciso vender {p['apresentacoes']} {_plural(apr.nome, p['apresentacoes'])}")
+        if p["unidades_por"] > 1:
+            texto += f", {_un(p['unidades'])}"
+        texto += f", {reais(p['receita'])} de vendas no mês."
+    if not p["completo"]:
+        texto += (f" Ficou fora, sem valor: {_juntar(p['faltando'])}; com ela o número é maior."
+                  if len(p["faltando"]) == 1 else
+                  f" Ficaram fora, sem valor: {_juntar(p['faltando'])}; com elas o número é maior.")
+    return _json({**p, "produto": apr.produto.nome, "apresentacao": apr.nome, "texto": texto})
+
+
+def ver_indireto_real(mes=""):
+    from .despesas import _competencia, _ultimo_dia
+
+    comp = _competencia(mes)
+    r = precos.indireto_real(competencia=comp)
+    nome_mes = mes_falado(r["competencia"])
+    andamento = r["ate"] < _ultimo_dia(r["competencia"])
+    quando_txt = f"{nome_mes}, de {r['de'].day} a {r['ate'].day}" if andamento else nome_mes
+    if not r["unidades_produzidas"]:
+        texto = (f"Em {quando_txt}, nenhuma produção concluída: sem salgados para dividir as despesas, não dá "
+                 "para conferir o indireto.")
+    else:
+        texto = (f"Conferência dos indiretos de {quando_txt}: {_un(r['unidades_produzidas'])} boas produzidas; as "
+                 f"despesas da produção (mão de obra, energia, gás e diária) somam {reais(r['despesas_indiretas'])}"
+                 + (", com as mensais pela parte dos dias até hoje" if andamento else "") + ".")
+        if r["indireto_real_un"] is not None:
+            texto += f" Dá {_rs(r['indireto_real_un'])} por salgado"
+            if r["referencia_un"] is not None:
+                texto += f"; a referência cadastrada é {_rs(r['referencia_un'])}"
+                dif = r["diferenca_un"]
+                if dif:
+                    texto += (f": o real está {_rs(abs(dif))} {'acima' if dif > 0 else 'abaixo'}"
+                              + (f", {_pct(abs(r['diferenca_pct']))}" if r["diferenca_pct"] else ""))
+                else:
+                    texto += ": igual"
+            else:
+                texto += "; nenhum produto produzido tem indireto de referência cadastrado"
+            texto += "."
+        if r["despesa_total_un"] is not None and r["despesa_total_un"] != r["indireto_real_un"]:
+            texto += (" Com todas as despesas, inclusive as que não são da produção, dá "
+                      f"{_rs(r['despesa_total_un'])} por salgado.")
+    if not r["completo"]:
+        texto += f" Incompleto: {_faltando_despesa_txt(r['faltando'])}; o real pode ser maior."
+    texto += " É estimado."
+    return _json({**r, "texto": texto})

@@ -288,4 +288,7 @@ def test_nada_de_apagar_e_dinheiro_so_com_o_sim():
     assert {n: v for n, v in nomes.items() if "pagamento" in n or "estornar" in n or "recebimento" in n} == {
         "registrar_pagamento": 2, "estornar_pagamento": 2, "estornar_recebimento": 2,
         "registrar_recebimento": 2, "estornar_recebimento_cliente": 2}
-    assert len(nomes) == 77  # 50 até o Plano 4 + 20 de vendas (Plano 6) + 7 de custos (Plano 7)
+    assert {n: v for n, v in nomes.items() if "despesa" in n and v} == {
+        "pagar_despesa": 2, "lancar_despesa": 2, "cancelar_despesa": 2, "informar_valor_despesa": 1}
+    # 50 até o Plano 4 + 20 de vendas (Plano 6) + 7 de custos (Plano 7) + 11 de despesas e estudo de preço (Plano 8)
+    assert len(nomes) == 88

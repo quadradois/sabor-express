@@ -23,7 +23,7 @@ from decisoes.servicos import aprovar_decisao as _aprovar
 from decisoes.servicos import recusar_decisao as _recusar
 
 from .acoes import _feito, _proposta, _uma_vez
-from .compras import _juntar, _n, quando, reais
+from .compras import _juntar, _n, dia_falado, mes_falado, quando, reais, sem_mes_numerico
 from .consultas import ConsultaInvalida, _casa, _inteiro, _normal
 
 MAX_FALADOS = 3  # itens lidos no `texto`; o resto vira "e mais N"
@@ -33,6 +33,7 @@ ORIGENS = {
     "lotes_vencidos": ("produto vencido", "vencido validade"),
     "encomenda_sem_estoque": ("encomenda sem estoque", "encomendas reserva reservar produzir falta"),
     "contas_vencidas": ("conta vencida", "contas vencida pagar"),
+    "despesas_sem_valor": ("despesa sem valor", "despesa despesas sem valor mensal luz energia internet gas"),
     "receber_vencidas": ("cliente devendo", "receber recebimento fiado devendo cliente"),
     "lotes_vencendo": ("validade perto de vencer", "vencendo vence validade"),
     "sobras_fritas": ("sobra de frito", "sobras frito fritos fritura"),
@@ -109,6 +110,8 @@ def falavel(texto) -> str:
     Os geradores do núcleo escrevem "15/11" e "R$ 100,00" (pendência do Plano 4); a voz não lê isso bem."""
     t = _DATA_ENTRE_PARENTESES.sub("", texto or "")
     t = _DATA.sub(_data_falada, t)
+    t = sem_mes_numerico(t)  # "Energia — 11/2026" → "Energia de novembro" (despesas, Plano 8)
+    t = t.replace(", parcela 1 de 1,", ",")
     t = _DINHEIRO.sub(lambda m: reais(Decimal(m.group(1).replace(".", "").replace(",", "."))), t)
     t = _UN.sub(lambda m: m.group(1) + (" unidade" if m.group(1) == "1" else " unidades"), t)
     return t.replace(" (lote sem lote)", "").replace("lote sem lote", "lote sem código")
@@ -233,6 +236,13 @@ def _assuntos(r, backup) -> list[dict]:
         add("contas_vencidas", "conta vencida",
             f"{_n(t['contas_vencidas'], 'conta vencida', 'contas vencidas')}, somando "
             f"{reais(t['valor_contas_vencidas'])}.")
+    despesas = r.get("despesas") or {}
+    if despesas.get("sem_valor_vencidas"):
+        sem = despesas["sem_valor_vencidas"]
+        add("despesas_sem_valor_vencidas", "despesa vencida sem valor",
+            f"{_n(len(sem), 'despesa do mês venceu', 'despesas do mês venceram')} sem valor nem pagamento anotado: "
+            + _juntar([f"{d['despesa']} de {mes_falado(d['competencia'])}, {dia_falado(d['vencimento'])}"
+                       for d in sem[:MAX_FALADOS]]) + ". Se já pagou, diga quanto foi.")
     if t.get("receber_vencidas"):
         add("receber_vencidas", "cliente devendo",
             f"{_n(t['receber_vencidas'], 'conta a receber vencida', 'contas a receber vencidas')} de clientes, "
@@ -262,6 +272,13 @@ def _assuntos(r, backup) -> list[dict]:
         add("contas_a_vencer", "contas a vencer",
             f"{_n(t['contas_a_vencer'], 'conta')} {verbo} nos próximos {r['contas']['dias']} dias, somando "
             f"{reais(t['valor_contas_a_vencer'])}.")
+    a_vencer_sem = [d for d in despesas.get("sem_valor") or [] if not d["vencida"]]
+    if a_vencer_sem:
+        verbo = "vence" if len(a_vencer_sem) == 1 else "vencem"
+        add("despesas_sem_valor", "despesa sem valor",
+            f"{_n(len(a_vencer_sem), 'despesa do mês', 'despesas do mês')} {verbo} logo e ainda sem valor: "
+            + _juntar([f"{d['despesa']}, {dia_falado(d['vencimento'])}" for d in a_vencer_sem[:MAX_FALADOS]])
+            + ". Quando a conta chegar, é só dizer o valor.")
     if r.get("sobras_fritas"):
         from .vendas import _un
 

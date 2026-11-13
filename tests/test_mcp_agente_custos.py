@@ -187,10 +187,11 @@ def test_ferramentas_de_custos_sao_so_leitura():
     nivel = {f.nome: f.nivel for f in REGISTRO}
     assert {n: nivel[n] for n in CUSTOS} == dict.fromkeys(CUSTOS, 0)
     t = ferramentas()
-    assert len(t) == 77
+    assert len(t) == 88  # + 11 do Plano 8 (despesas e estudo de preço)
     assert all(t[n].annotations.readOnlyHint for n in CUSTOS)
-    # preço, óleo e indiretos não mudam por voz; o sistema não sugere preço
-    assert not {n for n in nivel if any(p in n for p in ("sugerir", "mudar_preco", "indireto", "oleo"))}
+    # preço, óleo e indiretos não mudam por voz; o sistema não sugere preço (ver_indireto_real só lê)
+    assert not {n for n in nivel if any(p in n for p in ("sugerir", "mudar_preco", "oleo"))}
+    assert {n for n in nivel if "indireto" in n} == {"ver_indireto_real"} and nivel["ver_indireto_real"] == 0
 
 
 def test_periodos_falados():
@@ -409,7 +410,7 @@ def test_ver_relatorio(vendas_de_hoje):
     t = falado(r)
     assert r["rotulo"] == "estimado" and r["resultado"]["rotulo"] == "estimado"
     assert (r["resultado"]["receita"], r["resultado"]["perdas"], r["resultado"]["resultado"]) == (88, 1.2, 64.8)
-    assert t.startswith("Hoje, tudo estimado e antes das despesas. Vendas: 2 vendas, 88 reais, com margem estimada "
+    assert t.startswith("Hoje, tudo estimado. Vendas: 2 vendas, 88 reais, com margem estimada "
                         "de 75 por cento. Perdas com valor: 1 real e 20 centavos. Resultado estimado, antes das "
                         "despesas: 64 reais e 80 centavos, 73,6 por cento da receita. Dinheiro anotado: entrou "
                         "60 reais, saiu 10 reais.")
@@ -420,7 +421,8 @@ def test_ver_relatorio(vendas_de_hoje):
 
 def test_ver_relatorio_sem_movimento_e_com_ressalva(salgado):
     t = falado(chamar("ver_relatorio", periodo="semana passada"))
-    assert "Nenhuma venda concluída." in t and "Resultado estimado" not in t and "antes das despesas" in t
+    assert "Nenhuma venda concluída." in t and "Resultado estimado" not in t
+    assert "O resultado não desconta despesas" in t and "não dá para dizer o resultado depois delas" in t
     pastel = Item.objects.create(nome="Pastel", tipo="produto", unidade_base="un")
     lote(pastel, 10, custo="0")
     vender(apresentacao(pastel, preco="4"), 5)

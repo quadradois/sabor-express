@@ -11,8 +11,8 @@ nível 1 grava direto e devolve `dito` (o que foi feito); nível 2 não grava,
 devolve `confirmar` + `proposta_id` e só `confirmar_proposta` executa; o nível
 3 ("nunca") não tem ferramenta e o núcleo recusa. Toda gravação passa por
 `nucleo.operacoes.executar` com canal="agente". A lógica está em
-`agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`, `agente/vendas.py` e
-`agente/propostas.py`; custos, margens e relatórios (só leitura) em `agente/custos.py`.
+`agente/acoes.py`, `agente/compras.py`, `agente/decisoes.py`, `agente/vendas.py`, `agente/despesas.py` e
+`agente/propostas.py`; custos, margens, relatórios e estudo de preço (só leitura) em `agente/custos.py`.
 """
 
 import functools
@@ -25,7 +25,7 @@ from django.db import close_old_connections
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from . import acoes, compras, consultas, custos, decisoes, vendas
+from . import acoes, compras, consultas, custos, decisoes, despesas, vendas
 from .consultas import ConsultaInvalida
 from nucleo.operacoes import RegraViolada
 
@@ -45,9 +45,13 @@ INSTRUCOES = (
     "aprovar uma decisão sempre passa pelo 'confirmar'; recusar exige o motivo dito pelo dono. "
     "Vendas e encomendas: passe produto, apresentação e cliente pelo nome falado; o preço é sempre o da tabela "
     "(nunca diga um preço que não veio do sistema). registrar_recebimento só anota que o cliente pagou. "
-    "Custos e margens: são sempre estimados; diga \"margem estimada\" e, do resultado, \"antes das despesas\"; "
-    "nunca chame de lucro, nunca calcule diferença, porcentagem ou ponto (já vêm prontos no 'texto') e nunca "
-    "recomende preço. Sem dado, diga que não há dado."
+    "Custos e margens: são sempre estimados; diga \"margem estimada\" e, do resultado, se é antes ou depois das "
+    "despesas; a margem com indiretos e a margem só de ingredientes são diferentes: diga qual. Nunca chame de "
+    "lucro e nunca calcule diferença, porcentagem ou ponto (já vêm prontos no 'texto'). Sem dado, diga que não há "
+    "dado. Preço: nunca escolha a margem nem diga que preço cobrar por opinião; simular_preco só calcula com o "
+    "preço ou a sobra que o dono disser, é sempre simulação, e o preço só muda pela tela. "
+    "Despesas: o sistema só anota o pagamento; despesa \"sem valor\" nunca é zero; o resultado depois das despesas "
+    "só está completo quando não falta valor (diga o que falta)."
 )
 
 AUTOR = "agente-mcp"
@@ -339,16 +343,16 @@ def ver_custo(produto: str) -> dict:
 @leitura
 def ver_margem(periodo: str = "semana", agrupar: str = "produto", comparar: bool = True) -> dict:
     """"Qual minha margem esta semana?", "a margem caiu?": margem ESTIMADA das vendas do período, com a variação
-    em pontos sobre o mesmo trecho do período anterior ('comparar') e quantos itens de venda ficaram fora (custo
-    não confiável). 'periodo': hoje, ontem, semana, semana passada, mes, mes passado, ultimos 7 dias, ultimos 30
+    em pontos sobre o mesmo trecho do período anterior ('comparar'), a margem COM INDIRETOS de referência (outra
+    margem: diga qual) e quantos itens de venda ficaram fora (custo não confiável). 'periodo': hoje, ontem, semana, semana passada, mes, mes passado, ultimos 7 dias, ultimos 30
     dias. 'agrupar': produto, apresentacao, cliente, tabela ou dia."""
     return custos.ver_margem(periodo, agrupar, comparar)
 
 
 @leitura
 def ver_margem_tabela(produto: str = "") -> dict:
-    """Margem ESTIMADA de cada preço de tabela (varejo e atacado) pelo custo da ficha de hoje e a embalagem.
-    'produto' filtra pelo nome falado. Não sugere preço."""
+    """Margem ESTIMADA de cada preço de tabela (varejo e atacado) pelo custo da ficha de hoje e a embalagem, e a
+    margem com indiretos de referência quando houver. 'produto' filtra pelo nome falado. Não sugere preço."""
     return custos.ver_margem_tabela(produto)
 
 
@@ -369,9 +373,9 @@ def ver_previsto_realizado(producao_id: int | None = None, periodo: str = "seman
 
 @leitura
 def ver_relatorio(periodo: str = "mes") -> dict:
-    """"Como foi o mês?": vendas, margem estimada, perdas com valor, resultado ESTIMADO ANTES DAS DESPESAS (não é
-    lucro), produção, compras, dinheiro anotado e contas em aberto hoje, com as ressalvas. 'periodo' como em
-    ver_margem."""
+    """"Como foi o mês?": vendas, margem estimada, perdas com valor, resultado ESTIMADO antes e DEPOIS DAS DESPESAS
+    (não é lucro; diz o que falta), produção, compras, dinheiro anotado e contas em aberto hoje, com as ressalvas.
+    'periodo' como em ver_margem."""
     return custos.ver_relatorio(periodo)
 
 
@@ -380,6 +384,65 @@ def ver_evolucao_preco(item: str) -> dict:
     """"A farinha subiu?": preço de cada compra do item (por quilo, litro ou unidade), a variação da última sobre
     a anterior e desde a primeira compra. 'item' é o nome falado."""
     return custos.ver_evolucao_preco(item)
+
+
+# despesas, resultado depois das despesas e estudo de preço (Plano 8): só leitura
+
+@leitura
+def ver_despesas(mes: str = "") -> dict:
+    """"O que falta pagar este mês?", "quanto deu de despesa em outubro?": as despesas do mês (mensais e avulsas) com
+    o total lançado, o que já tem pagamento anotado, o que falta pagar, as vencidas, as que ainda estão SEM VALOR
+    (fora da soma, nunca zero) e o total por categoria. 'mes': vazio (este), mês passado, outubro ou AAAA-MM."""
+    return despesas.ver_despesas(mes)
+
+
+@leitura
+def ver_despesas_a_pagar(situacao: str = "todas") -> dict:
+    """"Tem despesa vencida?", "o que tenho de despesa para pagar?": despesas em aberto de qualquer mês (com valor e
+    sem valor), das que vencem primeiro, com o total que falta pagar e o já vencido. 'situacao': todas ou vencidas.
+    Conta de fornecedor fica em ver_contas."""
+    return despesas.ver_despesas_a_pagar(situacao)
+
+
+@leitura
+def ver_resultado(periodo: str = "mes") -> dict:
+    """"Quanto sobrou no mês depois das despesas?": resultado ESTIMADO antes e DEPOIS DAS DESPESAS do período, as
+    despesas por categoria e o que falta (despesa sem valor deixa o resultado incompleto). Não é lucro.
+    'periodo' como em ver_margem."""
+    return custos.ver_resultado(periodo)
+
+
+@leitura
+def ver_indireto_real(mes: str = "") -> dict:
+    """"Os 74 centavos estão certos?": compara o indireto de referência por salgado (mão de obra, energia, gás) com o
+    real do mês = despesas da produção ÷ salgados bons produzidos. 'mes' como em ver_despesas. Estimado."""
+    return custos.ver_indireto_real(mes)
+
+
+@leitura
+def ver_estudo_preco(produto: str = "", canal: str = "", tabela: str = "varejo") -> dict:
+    """"Quanto sobra numa coxinha?": estudo do preço ATUAL pelo CMV — CMV e CMV por cento do preço, indiretos de
+    referência e quanto sobra em cada canal de venda (balcão, cartão; taxa não informada = sem conta, nunca zero).
+    'produto' e 'canal' filtram pelo nome falado. Não muda nem sugere preço."""
+    return custos.ver_estudo_preco(produto, canal, tabela)
+
+
+@leitura
+def simular_preco(produto: str, apresentacao: str = "", preco: float | None = None, sobra_pct: float | None = None,
+                  canal: str = "", tabela: str = "varejo", forma: str = "", conservacao: str = "") -> dict:
+    """SIMULAÇÃO, não grava nada: "se eu vender a coxinha a 8 reais, quanto sobra?" ('preco') ou "quero que sobre 30
+    por cento, qual o preço?" ('sobra_pct', o número que o DONO disse; nunca escolha você). Um dos dois. 'canal'
+    padrão: balcão. Diga sempre que é simulação: o preço da tabela não muda e só muda pela tela."""
+    return custos.simular_preco(produto, apresentacao, preco, sobra_pct, canal, tabela, forma, conservacao)
+
+
+@leitura
+def ver_ponto_equilibrio(produto: str, apresentacao: str = "", canal: str = "", mes: str = "",
+                         forma: str = "", conservacao: str = "") -> dict:
+    """"Quantas coxinhas preciso vender para pagar as contas do mês?": despesas do mês ÷ o que cada venda deixa
+    (preço − CMV − taxa), como se todas as vendas fossem daquele jeito de vender. Estimativa; despesa sem valor fica
+    fora e é dita."""
+    return custos.ver_ponto_equilibrio(produto, apresentacao, canal, mes, forma, conservacao)
 
 
 # --- nível 1: faz e repete -------------------------------------------------
@@ -457,6 +520,14 @@ def recusar_decisao(decisao_id: int, motivo: str) -> dict:
     """Recusa uma decisão da caixa com o motivo dito pelo dono (ex.: "vou comprar amanhã"). Motivo obrigatório:
     sem ele, pergunte por quê. Aviso não se recusa (use dar_ciencia)."""
     return decisoes.recusar_decisao(decisao_id=decisao_id, motivo=motivo, autor=AUTOR, canal=CANAL)
+
+
+@escrita(1)
+def informar_valor_despesa(nome: str, valor: float, mes: str = "") -> dict:
+    """Anota o valor de uma despesa MENSAL do mês quando a conta chega ("a internet veio 99,90", "a luz deu 812"):
+    ela deixa de ficar sem valor (ou o previsto é corrigido) e entra nas contas a pagar. Não anota pagamento (isso é
+    pagar_despesa). Com pagamento já anotado, o sistema recusa. 'mes' só se não for a conta em aberto."""
+    return despesas.informar_valor_despesa(nome=nome, valor=valor, mes=mes, autor=AUTOR, canal=CANAL)
 
 
 @escrita(1)
@@ -773,6 +844,39 @@ def estornar_recebimento_cliente(motivo: str, cliente: str = "", pagamento_id: i
     Não grava: pede confirmação."""
     return vendas.propor_estornar_recebimento_cliente(motivo=motivo, cliente=cliente, pagamento_id=pagamento_id,
                                                       autor=AUTOR, canal=CANAL)
+
+
+# despesas (Plano 8): anotar pagamento, lançar e cancelar despesa esperam o "sim"
+
+@escrita(2)
+def pagar_despesa(nome: str, valor: float | None = None, data_pagamento: str = "", forma: str = "", mes: str = "",
+                  categoria: str = "") -> dict:
+    """Propõe ANOTAR que o dono pagou uma despesa ("paguei 850 de luz", "paguei a internet ontem, 99,90"); o sistema
+    não paga nada. Acha pelo nome falado a despesa do mês em aberto (luz = Energia) e anota com o valor real; se não
+    houver, lança uma despesa avulsa já paga (categoria pelo nome ou por 'categoria'). 'data_pagamento': hoje
+    (vazio), ontem, dia 5 ou AAAA-MM-DD. Não grava: pede confirmação."""
+    return despesas.propor_pagar_despesa(nome=nome, valor=valor, data_pagamento=data_pagamento, forma=forma, mes=mes,
+                                         categoria=categoria, autor=AUTOR, canal=CANAL)
+
+
+@escrita(2)
+def lancar_despesa(descricao: str, valor: float, categoria: str = "", vencimento: str = "", paga: bool = False,
+                   data_pagamento: str = "", forma: str = "") -> dict:
+    """Propõe lançar uma despesa avulsa a pagar ("chegou o boleto do gás, 230, vence dia 20") ou, com 'paga', já
+    paga. 'vencimento': amanhã, dia 20, AAAA-MM-DD. Despesa mensal (luz, internet) não se lança aqui: o valor dela é
+    informar_valor_despesa e o pagamento, pagar_despesa. Não grava: pede confirmação."""
+    return despesas.propor_lancar_despesa(descricao=descricao, valor=valor, categoria=categoria, vencimento=vencimento,
+                                          paga=paga, data_pagamento=data_pagamento, forma=forma, autor=AUTOR,
+                                          canal=CANAL)
+
+
+@escrita(2)
+def cancelar_despesa(motivo: str, nome: str = "", mes: str = "", conta_id: int | None = None) -> dict:
+    """Propõe cancelar uma despesa lançada errado ou que não houve, com o MOTIVO dito pelo dono (sem motivo,
+    pergunte). O pagamento anotado nela é estornado junto. Acha pelo nome neste mês ou no passado ('mes' para
+    outro). Não grava: pede confirmação."""
+    return despesas.propor_cancelar_despesa(motivo=motivo, nome=nome, mes=mes, conta_id=conta_id, autor=AUTOR,
+                                            canal=CANAL)
 
 
 @escrita(2)

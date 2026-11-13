@@ -31,7 +31,7 @@
 |---|---|---|---|
 | **1 — Núcleo** | esta sessão | modelos e migrações, serviços de despesa, rotina, lembretes, consultas de despesas, resultado depois das despesas, margem com indiretos, indireto real, estudo/simulação de preço, ponto de equilíbrio, canais, admin, testes | **feita** (Tasks 1–7) |
 | **2a — Telas** | sessão paralela, só `web/` | Despesas (do mês, lançar, mensais, categorias), Relatório com "depois das despesas", Margens com indiretos, Estudo de preço com simulação, Canais e taxas, Referências do salgado (Tasks 8–13) | a fazer |
-| **2b — Ferramentas MCP** | sessão paralela, só `agente/` e `docs/` do agente | leitura (nível 0) e lançamento/pagamento de despesa por voz (nível 1), instruções do agente (Tasks 14–16) | a fazer |
+| **2b — Ferramentas MCP** | sessão paralela, só `agente/` e `docs/` do agente | leitura (nível 0) e lançamento/pagamento de despesa por voz (nível 2, com confirmação), instruções do agente (Tasks 14–16) | **feita** |
 
 As fases 2a e 2b não mexem em modelo, serviço nem consulta; se precisarem de algo do núcleo, pedem à coordenação. O contrato estável está no fim deste documento.
 
@@ -171,18 +171,20 @@ Padrão das telas existentes: login, 360 px sem rolagem horizontal, **a tela nun
 
 ## Fase 2b — Ferramentas MCP e instruções do agente de voz (`agente/`)
 
+Feita: ver `2026-11-13-plano-8-pendencias-agente.md` (nomes finais, alçada — pagamento, lançamento e cancelamento ficaram nível 2 — e o que ficou para depois).
+
 ### Task 14: Leitura (nível 0)
-- [ ] Ferramentas da tabela "Ferramentas MCP sugeridas" de nível 0. Despesa e categoria por **nome falado** (sem acento/caixa; "luz" = categoria Energia ou mensal com "energia"/"luz" no nome; ambíguo → pergunta).
+- [x] Ferramentas da tabela "Ferramentas MCP sugeridas" de nível 0. Despesa e categoria por **nome falado** (sem acento/caixa; "luz" = categoria Energia ou mensal com "energia"/"luz" no nome; ambíguo → pergunta).
 
 ### Task 15: Despesa por voz (nível 1, com confirmação)
-- [ ] `pagar_despesa(nome, valor, data="hoje")`: se houver `DespesaDoMes` do mês corrente em aberto que case com o nome → `pagar_despesa_do_mes`; senão → `lancar_despesa(paga=True)`. Antes de gravar, repete "anoto R$ 850,00 de Energia de novembro como paga hoje?".
-- [ ] `lancar_despesa_a_pagar(descricao, categoria, valor, vencimento)` → `lancar_despesa(paga=False)`.
-- [ ] `informar_valor_despesa(nome, valor)` ("a conta de internet veio 99,90").
-- [ ] `cancelar_despesa(...)` só com motivo e confirmação.
+- [x] `pagar_despesa(nome, valor, data="hoje")`: se houver `DespesaDoMes` do mês corrente em aberto que case com o nome → `pagar_despesa_do_mes`; senão → `lancar_despesa(paga=True)`. Antes de gravar, repete "anoto R$ 850,00 de Energia de novembro como paga hoje?".
+- [x] `lancar_despesa_a_pagar(descricao, categoria, valor, vencimento)` → `lancar_despesa(paga=False)`.
+- [x] `informar_valor_despesa(nome, valor)` ("a conta de internet veio 99,90").
+- [x] `cancelar_despesa(...)` só com motivo e confirmação.
 
 ### Task 16: Instruções
-- [ ] `docs/agente-instrucoes-despesas.md`: "paguei 850 de luz", "o que falta pagar este mês?", "tem conta vencida?", "quanto sobrou no mês depois das despesas?", "a coxinha dá quanto depois de tudo?", "os 74 centavos estão certos?", "se eu vender a 6 reais, sobra quanto?", "quanto teria que cobrar para sobrar 40%?". Seção "o que pode e o que não pode dizer" (ver contrato).
-- [ ] `docs/agente-mcp.md`: tabela das ferramentas novas.
+- [x] `docs/agente-instrucoes-despesas.md`: "paguei 850 de luz", "o que falta pagar este mês?", "tem conta vencida?", "quanto sobrou no mês depois das despesas?", "a coxinha dá quanto depois de tudo?", "os 74 centavos estão certos?", "se eu vender a 6 reais, sobra quanto?", "quanto teria que cobrar para sobrar 40%?". Seção "o que pode e o que não pode dizer" (ver contrato).
+- [x] `docs/agente-mcp.md`: tabela das ferramentas novas.
 
 ---
 
