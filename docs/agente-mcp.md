@@ -248,6 +248,7 @@ próxima chamada (`encomenda_id`, `venda_id`, `parcela_id`, `pagamento_id`).
 | `ver_estoque_para_venda` | 0 | `produto=""` | `estoque_para_venda()`: por produto, forma e conservação, o livre, o reservado e o vencido |
 | `buscar_clientes` | 0 | `busca=""` | clientes (nome, contato, ativo) |
 | `ver_vendas` | 0 | `periodo="hoje"` (`ontem`, `semana`, `mes`, `AAAA-MM-DD`), `cliente=""` | `vendas()`: total, recebido na hora por forma de pagamento, a prazo, por produto, canceladas fora da conta; as 20 últimas vendas |
+| `ver_venda` | 0 | `venda_id=None`, `cliente=""` | `detalhe_venda()`: itens, total e dia; só com cliente, a venda da conta mais antiga em aberto ou a última |
 | `ver_encomendas` | 0 | `dia=""` (`hoje`, `amanhã`, dia da semana, `semana`, `AAAA-MM-DD`), `cliente=""` | `encomendas()` em aberto: prontas (tudo reservado) ou com o que falta reservar; vazio = todas, inclusive as atrasadas |
 | `ver_encomenda` | 0 | `encomenda_id` | `detalhe_encomenda()`: itens, reservado e falta, total, sinal, saldo, situação, observação |
 | `ver_necessidade_producao` | 0 | `dias=3` | `necessidade_producao()`: o que falta, quanto já dá para reservar do estoque livre e quanto produzir; não cria produção |

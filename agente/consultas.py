@@ -131,11 +131,22 @@ def produtos(busca=""):
     } for i in _filtrar(_produtos_ativos(), busca)]}
 
 
+_JEITOS = {"cru", "crua", "frito", "frita", "assado", "assada", "fresco", "fresca", "resfriado", "resfriada",
+           "congelado", "congelada"}
+
+
 def resolver_produto(nome):
     """Acha o produto pelo nome falado; exige exatamente uma correspondência."""
     if not (nome or "").strip():
         raise ConsultaInvalida("Diga o nome do produto.")
-    return escolher(_produtos_ativos(), nome, oque="produto")
+    try:
+        return escolher(_produtos_ativos(), nome, oque="produto")
+    except ConsultaInvalida as e:
+        # "coxinha 100 g frito fresco": o jeito (forma e conservação) não faz parte do nome do produto
+        limpo = " ".join(w for w in nome.split() if _normal(w).rstrip("s") not in _JEITOS)
+        if e.status != 404 or not limpo or limpo == " ".join(nome.split()):
+            raise
+        return escolher(_produtos_ativos(), limpo, oque="produto")
 
 
 def receita(produto_id, unidades):
