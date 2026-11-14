@@ -204,6 +204,15 @@ class Separador:
                           "sobra": saldo - self.usado[(lote.id, a.estado)]})
         return saida
 
+    def de_onde(self, lotes) -> str:
+        """Só o lote, sem repetir o produto: "do lote do dia 8, que vence amanhã" ou, com mais de um lote, "18 do
+        lote do dia 8, que vence amanhã, e 12 do lote do dia 10"."""
+        if not lotes:
+            return ""
+        so_um = len(lotes) == 1
+        return _juntar([f"{'' if so_um else _n(l['unidades']) + ' '}do {l['nome']}"
+                        f"{_vence(l['validade'], self.quando, self.hoje)}" for l in lotes])
+
     def texto(self, a, unidades, lotes, falta) -> str:
         """"30 un de Coxinha cru congelado: 18 do lote do dia 8, que vence amanhã, e 12 do lote do dia 10; o lote
         do dia 8 zera e no lote do dia 10 sobram 28." """
@@ -259,7 +268,7 @@ def separar_linha(sep, a, unidades, lotes_indicados=None, n_linha=1) -> dict:
     return {"apresentacao_id": a.id, "apresentacao": str(a), "produto_id": a.produto_id, "produto": a.produto.nome,
             "forma": a.forma, "estado": a.estado, "unidades": unidades, "lotes": lotes, "falta": falta,
             "lotes_indicados": bool(lotes_indicados), "deixados": deixados, "alocacao": alocacao,
-            "texto": sep.texto(a, unidades, lotes, falta),
+            "texto": sep.texto(a, unidades, lotes, falta), "de_onde": sep.de_onde(lotes),
             "avisos": avisos + _avisos_linha(sep, a, unidades, lotes, falta, deixados)}
 
 
@@ -365,7 +374,7 @@ def _linha_das_reservas(sep, ie) -> dict:
     return {"apresentacao_id": a.id, "apresentacao": str(a), "produto_id": a.produto_id, "produto": a.produto.nome,
             "forma": a.forma, "estado": a.estado, "unidades": ie.unidades, "lotes": lotes, "falta": falta,
             "lotes_indicados": False, "deixados": [], "alocacao": alocacao,
-            "texto": sep.texto(a, ie.unidades, lotes, falta),
+            "texto": sep.texto(a, ie.unidades, lotes, falta), "de_onde": sep.de_onde(lotes),
             "avisos": avisos + [x for x in _avisos_linha(sep, a, ie.unidades, lotes, ZERO, []) if x["tipo"] != "falta"]}
 
 
