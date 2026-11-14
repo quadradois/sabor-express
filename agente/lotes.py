@@ -136,6 +136,22 @@ def separacao_falada(sep) -> str:
     return " ".join(partes)
 
 
+def separacao_curta(sep) -> str:
+    """Para a proposta, que já disse produto e quantidade: só o lote ("Sai do lote do dia 8, que vence amanhã") e
+    os mesmos avisos da separação falada. Com mais de um produto, o nome volta para dizer qual sai de onde."""
+    def lote(l):
+        return _falavel(l["de_onde"]) or "não há de onde pegar"
+
+    linhas = sep["linhas"]
+    if len(linhas) == 1:
+        partes = [f"Sai {lote(linhas[0])}."]
+    else:
+        partes = ["De onde sai: " + "; ".join(f"{l['produto']} {l['forma']} {l['estado']}, {lote(l)}"
+                                               for l in linhas) + "."]
+    partes += [_falavel(a["texto"]) for a in sep["avisos"] if a["tipo"] in _AVISOS_FALADOS]
+    return " ".join(partes)
+
+
 def separacao_resposta(sep, **extra) -> dict:
     texto = separacao_falada(sep)
     if sep["precisa_motivo"]:

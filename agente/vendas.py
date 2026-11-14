@@ -31,7 +31,7 @@ from vendas.servicos import completar_reserva as _completar
 
 from .acoes import _data, _decimal, _estado, _feito, _forma, _proposta, _uma_vez
 from .lotes import (checar_motivo_na_separacao, lotes_da_apresentacao, lotes_indicados, nome, pedir_motivo, porcao_vencida, resolver_lote,
-                    separacao_falada, separacao_resposta, vencidos_da_separacao, vencidos_txt)
+                    separacao_curta, separacao_resposta, vencidos_da_separacao, vencidos_txt)
 from .compras import (_ate_cinco, _condicao, _dicts, _dinheiro, _juntar, _n, _parcela_txt, _sem_valor, _unidade,
                       qtd, quando, reais)
 from .consultas import ConsultaInvalida, _casa, _inteiro, _normal, escolher, resolver_produto
@@ -657,8 +657,9 @@ def _motivo(motivo_vencido, vencidos) -> str:
 
 
 def _separacao_proposta(sep, motivo) -> str:
-    """O que a proposta repete da separação: de quais lotes sai e, se houver, o vencido com o motivo."""
-    t = ". De onde sai: " + separacao_falada(sep).rstrip(".")
+    """O que a proposta diz da separação: só o lote de onde sai (produto e quantidade já foram ditos) e, se
+    houver, o vencido com o motivo."""
+    t = ". " + separacao_curta(sep).rstrip(".")
     return t + vencidos_txt([(n, v, "") for n, v in vencidos_da_separacao(sep)], motivo)
 
 

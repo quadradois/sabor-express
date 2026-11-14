@@ -183,7 +183,7 @@ def test_venda_repete_a_separacao_e_depois_avisa_o_deixado(coxinha, unidade, doi
     r = chamar("registrar_venda", itens=[{**ITEM, "lotes": [{"lote": nn, "unidades": 30}]}], forma_pagamento="pix")
     assert falavel(r["confirmar"], velho, novo) == (
         "Vender 30 unidades de Coxinha 150 g, cru congelado, a 2 reais cada. Total 60 reais, à vista no pix. "
-        f"De onde sai: 30 unidades de Coxinha 150 g cru congelado: 30 do {nn}; no {nn} sobram 10. Ficaram 18 "
+        f"Sai do {nn}. Ficaram 18 "
         f"unidades do {nv}, que vencem amanhã: venda esse primeiro. Confirma?")
     assert Venda.objects.count() == 0
     f = confirmar(r)
@@ -292,7 +292,7 @@ def test_entrega_com_separacao_e_lote_indicado(coxinha, unidade, dois_lotes):
         f"Encomenda {e['encomenda_id']} de João: 10 unidades de Coxinha 150 g cru congelado: 10 do {nv}, que vence "
         f"amanhã; no {nv} sobram 8.")
     r = chamar("entregar_encomenda", cliente="joão", lotes=[{"lote": nn, "unidades": 10}])
-    assert f"De onde sai: 10 unidades de Coxinha 150 g cru congelado: 10 do {nn}" in falavel(r["confirmar"], velho)
+    assert f"Sai do {nn}." in falavel(r["confirmar"], velho)
     f = confirmar(r)
     assert f"Ficaram 18 unidades do {nv}" in f["dito"]
     assert (saldo_lote(velho, "congelado"), saldo_lote(novo, "congelado")) == (18, 30)
