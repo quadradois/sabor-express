@@ -509,3 +509,14 @@ def test_resumo_fala_encomendas_de_hoje_e_o_que_falta_produzir(coxinha, tabela, 
     assert assuntos["falta_produzir"] == ("Para as encomendas dos próximos 3 dias, falta produzir 8 unidades de "
                                           "Coxinha 150 g cru congelado.")
     assert "2 encomendas para hoje" in r["texto"]  # entre os três mais urgentes
+
+
+def test_nome_ouvido_torto_ou_forma_que_nao_existe_vira_pergunta(coxinha, tabela):
+    lote(coxinha, 5, validade=dia(5))
+    for item in ({"produto": "coxinia", "quantidade": 1},
+                 {"produto": "coxinha", "apresentacao": "unidade", "forma": "frito", "conservacao": "pronto",
+                  "quantidade": 1}):
+        r = chamar("registrar_venda", itens=[item])
+        assert r["erro"].endswith("O que há parecido para vender está nas opções; pergunte qual."), r
+        assert "unidade de Coxinha 150 g, cru congelado" in " ".join(r["opcoes"]) and len(r["opcoes"]) == 3
+    assert Proposta.objects.count() == 0
