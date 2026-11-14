@@ -292,4 +292,4 @@ def test_nada_de_apagar_e_dinheiro_so_com_o_sim():
         "pagar_despesa": 2, "lancar_despesa": 2, "cancelar_despesa": 2, "informar_valor_despesa": 1}
     # 50 até o Plano 4 + 20 de vendas (Plano 6) + 7 de custos (Plano 7) + 11 de despesas e estudo de preço (Plano 8)
     # + 4 de lotes (Plano 9: separação, separação da encomenda, contagem, conferência do vencido)
-    assert len(nomes) == 94
+    assert len(nomes) == 95

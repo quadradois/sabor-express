@@ -64,6 +64,9 @@ def test_receita_produto_ambiguo_devolve_opcoes(bolinha):
     assert sorted(r["opcoes"]) == ["Bolinha 100 g", "Bolinha 25 g"]
     # o nome completo desfaz a ambiguidade
     assert chamar("calcular_receita", produto="bolinha 25 g", unidades=4)["produto"] == "Bolinha 25 g"
+    # o jeito dito junto do nome ("frito fresco") não atrapalha
+    assert chamar("calcular_receita", produto="Bolinha 25 g frito fresco", unidades=4)["produto"] == "Bolinha 25 g"
+    assert "erro" in chamar("calcular_receita", produto="pastel frito", unidades=4)
 
 
 def test_receita_produto_inexistente(bolinha):

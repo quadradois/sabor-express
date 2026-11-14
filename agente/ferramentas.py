@@ -306,6 +306,13 @@ def ver_vendas(periodo: str = "hoje", cliente: str = "") -> dict:
 
 
 @leitura
+def ver_venda(venda_id: int | None = None, cliente: str = "") -> dict:
+    """"O que ela comprou?": uma venda em detalhe (itens, total, dia). Pelo número da venda, como o que vem em
+    ver_a_receber, ou só com 'cliente': a venda da conta mais antiga em aberto dele, ou a última venda."""
+    return vendas.ver_venda(venda_id, cliente)
+
+
+@leitura
 def ver_encomendas(dia: str = "", cliente: str = "") -> dict:
     """"O que tem de encomenda amanhã?": encomendas em aberto (prontas ou faltando reservar), por dia de entrega.
     'dia': hoje, amanhã, um dia da semana, semana (próximos 7 dias) ou AAAA-MM-DD; vazio = todas as em aberto,

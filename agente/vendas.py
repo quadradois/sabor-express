@@ -400,6 +400,23 @@ def ver_vendas(periodo="hoje", cliente=""):
             "vendas": [_venda_curta(v) for v in lista[-20:]], "texto": texto}
 
 
+def ver_venda(venda_id=None, cliente=""):
+    if venda_id is None:
+        if not (cliente or "").strip():
+            raise ConsultaInvalida("Diga o número da venda ou o cliente.")
+        c = _cliente_qualquer(cliente)
+        # "o que ela comprou?": a venda da conta mais antiga em aberto; sem dívida, a última venda
+        ps = fc.receber_em_aberto(cliente_id=c.id)
+        ultimas = vc.vendas(cliente_id=c.id)["vendas"]
+        if not ps and not ultimas:
+            raise ConsultaInvalida(f"Nenhuma venda para {c.nome}.", 404)
+        venda_id = ps[0]["venda_id"] if ps else ultimas[-1]["venda_id"]
+    v = vc.detalhe_venda(_inteiro(venda_id, "venda_id"))
+    if v is None:
+        raise ConsultaInvalida("Venda não encontrada.", 404)
+    return {**_venda_curta(v), "texto": f"{_venda_txt(v)}, {_sem_em(quando(v['data']))}."}
+
+
 def _quando_encomenda(e) -> str:
     t = _para(e["entrega_data"]) + _hora_txt(e["entrega_hora"])
     return f"era {t}, já passou" if e["dias"] < 0 else t

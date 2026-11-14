@@ -118,7 +118,8 @@ def joao():
 
 # --- registro e alçada ----------------------------------------------------------
 
-LEITURA = {"ver_precos", "ver_estoque_para_venda", "buscar_clientes", "ver_vendas", "ver_encomendas", "ver_encomenda",
+LEITURA = {"ver_precos", "ver_estoque_para_venda", "buscar_clientes", "ver_vendas", "ver_venda", "ver_encomendas",
+           "ver_encomenda",
            "ver_necessidade_producao", "ver_a_receber", "ver_sobras"}
 NIVEL_2 = {"registrar_venda", "cancelar_venda", "criar_encomenda", "entregar_encomenda", "cancelar_encomenda",
            "registrar_fritura", "registrar_perda", "registrar_recebimento", "estornar_recebimento_cliente"}
@@ -135,7 +136,7 @@ def test_alcada_das_ferramentas_de_vendas():
                                                   "ver_estudo_preco", "simular_preco"}  # os dois do Plano 8 só leem
     assert nivel["ver_estudo_preco"] == nivel["simular_preco"] == 0
     t = ferramentas()
-    assert len(t) == 94  # + 4 do Plano 9 (separação, separação da encomenda, contagem, conferência)
+    assert len(t) == 95  # + 4 do Plano 9 (separação, separação da encomenda, contagem, conferência)
     assert {n for n in LEITURA if t[n].annotations.readOnlyHint} == LEITURA
     assert "$ref" not in json.dumps(t["registrar_venda"].inputSchema)
     assert t["registrar_venda"].inputSchema["properties"]["itens"]["items"]["required"] == ["produto", "quantidade"]
@@ -257,6 +258,12 @@ def test_fiado_vira_conta_a_receber_e_o_cliente_paga(coxinha, tabela, joao):
     assert falavel(d["texto"]) == (f"João deve 90 reais em 2 parcelas, nada vencido. A mais antiga: venda {v.id}, "
                                    f"parcela 1 de 2, 45 reais, vence {quando(dia(30))}.")
     assert chamar("ver_a_receber")["texto"] == "Os clientes devem 90 reais no total. João, 90 reais."
+    # "o que ele comprou?": pelo número que veio na conta ou só pelo nome do cliente
+    comprou = "Venda %d, João, 2 caixas com 25 de Coxinha 150 g, cru congelado, 90 reais, a prazo, hoje." % v.id
+    assert falavel(chamar("ver_venda", venda_id=v.id)["texto"]) == comprou
+    assert falavel(chamar("ver_venda", cliente="joão")["texto"]) == comprou
+    assert chamar("ver_venda", venda_id=v.id + 99)["erro"] == "Venda não encontrada."
+    assert chamar("ver_venda")["erro"] == "Diga o número da venda ou o cliente."
     assert chamar("ver_a_receber", situacao="vencidas")["texto"] == "Nenhum cliente com conta vencida."
     # o João pagou a primeira parcela
     p = chamar("registrar_recebimento", cliente="joão", forma="dinheiro")
