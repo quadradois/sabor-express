@@ -13,6 +13,7 @@ preços, totais, reservas, custos e recusas vêm de `vendas`, `producao.fritura`
 """
 
 import re
+from difflib import SequenceMatcher
 from datetime import date, time, timedelta
 from decimal import Decimal
 
@@ -131,6 +132,10 @@ def _cobre(ditos, tokens_alvo) -> bool:
     return all(any(t == d or t.startswith(d) for t in tokens_alvo) for d in ditos)
 
 
+def _perto(dito, alvo) -> bool:
+    return alvo == dito or alvo.startswith(dito) or SequenceMatcher(None, dito, alvo).ratio() >= 0.75
+
+
 def _rotulo_apres(a) -> str:
     return f"{a.produto.nome} {a.nome} {a.forma} {a.estado}"
 
@@ -153,6 +158,12 @@ def _apresentacao(pedido: dict) -> Apresentacao:
     if len(achadas) == 1:
         return achadas[0]
     if not achadas:
+        # nome ouvido torto ("previl" por "preview") ou forma/conservação que não existe: mostra o que há, não desiste
+        prod = _tokens(pedido.get("produto"))
+        proximas = [a for a in ativas if prod and all(any(_perto(d, x) for x in _tokens(a.produto.nome)) for d in prod)]
+        if proximas:
+            raise ConsultaInvalida(f"Não achei '{dito.strip()}' desse jeito. O que há parecido para vender está nas "
+                                   "opções; pergunte qual.", 409, opcoes=[_apres_txt(a) for a in proximas[:MAX_OPCOES]])
         raise ConsultaInvalida(f"Não achei preço para '{dito.strip()}'. Confira o nome do produto ou veja os preços "
                                "(ver_precos); apresentação nova só pela tela.", 404)
     raise ConsultaInvalida(f"Mais de um jeito de vender '{dito.strip()}'; pergunte qual.", 409,
