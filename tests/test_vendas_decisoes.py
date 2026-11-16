@@ -51,7 +51,7 @@ def test_encomenda_sem_estoque_avisa_e_depois_propoe_completar_a_reserva(coxinha
                     autor="dono")  # longe demais: fica fora da caixa
     rodar_rotina()
     [aviso] = caixa("encomenda_sem_estoque")
-    assert aviso["tipo"] == "aviso" and "falta reservar 30 un de Coxinha 150 g cru congelado" in aviso["texto"]
+    assert aviso["tipo"] == "aviso" and "falta reservar 30 un de Coxinha 150 g congelado" in aviso["texto"]
     lote(coxinha, 50, validade=dia(20))
     rodar_rotina()
     [d] = caixa("encomenda_sem_estoque")

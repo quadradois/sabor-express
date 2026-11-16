@@ -243,7 +243,7 @@ def test_produto_ambiguo_na_proposta(bolinha, farinha):
 
 def test_criar_tamanho_por_proposta(bolinha):
     r = chamar("criar_tamanho", salgado="bolinha", peso_g=25)
-    assert r["confirmar"] == "Criar o tamanho Bolinha 25 g. Confirma?"
+    assert r["confirmar"] == "Criar o tamanho Bolinha 25 g, frito. Confirma?"
     assert not Item.objects.filter(nome="Bolinha 25 g").exists()
     confirmar(r)
     assert Item.objects.filter(nome="Bolinha 25 g", tipo="produto").exists()

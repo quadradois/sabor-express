@@ -15,7 +15,8 @@ from custos import fichas as cf
 from custos.relatorios import relatorio_periodo
 from nucleo.operacoes import RegraViolada
 
-from cadastros.servicos import salvar_referencias
+from cadastros.servicos import definir_acabamento, salvar_referencias
+from fichas.models import Ficha
 
 from .views_compras import _dec, _id, _kw
 from .views_vendas import _dia
@@ -67,7 +68,18 @@ def custos(request):
 
 @login_required
 def referencias(request):
-    """Óleo e indiretos de referência por unidade de cada tamanho (só pela tela; vazio = sem referência)."""
+    """Acabamento de cada salgado (frito ou assado, Plano 10) e óleo e indiretos de referência por unidade de
+    cada tamanho (só pela tela; vazio = sem referência)."""
+    if request.method == "POST" and request.POST.get("ficha"):
+        post = request.POST
+        try:
+            r = definir_acabamento(ficha_id=_id(post.get("ficha"), "Salgado"), acabamento=post.get("acabamento", ""),
+                                   **_kw(request))
+        except RegraViolada as e:
+            messages.error(request, str(e))
+        else:
+            messages.success(request, f"{r['ficha']} agora é {r['acabamento']}.")
+        return redirect("referencias")
     if request.method == "POST":
         post = request.POST
         try:
@@ -80,7 +92,9 @@ def referencias(request):
             messages.success(request, "Referências salvas.")
         return redirect("referencias")
     return render(request, "web/referencias.html", {
-        "produtos": Item.objects.filter(tipo="produto", ativo=True).order_by("nome")})
+        "produtos": Item.objects.filter(tipo="produto", ativo=True).select_related("ficha").order_by("nome"),
+        "fichas": Ficha.objects.filter(tipo="produto", ativa=True).order_by("nome"),
+        "acabamentos": Ficha.ACABAMENTOS})
 
 
 @login_required

@@ -22,6 +22,8 @@ from decisoes import consultas as dc
 from decisoes.servicos import aprovar_decisao as _aprovar
 from decisoes.servicos import recusar_decisao as _recusar
 
+from estoque.categorias import categoria
+
 from .acoes import _feito, _proposta, _uma_vez
 from .compras import _juntar, _n, dia_falado, mes_falado, quando, reais, sem_mes_numerico
 from .consultas import ConsultaInvalida, _casa, _inteiro, _normal
@@ -37,7 +39,7 @@ ORIGENS = {
     "receber_vencidas": ("cliente devendo", "receber recebimento fiado devendo cliente"),
     "lotes_vencendo": ("validade perto de vencer", "vencendo vence validade"),
     "lotes_deixados": ("lote deixado para trás", "deixado deixados tras venda primeiro"),
-    "sobras_fritas": ("sobra de frito", "sobras frito fritos fritura"),
+    "sobras_fritas": ("sobra de frito ou assado", "sobras frito fritos fritura assado assados"),
     "consumo_pendente": ("consumo pendente", "conciliar conciliacao"),
     "contas_a_vencer": ("conta a vencer", "contas vencer pagar"),
     "estoque_baixo": ("estoque baixo", "minimo falta acabando"),
@@ -292,7 +294,7 @@ def _assuntos(r, backup) -> list[dict]:
 
         add("falta_produzir", "falta produzir para encomendas",
             f"Para as encomendas dos próximos {_n(enc['dias'], 'dia')}, falta produzir "
-            + _juntar([f"{_un(x['a_produzir'])} de {x['produto']} {x['forma']} {x['estado']}"
+            + _juntar([f"{_un(x['a_produzir'])} de {x['produto']} {categoria(x['forma'], x['estado'])}"
                        for x in a_produzir[:MAX_FALADOS]]) + ".")
     if t["itens_abaixo_do_minimo"]:
         baixo = r["estoque_baixo"]
@@ -317,8 +319,10 @@ def _assuntos(r, backup) -> list[dict]:
 
         sobras = r["sobras_fritas"]
         nomes = _juntar(sorted({x["item"] for x in sobras}))
-        add("sobras_fritas", "sobra de frito",
-            f"Sobra de frito no estoque: {_un(sum(x['saldo'] for x in sobras))} de {nomes}.")
+        formas = {x.get("forma", "frito") for x in sobras}
+        de_que = "frito e assado" if len(formas) > 1 else formas.pop()
+        add("sobras_fritas", f"sobra de {de_que}",
+            f"Sobra de {de_que} no estoque: {_un(sum(x['saldo'] for x in sobras))} de {nomes}.")
     if t["compras_atrasadas"]:
         add("compras_atrasadas", "compra atrasada",
             f"{_n(t['compras_atrasadas'], 'compra atrasada', 'compras atrasadas')}: sete dias ou mais sem chegar tudo.")

@@ -24,7 +24,7 @@ ORIGENS = {
     "recebimento_atrasado": "Compra que não chegou", "consumo_pendente": "Consumo pendente",
     "avisos_ajuste": "Aviso de ajuste", "ficha_rendimento": "Sugestão de ficha", "agente": "Pedido do agente",
     "encomenda_sem_estoque": "Encomenda sem estoque", "receber_vencidas": "Cliente atrasado",
-    "sobras_fritas": "Sobra de frito", "lotes_deixados": "Lote deixado para trás",
+    "sobras_fritas": "Sobra de frito ou assado", "lotes_deixados": "Lote deixado para trás",
 }
 SITUACOES = {"pendente": "Pendentes", "decididas": "Decididas", "aprovada": "Aprovadas", "recusada": "Recusadas",
              "expirada": "Expiradas", "sem_efeito": "Sem efeito"}

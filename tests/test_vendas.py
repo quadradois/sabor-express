@@ -115,7 +115,7 @@ def test_venda_baixa_pelo_que_vence_primeiro_na_forma_e_conservacao(coxinha):
 def test_venda_sem_estoque_recusa_sem_gravar_nada(coxinha):
     lote(coxinha, 5, validade=dia(5))
     a = apresentacao(coxinha)
-    with pytest.raises(RegraViolada, match=r"Só há 5 un de 'Coxinha 150 g' cru congelado"):
+    with pytest.raises(RegraViolada, match=r"Só há 5 un de 'Coxinha 150 g' congelado"):
         registrar_venda(itens=[{"apresentacao_id": a, "quantidade": 6}], autor="dono")
     assert Venda.objects.count() == 0 and saldo(coxinha) == 5
     assert RegistroOperacao.objects.filter(nome="registrar_venda", status="erro").count() == 1

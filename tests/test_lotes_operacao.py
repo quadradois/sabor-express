@@ -100,7 +100,7 @@ def test_separacao_diz_de_qual_lote_pegar_e_quanto_sobra_sem_gravar(coxinha):
     [l] = s["linhas"]
     assert [(x["lote_id"], x["unidades"], x["sobra"]) for x in l["lotes"]] == [(velho.id, 18, 0), (novo.id, 12, 28)]
     nv, nn = nome_lote(velho), nome_lote(novo)
-    assert l["texto"] == (f"30 un de Coxinha 150 g cru congelado: 18 do {nv}, que vence amanhã, e 12 do {nn}; "
+    assert l["texto"] == (f"30 un de Coxinha 150 g congelado: 18 do {nv}, que vence amanhã, e 12 do {nn}; "
                           f"o {nv} zera e no {nn} sobram 28.")
     assert [a["tipo"] for a in l["avisos"]] == ["vence_amanha"] and s["completo"] and l["deixados"] == []
     assert (RegistroOperacao.objects.count(), Movimento.objects.count()) == (ops, movs)

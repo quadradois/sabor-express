@@ -6,10 +6,19 @@
 {% include "web/_custos_nav.html" %}
 {% include "web/_mensagens.html" %}
 <p class="mudo">Quanto, em média, cada salgado gasta de <strong>óleo</strong> (na fritura) e de <strong>indiretos</strong> (mão de obra, energia e gás). São números de referência, por unidade, em reais. Em branco = sem referência (o sistema avisa em vez de contar zero). Para conferir se o indireto está certo, veja o <a href="{% url 'estudo_preco' %}#indireto-real">estudo de preço</a>.</p>
+<h2>Acabamento de cada salgado</h2>
+<p class="mudo">Cada salgado é <strong>frito</strong> ou <strong>assado</strong>, e isso vale para todos os tamanhos dele. O assado vai ao forno: não usa a referência de óleo.</p>
+{% for f in fichas %}<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
+  <input type="hidden" name="ficha" value="{{ f.id }}">
+  <p><label><strong>{{ f.nome }}</strong> é <select name="acabamento">{% for v, nome in acabamentos %}<option value="{{ v }}" {% if f.acabamento == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
+  <button type="submit">Salvar acabamento de {{ f.nome }}</button></form></section>
+{% empty %}<p>Nenhum salgado com ficha.</p>{% endfor %}
+<h2>Óleo e indiretos de cada tamanho</h2>
 {% for p in produtos %}<section class="bloco"><form method="post" class="form">{% csrf_token %}{% chave %}
   <input type="hidden" name="produto" value="{{ p.id }}">
   <p><strong>{{ p.nome }}</strong></p>
-  <p><label>Óleo por unidade (R$) <input name="oleo_ref_un" inputmode="decimal" value="{{ p.oleo_ref_un|ref4 }}"></label></p>
+  {% if p.ficha.acabamento == "assado" %}<p class="mudo">Assado: não leva óleo.</p><input type="hidden" name="oleo_ref_un" value="{{ p.oleo_ref_un|ref4 }}">
+  {% else %}<p><label>Óleo por unidade (R$) <input name="oleo_ref_un" inputmode="decimal" value="{{ p.oleo_ref_un|ref4 }}"></label></p>{% endif %}
   <p><label>Indiretos por unidade (R$) <input name="indireto_ref_un" inputmode="decimal" value="{{ p.indireto_ref_un|ref4 }}"></label></p>
   <button type="submit">Salvar {{ p.nome }}</button></form></section>
 {% empty %}<p>Nenhum tamanho cadastrado.</p>{% endfor %}

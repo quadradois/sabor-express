@@ -6,6 +6,7 @@ from django.db.models import Min, Sum
 from django.utils import timezone
 
 from cadastros.models import Item
+from estoque.categorias import checar_forma
 from estoque.lotes import checar_vencido
 from estoque.models import ESTADOS, FORMAS, ConsumoPendente, Lote, Movimento
 from estoque.servicos import alocar_fefo, alocar_fefo_parcial, calcular_validade, saldo_lote
@@ -34,6 +35,7 @@ def iniciar_producao(*, produto_id, unidades, forma, pendente_justificativa="", 
             raise RegraViolada(f"O produto '{produto.nome}' está inativo.")
         if forma not in dict(FORMAS):
             raise RegraViolada("Forma inválida.")
+        checar_forma(produto, forma)
         if forma == "frito" and not produto.oleo_ref_un:
             raise RegraViolada(f"Cadastre a referência de óleo de '{produto.nome}'.")
         receita = escalar(produto.ficha, unidades, produto.peso_g)
@@ -46,6 +48,9 @@ def iniciar_producao(*, produto_id, unidades, forma, pendente_justificativa="", 
                    "midia": e.midia.url if e.midia else ""} for b in receita.blocos for e in b.etapas]
         if forma == "frito":
             etapas.append({"bloco": "Fritura", "instrucao": f"Frite as {unidades} unidades.",
+                           "tempo_seg": None, "ponto": "", "midia": ""})
+        elif forma == "assado":  # o forno não soma óleo ao custo
+            etapas.append({"bloco": "Forno", "instrucao": f"Asse as {unidades} unidades.",
                            "tempo_seg": None, "ponto": "", "midia": ""})
         p = Producao.objects.create(produto=produto, versao=versao_vigente(produto.ficha), unidades=unidades,
                                     peso_g=produto.peso_g, forma=forma, etapas=etapas,

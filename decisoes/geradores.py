@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from cadastros.models import Item
 from compras.consultas import compras_em_aberto
+from estoque.categorias import categoria
 from estoque.lotes import dia_producao, nome_lote
 from estoque.models import Lote
 from estoque.servicos import alocar_porcoes, consumos_pendentes, itens_abaixo_do_minimo, porcoes, validade_porcao
@@ -282,7 +283,7 @@ def encomenda_sem_estoque(hoje):
             alocacao, _ = alocar_porcoes(Item.objects.get(id=i["produto_id"]), falta, forma=i["forma"], estado=i["estado"], hoje=hoje,
                                          valida_ate=e["entrega_data"])
             cobre += sum((q for _, q in alocacao), Decimal("0"))
-            faltas.append(f"{quantidade(falta, 'un')} de {i['produto']} {i['forma']} {i['estado']}")
+            faltas.append(f"{quantidade(falta, 'un')} de {i['produto']} {categoria(i['forma'], i['estado'])}")
         if not faltas:
             continue
         texto = f"Encomenda {e['encomenda_id']} de {e['cliente']} {_dia(e, hoje)}: falta reservar " + ", ".join(faltas)
@@ -307,9 +308,9 @@ def receber_vencidas_(hoje):
 
 
 def sobras_fritas_(hoje):
-    """Fritos de dias anteriores ainda com saldo (RF-FRI-03): pedem destino (perda ou outro permitido)."""
+    """Fritos e assados de dias anteriores ainda com saldo (RF-FRI-03): pedem destino (perda ou outro permitido)."""
     return [{"assunto": f"sobra_frita:{p['lote_id']}:{p['estado']}",
-             "texto": f"Sobraram {quantidade(p['saldo'], 'un')} de {p['item']} fritos em {_data(p['frito_em'])} "
+             "texto": f"Sobraram {quantidade(p['saldo'], 'un')} de {p['item']} {p['forma']}s em {_data(p['frito_em'])} "
                       f"(lote {p['codigo']}). Registre a perda ou o destino das sobras.",
              "detalhes": p}
             for p in sobras_fritas(hoje=hoje, ate_ontem=True)]

@@ -413,4 +413,4 @@ def test_hoje_avisa_despesa_sem_valor_e_menu_nao_cresce(client, dono):
     assert t.count("Custos e relatórios") == 1
     assert 'href="/despesas/"' in r.content.decode()
     t = limpo(client.get(reverse("custos")))
-    assert "Estudo de preço" in t and "Despesas" in t and "Óleo e indiretos de cada tamanho" in t
+    assert "Estudo de preço" in t and "Despesas" in t and "Acabamento (frito ou assado), óleo e indiretos" in t

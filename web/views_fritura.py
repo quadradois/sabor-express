@@ -1,10 +1,13 @@
-"""Telas de fritura, sobras e descarte (Plano 6, fase 2a). Só chamam serviços e consultas do núcleo."""
+"""Telas de finalização (fritar ou assar, Plano 10), sobras e descarte (Plano 6, fase 2a). Só chamam serviços e
+consultas do núcleo."""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 
+from cadastros.models import Item
+from estoque.categorias import PARTICIPIO, acabamento
 from estoque.models import DESTINOS_PERDA, ESTADOS, Lote
 from estoque.servicos import livre_porcao, porcoes, registrar_perda
 from nucleo.operacoes import RegraViolada
@@ -28,7 +31,7 @@ _FEITO = {"perda": "Perda registrada", "descarte": "Descarte registrado",
 
 
 def _vencidas_cruas(produto_id):
-    """Porções cruas vencidas com saldo livre: só vão para o óleo com um motivo (Plano 9)."""
+    """Porções cruas vencidas com saldo livre: só vão para o óleo ou para o forno com um motivo (Plano 9)."""
     crus = Lote.objects.filter(item_id=produto_id, forma="cru").in_bulk()
     saida = []
     for p in porcoes(item=produto_id):
@@ -49,7 +52,7 @@ def fritura(request):
             try:
                 lote_id, estado = post.get("porcao", "").split("|")
             except ValueError:
-                raise RegraViolada("Escolha o lote que vai para a fritura.") from None
+                raise RegraViolada("Escolha o lote que vai para o óleo ou para o forno.") from None
             r = registrar_fritura(
                 lote_id=_id(lote_id, "Lote"), estado=estado, quantidade=post.get("quantidade"),
                 boas=post.get("boas"), estado_destino=post.get("estado_destino", "fresco"),
@@ -61,14 +64,18 @@ def fritura(request):
             messages.error(request, str(e))
             pede_motivo = "motivo" in str(e).lower()
         else:
-            txt = f"Fritura registrada: {r['boas']} boas e {r['perdas']} perdas de {r['produto']}."
+            feito = "Assado registrado" if r["forma"] == "assado" else "Fritura registrada"
+            txt = f"{feito}: {r['boas']} boas e {r['perdas']} perdas de {r['produto']}."
             if int(r["boas"]):
                 txt += f" Custo: {dinheiro(r['custo_unitario'])} por unidade."
             messages.success(request, txt)
             return redirect(f"{reverse('fritura')}?produto={produto}" if produto else "fritura")
     lista = vc.lotes_para_fritar(produto_id=int(produto)) if produto.isdigit() else []
     vencidas = _vencidas_cruas(int(produto)) if produto.isdigit() else []
+    item = Item.objects.select_related("ficha").filter(id=int(produto), tipo="produto").first() if produto.isdigit() else None
+    acab = acabamento(item) if item else "frito"
     return render(request, "web/fritura.html", {
+        "nome_produto": item.nome if item else "", "acab": acab, "feitas": PARTICIPIO[acab],
         "produtos": _produtos_com_cru(), "produto": produto, "porcoes": lista, "vencidas": vencidas,
         "pede_motivo": pede_motivo, "p": post,
         "estados": ESTADOS, "frituras": vc.frituras(de=timezone.localdate())})

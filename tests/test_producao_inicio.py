@@ -48,6 +48,8 @@ def test_frito_sem_referencia_de_oleo_recusa(bolinha, farinha_em_estoque):
 
 def test_produto_inativo_e_forma_invalida_recusam(bolinha, farinha_em_estoque):
     with pytest.raises(RegraViolada, match="Forma inválida"):
+        _ini(bolinha, "grelhado")
+    with pytest.raises(RegraViolada, match="'Bolinha 100 g' é frito, não assado"):  # trava do acabamento (Plano 10)
         _ini(bolinha, "assado")
     bolinha.ativo = False
     bolinha.save()

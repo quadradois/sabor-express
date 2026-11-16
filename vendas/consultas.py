@@ -10,6 +10,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from cadastros.models import Cliente
+from estoque.categorias import FINALIZADAS, acabamento
 from estoque.models import Lote
 from estoque.servicos import livre_porcao, porcoes
 from producao.models import Fritura
@@ -219,22 +220,24 @@ def necessidade_producao(*, dias=3, hoje=None) -> list[dict]:
 # ---------- fritura e sobras ----------
 
 def frituras(*, de=None, ate=None) -> list[dict]:
-    qs = Fritura.objects.select_related("lote_origem__item", "lote").order_by("criado_em", "id")
+    qs = Fritura.objects.select_related("lote_origem__item__ficha", "lote").order_by("criado_em", "id")
     if de:
         qs = qs.filter(criado_em__date__gte=de)
     if ate:
         qs = qs.filter(criado_em__date__lte=ate)
     return [{"fritura_id": f.id, "produto": f.lote_origem.item.nome, "lote_origem_id": f.lote_origem_id,
+             "forma": f.lote.forma if f.lote_id else acabamento(f.lote_origem.item),  # frito ou assado
              "lote_id": f.lote_id, "fritas": f.quantidade, "boas": f.boas, "perdas": f.perdas,
              "perda_motivo": f.perda_motivo, "custo_total": f.custo_total, "custo_unitario": f.custo_unitario,
              "criado_em": f.criado_em} for f in qs]
 
 
 def sobras_fritas(*, hoje=None, ate_ontem=False) -> list[dict]:
-    """Porções de lotes fritos com saldo (RF-FRI-03): o que sobrou e precisa de destino (perda ou
-    outro permitido). `ate_ontem=True` só traz os fritos de dias anteriores (a rotina avisa esses)."""
+    """Porções de lotes fritos ou assados com saldo (RF-FRI-03): o que sobrou e precisa de destino (perda ou
+    outro permitido). `ate_ontem=True` só traz os de dias anteriores (a rotina avisa esses). O nome e a chave
+    `frito_em` ficaram de antes do assado (Plano 10); `forma` diz qual dos dois."""
     hoje = hoje or timezone.localdate()
-    fritos = Lote.objects.filter(forma="frito").in_bulk()
+    fritos = Lote.objects.filter(forma__in=FINALIZADAS).in_bulk()
     saida = []
     for p in porcoes(hoje=hoje):
         lote = fritos.get(p["lote_id"])
@@ -243,7 +246,7 @@ def sobras_fritas(*, hoje=None, ate_ontem=False) -> list[dict]:
         criado = timezone.localtime(lote.criado_em).date()
         if ate_ontem and criado >= hoje:
             continue
-        saida.append({**p, "frito_em": criado, "reservado": p["saldo"] - livre_porcao(lote, p["estado"])})
+        saida.append({**p, "forma": lote.forma, "frito_em": criado, "reservado": p["saldo"] - livre_porcao(lote, p["estado"])})
     return saida
 
 

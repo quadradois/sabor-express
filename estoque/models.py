@@ -2,7 +2,7 @@ from django.db import models
 
 
 ESTADOS = [("fresco", "Fresco"), ("resfriado", "Resfriado"), ("congelado", "Congelado")]
-FORMAS = [("cru", "Cru"), ("frito", "Frito")]
+FORMAS = [("cru", "Cru"), ("frito", "Frito"), ("assado", "Assado")]
 # para onde foi o que saiu sem venda (Plano 9: "estão aqui" na conferência do vencido); todas são baixa com valor
 DESTINOS_PERDA = [("perda", "Perda"), ("descarte", "Descarte"), ("consumo_equipe", "Consumo da equipe"),
                   ("doacao", "Doação")]
@@ -52,7 +52,22 @@ class CriterioValidade(models.Model):
         constraints = [models.UniqueConstraint(fields=["produto", "forma", "estado"], name="criterio_unico")]
 
     def __str__(self):
-        return f"{self.produto} {self.forma} {self.estado}: {self.dias} dias"
+        from .categorias import categoria
+
+        return f"{self.produto} {categoria(self.forma, self.estado)}: {self.dias} dias"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        from nucleo.operacoes import RegraViolada
+
+        from .categorias import checar_forma
+
+        if self.produto_id and self.forma:
+            try:
+                checar_forma(self.produto, self.forma)
+            except RegraViolada as e:
+                raise ValidationError({"forma": str(e)})
 
 
 class EtiquetaImpressa(models.Model):

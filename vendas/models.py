@@ -18,7 +18,7 @@ class Apresentacao(models.Model):
     """Como o produto é vendido (RF-CAD-04): unidade, caixa ou cento, em uma forma e conservação, com preço.
 
     Cada tamanho já é um produto (design §6.3.7); a apresentação diz quantas unidades vão, de que jeito
-    (cru congelado, frito fresco...) e quanto custa no varejo e no atacado."""
+    (congelado, frito ou assado: ver `estoque.categorias`) e quanto custa no varejo e no atacado."""
 
     produto = models.ForeignKey("cadastros.Item", on_delete=models.PROTECT, related_name="apresentacoes",
                                 limit_choices_to={"tipo": "produto"})
@@ -38,7 +38,9 @@ class Apresentacao(models.Model):
         constraints = [models.UniqueConstraint(fields=["produto", "nome"], name="apresentacao_unica_por_produto")]
 
     def __str__(self):
-        return f"{self.produto} — {self.nome} ({self.forma}, {self.estado})"
+        from estoque.categorias import categoria
+
+        return f"{self.produto} — {self.nome} ({categoria(self.forma, self.estado)})"
 
 
 class CanalVenda(models.Model):

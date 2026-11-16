@@ -72,6 +72,13 @@ def conservacao(estado):
 
 
 @register.filter
+def categoria(forma, estado):
+    """As três categorias de venda (Plano 10): `{{ a.forma|categoria:a.estado }}` → "congelado", "frito", "assado"."""
+    from estoque.categorias import categoria as _categoria
+    return _categoria(forma, estado)
+
+
+@register.filter
 def forma_nome(forma):
     from estoque.models import FORMAS
     return dict(FORMAS).get(forma, forma)

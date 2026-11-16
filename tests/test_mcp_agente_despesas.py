@@ -419,7 +419,7 @@ def test_margem_com_indiretos_e_dita_como_outra_margem(bolinha_a_5, bolinha):
 def test_ver_estudo_preco_por_canal(bolinha_a_5):
     r = chamar("ver_estudo_preco", produto="bolinha")
     t = falado(r)
-    assert t.startswith("unidade de Bolinha 100 g, cru, a 5 reais: CMV de 50 centavos, 10 por cento do preço; "
+    assert t.startswith("unidade de Bolinha 100 g, congelado, a 5 reais: CMV de 50 centavos, 10 por cento do preço; "
                         "indiretos de referência, 74 centavos. No balcão, dinheiro e balcão, pix, sobram 3 reais e "
                         "76 centavos, 75,2 por cento do preço; no cartão de débito, taxa não informada, sem conta; "
                         "no cartão de crédito, sobram 3 reais e 56 centavos, 71,2 por cento do preço, já descontada a "
@@ -435,7 +435,7 @@ def test_simular_preco_nos_dois_sentidos_sem_gravar(bolinha_a_5):
     r = chamar("simular_preco", produto="bolinha", preco=8)
     t = falado(r)
     assert r["rotulo"] == "simulação" and r["sobra"] == 6.76
-    assert t.startswith("Simulação, o preço da tabela não muda: unidade de Bolinha 100 g, cru a 8 reais no balcão, "
+    assert t.startswith("Simulação, o preço da tabela não muda: unidade de Bolinha 100 g, congelado a 8 reais no balcão, "
                         "dinheiro. CMV de 50 centavos, 6,3 por cento do preço; indiretos de referência, 74 centavos; "
                         "sobram 6 reais e 76 centavos, 84,5 por cento do preço.")
     assert "Hoje a tabela está em 5 reais: este preço fica 3 reais acima." in t
@@ -444,7 +444,7 @@ def test_simular_preco_nos_dois_sentidos_sem_gravar(bolinha_a_5):
     r = chamar("simular_preco", produto="bolinha", sobra_pct=30)
     t = falado(r)
     assert r["preco"] == 1.77 and r["sobra_pct_pedida"] == 30
-    assert ("para sobrar 30 por cento do preço no balcão, dinheiro, o sistema calcula unidade de Bolinha 100 g, cru "
+    assert ("para sobrar 30 por cento do preço no balcão, dinheiro, o sistema calcula unidade de Bolinha 100 g, congelado "
             "a 1 real e 77 centavos.") in t
     assert "este preço fica 3 reais e 23 centavos abaixo." in t
     r = chamar("simular_preco", produto="bolinha", preco=4, canal="crédito")

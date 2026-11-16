@@ -216,7 +216,7 @@ def test_relatorio_do_periodo(client, dono, bolinha, producao_concluida):
     vender_coxinha("0.60", 10)
     t = limpo(client.get(reverse("relatorio"), {"periodo": "hoje"}))
     for trecho in ("estimado", "antes das despesas", "Não é lucro", "R$ 50,00", "R$ 44,00", "Perdas com valor",
-                   "Compras", "Dinheiro anotado", "Contas em aberto hoje", "Produção e fritura", "Encomendas",
+                   "Compras", "Dinheiro anotado", "Contas em aberto hoje", "Produção e finalização (fritar ou assar)", "Encomendas",
                    "despesas (aluguel"):
         assert trecho in t, trecho
     assert "1 produção(ões)" in t and "estimada" in t
