@@ -37,7 +37,7 @@ def test_dados_etiqueta_iguais_ao_lote(lote):
         "produto": lote.item.nome, "lote": "L1", "fabricacao": timezone.localdate(lote.criado_em),
         "dia_producao": timezone.localdate(lote.criado_em).day, "nome_lote": "lote do dia "
         f"{timezone.localdate(lote.criado_em).day}",
-        "validade": lote.validade, "validade_manual": True, "conservacao": "Resfriado", "forma": "Cru",
+        "validade": lote.validade, "validade_manual": True, "conservacao": "Resfriado", "forma": "Cru", "categoria": "Resfriado",
         "quantidade": D("250")}
 
 

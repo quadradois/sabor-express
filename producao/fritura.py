@@ -1,13 +1,15 @@
-"""Registro rápido de fritura (PRD §7.8, FL-04): unidades cruas de um lote guardado viram um lote frito.
+"""Finalização rápida (PRD §7.8, FL-04): unidades cruas de um lote guardado viram um lote frito ou, se o
+acabamento do salgado é assado (Plano 10), um lote assado. A operação e o registro continuam se chamando fritura.
 
-A fritura como última etapa de um preparo continua em `producao.servicos` (forma "frito"); aqui é a
-fritura do balcão, a partir de um lote cru já produzido. Troca de óleo (RF-FRI-04) fica para depois.
+A finalização como última etapa de um preparo continua em `producao.servicos` (forma "frito" ou "assado"); aqui
+é a do balcão, a partir de um lote cru já produzido. Troca de óleo (RF-FRI-04) fica para depois.
 """
 
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.utils import timezone
 
+from estoque.categorias import PARTICIPIO, VERBO, acabamento
 from estoque.lotes import checar_vencido, texto_vencido
 from estoque.models import ESTADOS, Lote, Movimento
 from estoque.servicos import calcular_validade, livre_porcao, saldo_lote, validade_porcao
@@ -24,7 +26,10 @@ def registrar_fritura(*, lote_id, quantidade, boas, estado="", estado_destino="f
     (RF-FRI-01), no `estado_destino` e com a validade do critério de "frito" (RN-27; sem critério, manual
     e justificada). Custo do lote frito = (custo do cru × fritas + óleo de referência × fritas) ÷ boas
     (RF-FRI-02, CA-24). Não frita o reservado para encomendas. Vencido (FL-04 E1) só com `motivo_vencido`
-    (Plano 9: aviso com motivo); o motivo fica no movimento de consumo."""
+    (Plano 9: aviso com motivo); o motivo fica no movimento de consumo.
+
+    Salgado de acabamento assado (Plano 10): mesma operação, o lote sai "assado", com a validade do critério de
+    "assado", e o custo não soma óleo (nem exige a referência de óleo)."""
     parametros = {"lote_id": lote_id, "quantidade": quantidade, "boas": boas, "estado": estado,
                   "estado_destino": estado_destino, "perda_motivo": perda_motivo, "validade_manual": validade_manual,
                   "justificativa": justificativa, "confirmar_perda_total": confirmar_perda_total}
@@ -43,28 +48,31 @@ def registrar_fritura(*, lote_id, quantidade, boas, estado="", estado_destino="f
         produto = lote.item
         if produto.tipo != "produto" or lote.forma != "cru":
             raise RegraViolada("Escolha um lote de salgado cru.")
-        if not produto.oleo_ref_un:
+        forma = acabamento(produto)
+        feitas, verbo = PARTICIPIO[forma], VERBO[forma]
+        if forma == "frito" and not produto.oleo_ref_un:
             raise RegraViolada(f"Cadastre a referência de óleo de '{produto.nome}'.")
         if estado_destino not in dict(ESTADOS) or estado not in dict(ESTADOS):
             raise RegraViolada("Conservação inválida.")
         if q < 1:
-            raise RegraViolada("Informe quantas unidades foram fritas.")
+            raise RegraViolada(f"Informe quantas unidades foram {feitas}.")
         if b < 0 or b > q:
-            raise RegraViolada("As boas devem ficar entre zero e as fritas.")
+            raise RegraViolada(f"As boas devem ficar entre zero e as {feitas}.")
         if b < q and not (perda_motivo or "").strip():
             raise RegraViolada("Informe o motivo das perdas.")
         if b == 0 and not confirmar_perda_total:
             raise RegraViolada("Nenhuma unidade boa: confirme a perda total.")
         v = validade_porcao(lote, estado)
         mv = checar_vencido(lote, estado, v, quando=hoje, motivo_vencido=motivo_vencido,
-                            regra=lambda: f"{texto_vencido(lote, estado, v)} Lote vencido não pode ser frito sem um "
-                                          "motivo: descarte ou, para fritar mesmo assim, informe o motivo.")
+                            regra=lambda: f"{texto_vencido(lote, estado, v)} Lote vencido não pode ser {forma} sem um "
+                                          f"motivo: descarte ou, para {verbo} mesmo assim, informe o motivo.")
         if q > saldo_lote(lote, estado):
             raise RegraViolada(f"Só há {fmt_qtd(saldo_lote(lote, estado), 'un')} desse lote em {estado}.")
         if q > livre_porcao(lote, estado):
             raise RegraViolada(f"Só {fmt_qtd(livre_porcao(lote, estado), 'un')} desse lote em {estado} não estão "
                                "reservadas para encomendas.")
-        custo = (lote.custo_unitario * q + produto.oleo_ref_un * q).quantize(Decimal("0.01"), ROUND_HALF_UP)
+        oleo = produto.oleo_ref_un if forma == "frito" else Decimal("0")  # o forno não gasta óleo
+        custo = (lote.custo_unitario * q + oleo * q).quantize(Decimal("0.01"), ROUND_HALF_UP)
         f = Fritura.objects.create(lote_origem=lote, estado_origem=estado, quantidade=q, boas=b,
                                    perda_motivo=(perda_motivo or "").strip() if b < q else "",
                                    estado=estado_destino, custo_total=custo, operacao=op)
@@ -74,16 +82,16 @@ def registrar_fritura(*, lote_id, quantidade, boas, estado="", estado_destino="f
                                  operacao=op)
         validade, manual = None, False
         if b > 0:
-            validade, manual = calcular_validade(produto, "frito", estado_destino, hoje=hoje, manual=validade_manual,
+            validade, manual = calcular_validade(produto, forma, estado_destino, hoje=hoje, manual=validade_manual,
                                                  justificativa=justificativa)
             f.custo_unitario = (custo / b).quantize(Decimal("0.0001"), ROUND_HALF_UP)
-            f.lote = Lote.objects.create(item=produto, codigo=f"{hoje:%y%m%d}-F{f.id}", forma="frito",
+            f.lote = Lote.objects.create(item=produto, codigo=f"{hoje:%y%m%d}-{forma[0].upper()}{f.id}", forma=forma,
                                          validade=validade, custo_unitario=f.custo_unitario)
             Movimento.objects.create(tipo="entrada_fritura", item=produto, lote=f.lote, quantidade=b,
                                      quantidade_informada=b, unidade_informada="un", fator=Decimal("1"), motivo=motivo,
                                      estado=estado_destino, validade=validade, validade_manual=manual, operacao=op)
             f.save(update_fields=["custo_unitario", "lote"])
-        return {"fritura_id": f.id, "lote_id": f.lote_id, "lote_origem_id": lote.id, "produto": produto.nome,
+        return {"fritura_id": f.id, "lote_id": f.lote_id, "lote_origem_id": lote.id, "produto": produto.nome, "forma": forma,
                 "fritas": q, "boas": b, "perdas": q - b, "custo_total": custo, "custo_unitario": f.custo_unitario,
                 "validade": validade, "validade_manual": manual}
 

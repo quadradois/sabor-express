@@ -21,7 +21,8 @@ from django.utils import timezone
 
 from cadastros.models import Cliente, Item
 from cadastros.servicos import salvar_cliente
-from estoque.models import Lote
+from estoque.categorias import PARTICIPIO, VERBO, acabamento, categoria
+from estoque.models import ESTADOS, FORMAS, Lote
 from estoque.servicos import porcoes
 from financeiro import consultas as fc
 from financeiro.servicos import dividir_parcelas
@@ -44,7 +45,7 @@ MAX_OPCOES = 8
 _VAZIAS = {"de", "da", "do", "das", "dos", "com", "a", "o", "as", "os", "e", "pra", "pro", "para", "em", "um", "uma",
            "uns", "umas", "no", "na"}
 _SINONIMOS = {"fresc": "fresco", "resfri": "resfriado", "gelad": "resfriado", "congel": "congelado",
-              "freez": "congelado", "frit": "frito"}  # por começo de palavra ("congeladas", "geladeira")
+              "freez": "congelado", "frit": "frito", "assad": "assado"}  # por começo de palavra ("congeladas")
 _IGUAIS = {"crua": "cru", "cru": "cru", "grama": "g", "gr": "g", "quilo": "kg"}  # palavra inteira
 _DIAS_SEMANA = ("segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo")
 
@@ -75,11 +76,12 @@ def _plural(nome, q) -> str:
 
 
 def _jeito(forma, estado) -> str:
-    return f"{forma} {estado}"
+    """A categoria falada (Plano 10): "congelado", "frito" ou "assado"; o resto por extenso."""
+    return categoria(forma, estado)
 
 
 def _apres_txt(a, q=None) -> str:
-    """"2 caixas com 25 de Coxinha 150 g, cru congelado"."""
+    """"2 caixas com 25 de Coxinha 150 g, congelado"."""
     nome = a.nome if q is None else f"{q} {_plural(a.nome, q)}"
     return f"{nome} de {a.produto.nome}, {_jeito(a.forma, a.estado)}"
 
@@ -140,15 +142,46 @@ def _rotulo_apres(a) -> str:
     return f"{a.produto.nome} {a.nome} {a.forma} {a.estado}"
 
 
+_FORMAS_DITAS = {f for f, _ in FORMAS}
+_ESTADOS_DITOS = {e for e, _ in ESTADOS}
+
+
+def _da_categoria(achadas, ditos) -> list:
+    """As três categorias na entrada (Plano 10): "congelado" (ou "cru") sozinho é o cru congelado; "frito" ou
+    "assado" sozinho é o que acabou de sair, fresco. Só desempata: dito por extenso ("frito congelado"), vale o dito."""
+    formas, estados = _FORMAS_DITAS & set(ditos), _ESTADOS_DITOS & set(ditos)
+    if len(achadas) < 2 or len(formas) + len(estados) != 1:
+        return achadas
+    if formas:
+        quer = "congelado" if formas == {"cru"} else "fresco"
+        return [a for a in achadas if a.estado == quer] or achadas
+    if estados == {"fresco"}:
+        return achadas
+    return [a for a in achadas if a.forma == "cru"] or achadas
+
+
+def _outro_acabamento(ditos, proximas) -> str:
+    """Pediram frito de um salgado que é assado (ou o contrário): a frase que diz o acabamento dele."""
+    pedido = {"frito", "assado"} & set(ditos)
+    if len(pedido) != 1 or not proximas:
+        return ""
+    pedido = pedido.pop()
+    if any(acabamento(a.produto) == pedido for a in proximas):
+        return ""
+    nomes = list(dict.fromkeys(a.produto.ficha.nome if a.produto.ficha_id else a.produto.nome for a in proximas))
+    return f"{_juntar(nomes)} é {acabamento(proximas[0].produto)}, não {pedido}."
+
+
 def _apresentacao(pedido: dict) -> Apresentacao:
     """A apresentação de um item falado: {produto, apresentacao?, forma?, conservacao?}."""
     dito = " ".join(str(pedido.get(k) or "") for k in ("produto", "apresentacao", "forma", "conservacao"))
     ditos = _tokens(dito)
     if not ditos:
         raise ConsultaInvalida("Diga o produto de cada item (ex.: coxinha, caixa com 25, congelada).")
-    ativas = list(Apresentacao.objects.select_related("produto")
+    ativas = list(Apresentacao.objects.select_related("produto__ficha")
                   .filter(ativo=True, produto__ativo=True).order_by("produto__nome", "unidades", "nome"))
     achadas = [a for a in ativas if _cobre(ditos, _tokens(_rotulo_apres(a)))]
+    achadas = _da_categoria(achadas, ditos)
     if len(achadas) > 1:  # o nome da apresentação todo dito ganha das parciais ("caixa com 25" × "caixa com 50")
         inteiras = [a for a in achadas if set(_tokens(a.nome)) <= set(ditos)]
         achadas = inteiras or achadas
@@ -159,8 +192,12 @@ def _apresentacao(pedido: dict) -> Apresentacao:
         return achadas[0]
     if not achadas:
         # nome ouvido torto ("previl" por "preview") ou forma/conservação que não existe: mostra o que há, não desiste
-        prod = _tokens(pedido.get("produto"))
+        prod = [t for t in _tokens(pedido.get("produto")) if t not in _FORMAS_DITAS and t not in _ESTADOS_DITOS]
         proximas = [a for a in ativas if prod and all(any(_perto(d, x) for x in _tokens(a.produto.nome)) for d in prod)]
+        outro = _outro_acabamento(ditos, proximas)
+        if outro:
+            raise ConsultaInvalida(outro + " O que há para vender está nas opções; pergunte qual.", 409,
+                                   opcoes=[_apres_txt(a) for a in proximas[:MAX_OPCOES]])
         if proximas:
             raise ConsultaInvalida(f"Não achei '{dito.strip()}' desse jeito. O que há parecido para vender está nas "
                                    "opções; pergunte qual.", 409, opcoes=[_apres_txt(a) for a in proximas[:MAX_OPCOES]])
@@ -581,14 +618,19 @@ def ver_a_receber(cliente="", situacao="todas", dias=7):
 def ver_sobras():
     sobras = vc.sobras_fritas()
     if not sobras:
-        texto = "Nenhuma sobra de salgado frito no estoque."
+        texto = "Nenhuma sobra de salgado frito ou assado no estoque."
     else:
         total = sum((s["saldo"] for s in sobras), ZERO)
-        texto = f"Sobras fritas: {_un(total)}. " + _ate_cinco(
-            f"{_un(s['saldo'])} de {s['item']} fritas {_sem_em(quando(s['frito_em']))}, {s['estado']}"
+        so_assado = all(s["forma"] == "assado" for s in sobras)
+        misto = not so_assado and any(s["forma"] == "assado" for s in sobras)
+        titulo = "Sobras assadas" if so_assado else "Sobras fritas e assadas" if misto else "Sobras fritas"
+        texto = f"{titulo}: {_un(total)}. " + _ate_cinco(
+            f"{_un(s['saldo'])} de {s['item']} {PARTICIPIO[s['forma']]} {_sem_em(quando(s['frito_em']))}"
+            + ("" if s["estado"] == "fresco" else f", {s['estado']}")
             + (f", {_un(s['reservado'])} reservadas" if s["reservado"] else "")
             + (", vencidas" if s["vencido"] else "") for s in sobras)
     return {"sobras": [{"lote_id": s["lote_id"], "codigo": s["codigo"], "produto": s["item"],
+                        "forma": s["forma"], "categoria": categoria(s["forma"], s["estado"]),
                         "conservacao": s["estado"], "saldo": float(s["saldo"]), "reservado": float(s["reservado"]),
                         "frito_em": s["frito_em"].isoformat(), "validade": _iso(s["validade"]),
                         "vencido": s["vencido"]} for s in sobras], "texto": texto}
@@ -838,7 +880,7 @@ def _lotes_entrega(encomenda_id, pedidos) -> list[dict] | None:
             ditos = _tokens(p["produto"])
             candidatos = [i for i in itens if _cobre(ditos, _tokens(_rotulo_apres(i.apresentacao)))] or itens
         lotes = {l.id: l for i in candidatos for l in lotes_da_apresentacao(i.apresentacao)}
-        oque = _juntar(sorted({f"{i.apresentacao.produto.nome} {i.apresentacao.forma} {i.apresentacao.estado}"
+        oque = _juntar(sorted({f"{i.apresentacao.produto.nome} {_jeito(i.apresentacao.forma, i.apresentacao.estado)}"
                                for i in candidatos}))
         lote = resolver_lote(p.get("lote"), lotes.values(), oque=oque, lote_id=p.get("lote_id"))
         servem = [i for i in candidatos if i.apresentacao.produto_id == lote.item_id
@@ -929,7 +971,7 @@ def propor_cancelar_encomenda(*, motivo, encomenda_id=None, cliente="", devolver
 # --- nível 2: fritura e perda -----------------------------------------------------------
 
 def _porcoes_cruas_do_lote(p, lote, conservacao):
-    """Fritura de um lote dito ("frita do lote do dia 8"): as porções cruas dele, vencidas inclusive (vencido só
+    """Fritura (ou forno) de um lote dito ("frita do lote do dia 8"): as porções cruas dele, vencidas inclusive (vencido só
     sai com motivo, quem confere é o núcleo)."""
     crus = Lote.objects.select_related("item").filter(item=p, forma="cru")
     ps = [x for x in porcoes(item=p) if x["lote_id"] in {l.id for l in crus}]
@@ -944,6 +986,8 @@ def propor_registrar_fritura(*, produto, quantidade, boas=None, motivo_perdas=""
     p = resolver_produto(produto)
     q = _inteiro(quantidade, "quantidade")
     b = q if _sem_valor(boas) and boas != 0 else _inteiro(boas, "boas")
+    acab = acabamento(p)  # frito ou assado: a mesma ferramenta serve aos dois (Plano 10)
+    verbo, feita = VERBO[acab], PARTICIPIO[acab][:-1]
     if (lote or "").strip():
         porcoes_cruas = _porcoes_cruas_do_lote(p, lote, conservacao)
     else:
@@ -953,8 +997,8 @@ def propor_registrar_fritura(*, produto, quantidade, boas=None, motivo_perdas=""
         porcoes_cruas = [x for x in porcoes_cruas if x["estado"] == estado]
     if not porcoes_cruas:
         onde = f" {_estado(conservacao)}" if (conservacao or "").strip() else ""
-        raise ConsultaInvalida(f"Nenhum lote de {p.nome} cru{onde} livre para fritar (não vencido e não reservado).",
-                               404)
+        raise ConsultaInvalida(f"Nenhum lote de {p.nome} cru{onde} livre para {verbo} (não vencido e não "
+                               "reservado).", 404)
     estados = list(dict.fromkeys(x["estado"] for x in porcoes_cruas))
     if len(estados) > 1:
         livres = {e: sum((x["livre"] for x in porcoes_cruas if x["estado"] == e), ZERO) for e in estados}
@@ -975,16 +1019,16 @@ def propor_registrar_fritura(*, produto, quantidade, boas=None, motivo_perdas=""
               + (f", que {'venceu' if vencido else 'vence'} {quando(porcao['validade'])}" if porcao["validade"] else ""))
 
     def resumir(r):
-        t = f"Fritar {_un(q)} de {p.nome} {origem}: "
+        t = f"{verbo.capitalize()} {_un(q)} de {p.nome} {origem}: "
         perdas = r["perdas"]
         perda = f"{perdas} perdida{'s' if perdas > 1 else ''} ({parametros['perda_motivo']})" if perdas else ""
         if r["boas"] == 0:
             return (t + "PERDA TOTAL, nenhuma boa" + (f", {perda}" if perda else "")
                     + (vencidos_txt([vencido], mv) if mv else ""))
         t += f"{r['boas']} boa{'s' if r['boas'] > 1 else ''}" + (f" e {perda}" if perda else "")
-        t += f". Custo de {reais(r['custo_unitario'])} por unidade frita"
+        t += f". Custo de {reais(r['custo_unitario'])} por unidade {feita}"
         if r["validade"]:
-            t += f"; o frito fica {destino_estado} e vale até {_sem_em(quando(r['validade']))}"
+            t += f"; o {acab} fica {destino_estado} e vale até {_sem_em(quando(r['validade']))}"
         return t + (vencidos_txt([vencido], mv) if mv else "")
 
     return pedir_motivo(lambda: _proposta("registrar_fritura", parametros, resumir, autor, canal))
@@ -1003,6 +1047,11 @@ def _porcao_para_perda(produto, *, conservacao="", forma="", lote="", vencido=Fa
         f = _forma(forma)
         formas = Lote.objects.in_bulk({x["lote_id"] for x in ps})
         ps = [x for x in ps if formas[x["lote_id"]].forma == f]
+        if f != "cru" and not (conservacao or "").strip():  # "frito" ou "assado" sozinho é o fresco
+            ps = [x for x in ps if x["estado"] == "fresco"] or ps
+    elif (conservacao or "").strip() and estado != "fresco" and i.tipo == "produto":  # "congelado" sozinho é o cru
+        formas = Lote.objects.in_bulk({x["lote_id"] for x in ps})
+        ps = [x for x in ps if formas[x["lote_id"]].forma == "cru"] or ps
     if (lote or "").strip() or lote_id not in (None, ""):
         lotes = Lote.objects.select_related("item").in_bulk({x["lote_id"] for x in ps})
         escolhido = resolver_lote(lote, lotes.values(), oque=i.nome, lote_id=lote_id)
@@ -1013,15 +1062,15 @@ def _porcao_para_perda(produto, *, conservacao="", forma="", lote="", vencido=Fa
         raise ConsultaInvalida(f"Nenhum lote de {i.nome}" + (" vencido" if vencido else "") + " com saldo"
                                + (" nessa conservação" if (conservacao or "").strip() else "") + ".", 404)
     if len(ps) > 1:
-        raise ConsultaInvalida(f"Há mais de um lote de {i.nome} com saldo; pergunte qual (conservação, frito ou "
-                               "cru, ou o dia do lote).", 409, opcoes=[_porcao_txt(i, x) for x in ps[:MAX_OPCOES]])
+        raise ConsultaInvalida(f"Há mais de um lote de {i.nome} com saldo; pergunte qual (congelado, frito ou "
+                               "assado, ou o dia do lote).", 409, opcoes=[_porcao_txt(i, x) for x in ps[:MAX_OPCOES]])
     return i, ps[0]
 
 
 def _porcao_txt(i, x) -> str:
     l = Lote.objects.get(id=x["lote_id"])
-    forma = l.forma if i.tipo == "produto" else ""
-    t = nome(l) + (f", {forma}" if forma else "") + (f", {x['estado']}" if x["estado"] else "")
+    jeito = _jeito(l.forma, x["estado"]) if i.tipo == "produto" else x["estado"]
+    t = nome(l) + (f", {jeito}" if jeito else "")
     t += f", {qtd(x['saldo'], x['unidade_base'])}"
     if x["validade"]:
         t += f", {'venceu' if x['vencido'] else 'vence'} {quando(x['validade'])}"

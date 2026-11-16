@@ -5,7 +5,7 @@
   {% if passada %}<p class="aviso">Venda de {{ sep.data_venda|date:"d/m/Y" }}: a validade é julgada naquele dia.</p>{% endif %}
   {% for x in painel %}{% with l=x.linha %}
   <div class="bloco">
-    <p><strong>{{ l.produto }}</strong> <span class="mudo">({{ l.forma|forma_nome|lower }}, {{ l.estado|conservacao|lower }})</span> — {{ l.unidades|numero }} un</p>
+    <p><strong>{{ l.produto }}</strong> <span class="mudo">({{ l.forma|categoria:l.estado }})</span> — {{ l.unidades|numero }} un</p>
     <ul class="separar">{% for lo in l.lotes %}
       <li>Pegar <strong>{{ lo.unidades|numero }} un</strong> do <strong>{{ lo.nome }}</strong> <span class="mudo">(código {{ lo.codigo }})</span>
         {% if lo.validade %} · vence {{ lo.validade|date:"d/m" }}{% endif %}{% if lo.vencido %} <span class="falta">vencido</span>{% endif %}

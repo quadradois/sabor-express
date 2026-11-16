@@ -17,6 +17,7 @@ from decimal import Decimal
 from django.utils import timezone
 
 from decisoes import consultas as dc
+from estoque.categorias import categoria
 from estoque.lotes import MESES, ORDINAIS, dia_producao, nome_lote, vencida
 from estoque.models import Lote
 from estoque.servicos import porcoes, saldo_lote, validade_porcao
@@ -97,7 +98,7 @@ def lotes_indicados(a, pedidos) -> list[dict] | None:
     if isinstance(pedidos, dict):
         pedidos = [pedidos]
     candidatos = lotes_da_apresentacao(a)
-    oque = f"{a.produto.nome} {a.forma} {a.estado}"
+    oque = f"{a.produto.nome} {categoria(a.forma, a.estado)}"
     saida = []
     for p in pedidos:
         p = dict(p)
@@ -146,7 +147,7 @@ def separacao_curta(sep) -> str:
     if len(linhas) == 1:
         partes = [f"Sai {lote(linhas[0])}."]
     else:
-        partes = ["De onde sai: " + "; ".join(f"{l['produto']} {l['forma']} {l['estado']}, {lote(l)}"
+        partes = ["De onde sai: " + "; ".join(f"{l['produto']} {categoria(l['forma'], l['estado'])}, {lote(l)}"
                                                for l in linhas) + "."]
     partes += [_falavel(a["texto"]) for a in sep["avisos"] if a["tipo"] in _AVISOS_FALADOS]
     return " ".join(partes)
@@ -213,8 +214,9 @@ def checar_motivo_na_separacao(sep):
 # --- contagem do lote (nível 2) ----------------------------------------------------------------
 
 def _porcao_txt(lote, estado) -> str:
-    return (f"o {nome(lote)} de {lote.item.nome}" + (f", {lote.forma}" if lote.item.tipo == "produto" else "")
-            + (f", {estado}" if estado else ""))
+    if lote.item.tipo == "produto":  # produto fala a categoria: congelado, frito ou assado
+        return f"o {nome(lote)} de {lote.item.nome}, " + (categoria(lote.forma, estado) if estado else lote.forma)
+    return f"o {nome(lote)} de {lote.item.nome}" + (f", {estado}" if estado else "")
 
 
 def _contagem_resumo(lote, estado):

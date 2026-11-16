@@ -91,8 +91,9 @@ def custo_estimado(*, produto_id, em=None) -> dict:
 
     `ingredientes` = Σ(quantidade por unidade × referência), `None` se faltar referência (ver `faltando`;
     `ingredientes_conhecido` soma só o que tem referência). `custo_cru` = ingredientes + indiretos (se houver
-    referência); `custo_frito` = custo_cru + óleo de referência (`None` sem óleo). `inclui`/`nao_inclui`
-    dizem o que entra (RF-CUS-06)."""
+    referência); `custo_frito` = custo_cru + óleo de referência (`None` sem óleo). Salgado de acabamento
+    assado (Plano 10) não leva óleo: `oleo` e `custo_frito` vêm `None` e `custo_assado` = custo_cru.
+    `inclui`/`nao_inclui` dizem o que entra (RF-CUS-06)."""
     produto = Item.objects.select_related("ficha").filter(id=produto_id, tipo="produto").first()
     if produto is None or produto.ficha_id is None:
         raise RegraViolada("Produto não encontrado.")
@@ -103,7 +104,8 @@ def custo_estimado(*, produto_id, em=None) -> dict:
         _blocos(p.preparacao, produto.peso_g * p.percentual / 100, refs, blocos)
     soma = _fechar(blocos)
     ingredientes = soma["total"]
-    indiretos, oleo = produto.indireto_ref_un, produto.oleo_ref_un
+    assado = ficha.acabamento == "assado"
+    indiretos, oleo = produto.indireto_ref_un, None if assado else produto.oleo_ref_un
     inclui, nao_inclui = [INCLUI_INGREDIENTES], list(NAO_INCLUI_SEMPRE)
     if indiretos is not None:
         inclui.append("indiretos de referência por unidade (mão de obra, gás, energia)")
@@ -118,6 +120,7 @@ def custo_estimado(*, produto_id, em=None) -> dict:
         "completo": soma["completo"], "faltando": soma["faltando"],
         "ingredientes": _q(ingredientes), "ingredientes_conhecido": _q(soma["conhecido"]),
         "indiretos": indiretos, "oleo": oleo, "custo_cru": _q(custo_cru), "custo_frito": _q(custo_frito),
+        "acabamento": ficha.acabamento, "custo_assado": _q(custo_cru) if assado else None,
         "inclui": inclui, "nao_inclui": nao_inclui, "blocos": _arredondar(blocos),
     }
 

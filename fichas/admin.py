@@ -58,7 +58,7 @@ class VersaoInline(admin.TabularInline):
 
 @admin.register(Ficha)
 class FichaAdmin(AdminViaExecutar, admin.ModelAdmin):
-    list_display = ("nome", "tipo", "rendimento_g", "ativa")
+    list_display = ("nome", "tipo", "acabamento", "rendimento_g", "ativa")
     inlines = [ComponenteItemInline, ComponentePreparacaoInline, ProporcaoInline, EtapaInline, VersaoInline]
 
     def depois_de_salvar(self, obj, op):

@@ -446,7 +446,7 @@ def test_etiqueta_traz_o_dia_da_producao_em_destaque(client, dono, coxinha):
     t = texto(r)
     assert f'<div class="dia" aria-label="Dia da produção">{dia(-2).day}</div>' in t and nome_lote(l) in t
     p = limpo(r)
-    assert "Coxinha 150 g" in p and "Lote: K1" in p and f"Validade: {dia(5):%d/%m/%Y}" in p and "congelado" in p.lower() and "cru" in p.lower()
+    assert "Coxinha 150 g" in p and "Lote: K1" in p and f"Validade: {dia(5):%d/%m/%Y}" in p and "Congelado — 12 un" in p and "cru" not in p.lower()
 
 
 def test_nome_do_lote_junto_do_codigo_nas_listas(client, dono, coxinha):

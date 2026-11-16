@@ -4,15 +4,15 @@
 {% block conteudo %}
 <h1>Custo dos produtos</h1>
 {% include "web/_custos_nav.html" %}
-<p class="acoes"><a href="{% url 'referencias' %}">Óleo e indiretos de cada tamanho</a> <a href="{% url 'estudo_preco' %}">Estudo de preço</a></p>
+<p class="acoes"><a href="{% url 'referencias' %}">Acabamento (frito ou assado), óleo e indiretos</a> <a href="{% url 'estudo_preco' %}">Estudo de preço</a></p>
 <p class="mudo">Custo <strong>estimado</strong> de uma unidade, pela ficha e pelo preço da última compra de cada ingrediente. Não inclui despesas, tributos nem perdas da produção.</p>
 {% for c in produtos %}<section class="bloco">
   {% if c.erro %}<p><strong>{{ c.produto }}</strong></p><p class="erro">Ficha com problema: {{ c.erro }}</p>
   {% else %}<p><a href="{% url 'custo_produto' c.produto_id %}"><strong>{{ c.produto }}</strong></a>
     {% if c.completo %}<br>Ingredientes <strong>{{ c.ingredientes|custo4 }}</strong>
       · indiretos {% if c.indiretos is None %}não cadastrados{% else %}{{ c.indiretos|custo4 }}{% endif %}
-      · óleo {% if c.oleo is None %}não cadastrado{% else %}{{ c.oleo|custo4 }}{% endif %}
-      <br>Cru (ingredientes + indiretos): <strong>{{ c.custo_cru|custo4 }}</strong> · Frito (cru + óleo): <strong>{{ c.custo_frito|custo4 }}</strong>
+      {% if c.acabamento == "assado" %}· assado, sem óleo{% else %}· óleo {% if c.oleo is None %}não cadastrado{% else %}{{ c.oleo|custo4 }}{% endif %}{% endif %}
+      <br>Cru (ingredientes + indiretos): <strong>{{ c.custo_cru|custo4 }}</strong> · {% if c.acabamento == "assado" %}Assado (sem óleo): <strong>{{ c.custo_assado|custo4 }}</strong>{% else %}Frito (cru + óleo): <strong>{{ c.custo_frito|custo4 }}</strong>{% endif %}
     {% else %}<br><span class="falta">incompleto: falta comprar {% for f in c.faltando %}{{ f.item }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
       <br class="mudo"><span class="mudo">Só com o que tem preço: {{ c.ingredientes_conhecido|custo4 }} (não é o custo do produto)</span>{% endif %}</p>{% endif %}
 </section>{% empty %}<p>Nenhum produto com ficha.</p>{% endfor %}

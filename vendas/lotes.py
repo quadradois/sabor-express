@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from django.utils import timezone
 
+from estoque.categorias import categoria
 from estoque.lotes import checar_vencido, dia_producao, nome_lote, texto_vencido, vencida
 from estoque.models import Lote
 from estoque.servicos import livre_porcao, porcoes, reservado, saldo_lote, validade_porcao
@@ -214,9 +215,9 @@ class Separador:
                         f"{_vence(l['validade'], self.quando, self.hoje)}" for l in lotes])
 
     def texto(self, a, unidades, lotes, falta) -> str:
-        """"30 un de Coxinha cru congelado: 18 do lote do dia 8, que vence amanhã, e 12 do lote do dia 10; o lote
+        """"30 un de Coxinha congelado: 18 do lote do dia 8, que vence amanhã, e 12 do lote do dia 10; o lote
         do dia 8 zera e no lote do dia 10 sobram 28." """
-        cabeca = f"{_n(unidades)} un de {a.produto.nome} {a.forma} {a.estado}"
+        cabeca = f"{_n(unidades)} un de {a.produto.nome} {categoria(a.forma, a.estado)}"
         if not lotes:
             return f"{cabeca}: não há de onde pegar."
         partes = [f"{_n(l['unidades'])} do {l['nome']}{_vence(l['validade'], self.quando, self.hoje)}" for l in lotes]
@@ -244,7 +245,7 @@ def _avisos_linha(sep, a, unidades, lotes, falta, deixados) -> list[dict]:
                                 "venda esse primeiro."})
     if falta > 0:
         tem = unidades - falta
-        avisos.append({"tipo": "falta", "texto": f"{_faltam(falta)} {_n(falta)} un de {a.produto.nome} {a.forma} {a.estado}: "
+        avisos.append({"tipo": "falta", "texto": f"{_faltam(falta)} {_n(falta)} un de {a.produto.nome} {categoria(a.forma, a.estado)}: "
                                                   f"só há {_n(tem)} un livres e dentro da validade."})
         vencidas = [p for p in sep._candidatas(a) if p["vencido"] and sep.livre(p["lote"], a.estado) > 0]
         for p in vencidas:
@@ -369,8 +370,8 @@ def _linha_das_reservas(sep, ie) -> dict:
     falta = max(Decimal(ie.unidades) - tem, ZERO)
     lotes = sep.lotes_saida(a, alocacao)
     if falta > 0:
-        avisos.append({"tipo": "falta", "texto": f"Falta reservar {_n(falta)} un de {a.produto.nome} {a.forma} "
-                                                  f"{a.estado}. Complete a reserva antes de entregar."})
+        avisos.append({"tipo": "falta", "texto": f"Falta reservar {_n(falta)} un de {a.produto.nome} "
+                                                  f"{categoria(a.forma, a.estado)}. Complete a reserva antes de entregar."})
     return {"apresentacao_id": a.id, "apresentacao": str(a), "produto_id": a.produto_id, "produto": a.produto.nome,
             "forma": a.forma, "estado": a.estado, "unidades": ie.unidades, "lotes": lotes, "falta": falta,
             "lotes_indicados": False, "deixados": [], "alocacao": alocacao,

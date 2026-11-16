@@ -2,6 +2,7 @@ from django.utils import timezone
 
 from nucleo.operacoes import RegraViolada, executar
 
+from .categorias import categoria
 from .lotes import nome_lote
 from .models import ESTADOS, FORMAS, EtiquetaImpressa, Lote, Movimento
 from .servicos import saldo_lote, validade_porcao
@@ -17,6 +18,7 @@ def dados_etiqueta(lote, estado: str) -> dict:
             "dia_producao": fabricacao.day, "nome_lote": nome_lote(lote),
             "validade": validade_porcao(lote, estado), "validade_manual": bool(entrada and entrada.validade_manual),
             "conservacao": dict(ESTADOS).get(estado, estado), "forma": dict(FORMAS).get(lote.forma, lote.forma),
+            "categoria": categoria(lote.forma, estado).capitalize(),  # o que a etiqueta mostra (Plano 10)
             "quantidade": saldo_lote(lote, estado)}
 
 

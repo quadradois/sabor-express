@@ -79,7 +79,7 @@ def estudo_preco(*, produto_id=None, tabela="varejo", ativas=True, em=None) -> d
                               "faltando": "taxa do canal não informada" if c["taxa_pct"] is None else ""})
         saida.append({
             "apresentacao_id": a["apresentacao_id"], "produto_id": a["produto_id"], "produto": a["produto"],
-            "nome": a["nome"], "descricao": a["descricao"], "forma": a["forma"], "unidades": a["unidades"],
+            "nome": a["nome"], "descricao": a["descricao"], "forma": a["forma"], "estado": a["estado"], "unidades": a["unidades"],
             "tabela": tabela, "preco": preco, "preco_un": None if preco is None else _rs(preco / a["unidades"]),
             "cmv": cmv, "cmv_un": None if cmv is None else (cmv / a["unidades"]).quantize(Q4, ROUND_HALF_UP),
             "cmv_pct": _pct(cmv, preco), "custo_salgado": a["custo_salgado"], "custo_embalagem": a["custo_embalagem"],

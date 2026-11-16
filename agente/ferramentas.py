@@ -281,7 +281,7 @@ def ver_backup() -> dict:
 @leitura
 def ver_precos(produto: str = "") -> dict:
     """"Quanto custa a caixa de coxinha?": tabela de preços (varejo e atacado) de cada jeito de vender — unidade,
-    caixa com 25... em cada forma (cru/frito) e conservação — e quantas dá para vender agora. 'produto' filtra."""
+    caixa com 25... em cada categoria (congelado, frito ou assado) — e quantas dá para vender agora. 'produto' filtra."""
     return vendas.ver_precos(produto)
 
 
@@ -343,7 +343,8 @@ def ver_a_receber(cliente: str = "", situacao: str = "todas", dias: int = 7) -> 
 
 @leitura
 def ver_sobras() -> dict:
-    """"Sobrou frito?": salgados fritos ainda no estoque (sobras do balcão), de quando são e quanto de cada."""
+    """"Sobrou frito?", "sobrou assado?": salgados fritos ou assados ainda no estoque (sobras do balcão), de quando
+    são e quanto de cada."""
     return vendas.ver_sobras()
 
 
@@ -352,7 +353,7 @@ def ver_sobras() -> dict:
 @leitura
 def ver_custo(produto: str) -> dict:
     """"Quanto me custa uma coxinha?": custo estimado de uma unidade do produto (ou de uma preparação, como a
-    massa) pela ficha e pela última compra de cada ingrediente: ingredientes, cru e frito (com óleo), e o que não
+    massa) pela ficha e pela última compra de cada ingrediente: ingredientes, cru e frito (com óleo; o assado não soma óleo), e o que não
     inclui. Ingrediente nunca comprado deixa o custo incompleto (diz qual falta). 'produto' é o nome falado."""
     return custos.ver_custo(produto)
 
@@ -567,7 +568,8 @@ def completar_reserva(encomenda_id: int | None = None, cliente: str = "") -> dic
 
 @escrita(2)
 def iniciar_producao(produto: str, unidades: int, forma: str = "cru", justificativa_falta: str = "") -> dict:
-    """Propõe iniciar uma produção ('forma': cru ou frito). Não grava: pede confirmação.
+    """Propõe iniciar uma produção ('forma': cru, ou já finalizado — frito ou assado, conforme o acabamento do
+    salgado). Não grava: pede confirmação.
     Se faltar estoque e o dono quiser começar assim mesmo, passe 'justificativa_falta' com o motivo
     (ex.: "farinha chega à tarde"): o que faltar fica como consumo pendente de conciliar."""
     return acoes.propor_iniciar_producao(produto=produto, unidades=unidades, forma=forma,
@@ -777,8 +779,8 @@ class ItemVenda(TypedDict, total=False):
     produto: Required[str]  # o salgado como foi falado (ex.: "coxinha", "coxinha 150 g")
     quantidade: Required[int]  # quantas apresentações (duas caixas = 2)
     apresentacao: str  # unidade, caixa com 25, cento...
-    forma: str  # cru ou frito
-    conservacao: str  # fresco, resfriado ou congelado
+    forma: str  # a categoria dita: congelado (o cru congelado), frito ou assado
+    conservacao: str  # só se disserem outra além da categoria: fresco, resfriado ou congelado
     lotes: list[LoteIndicado]  # só se o atendente disse de qual lote pegou ("peguei do lote do dia 10")
 
 
@@ -812,7 +814,7 @@ def registrar_venda(itens: list[ItemVenda], cliente: str = "", condicao: str = "
                     tabela: str = "varejo", prazo_dias: int | None = None, vencimento: str = "", parcelas: int = 1,
                     intervalo_dias: int = 30, data: str = "", motivo_vencido: str = "") -> dict:
     """Propõe registrar uma venda ("vendi duas caixas de coxinha congelada pro João, fiado"). 'itens': cada um com
-    o produto falado, a quantidade e, se houver mais de um jeito de vender, a apresentação, a forma e a conservação.
+    o produto falado, a quantidade e, se houver mais de um jeito de vender, a apresentação e a categoria (congelado, frito ou assado).
     Preço: sempre o da tabela ('tabela' varejo ou atacado). Balcão não precisa de cliente; a prazo (fiado) precisa
     do cliente e de 'prazo_dias' ou 'vencimento' (AAAA-MM-DD). O estoque baixa pelo que vence primeiro, salvo os
     'lotes' que o atendente disse ter pego (o resto o sistema completa). 'data': venda que aconteceu antes (ontem,
@@ -876,9 +878,10 @@ def cancelar_encomenda(motivo: str, encomenda_id: int | None = None, cliente: st
 def registrar_fritura(produto: str, quantidade: int, boas: int | None = None, motivo_perdas: str = "",
                       conservacao: str = "", destino: str = "fresco", validade: str = "",
                       justificativa: str = "", lote: str = "", motivo_vencido: str = "") -> dict:
-    """Propõe registrar uma fritura do balcão ("fritei 40 coxinhas, 38 boas, 2 estouraram"): o cru sai do lote que
-    vence primeiro (ou do 'lote' dito: "lote do dia 8") e vira um lote frito. Sem 'boas', todas ficaram boas; perdas
-    pedem 'motivo_perdas'. 'conservacao' do cru (se houver em mais de uma); 'destino' do frito (fresco). 'validade'
+    """Propõe registrar a finalização do balcão, fritar ou assar conforme o acabamento do salgado ("fritei 40
+    coxinhas, 38 boas, 2 estouraram", "assei 40 esfirras"): o cru sai do lote que vence primeiro (ou do 'lote' dito:
+    "lote do dia 8") e vira um lote frito ou assado (o assado não gasta óleo). Sem 'boas', todas ficaram boas; perdas
+    pedem 'motivo_perdas'. 'conservacao' do cru (se houver em mais de uma); 'destino' do pronto (fresco). 'validade'
     (AAAA-MM-DD) e 'justificativa' só se o sistema pedir. 'motivo_vencido': só o dito pelo dono. Não grava: pede
     confirmação."""
     return vendas.propor_registrar_fritura(produto=produto, quantidade=quantidade, boas=boas,
@@ -893,7 +896,7 @@ def registrar_perda(produto: str, motivo: str, quantidade: float | None = None, 
                     destino: str = "perda") -> dict:
     """Propõe dar perda ou descartar ("joga fora 10 coxinhas fritas que caíram", "descarta o leite vencido"). Vale
     para salgado, ingrediente ou embalagem. Motivo obrigatório. Sem 'quantidade', o lote todo. 'conservacao',
-    'forma' (cru/frito), 'lote' ("lote do dia 8") e 'vencido' ajudam a achar o lote certo. 'destino': perda (padrão),
+    'forma' (congelado, frito ou assado), 'lote' ("lote do dia 8") e 'vencido' ajudam a achar o lote certo. 'destino': perda (padrão),
     descarte, consumo da equipe ou doação. Não grava: pede confirmação."""
     return vendas.propor_registrar_perda(produto=produto, motivo=motivo, quantidade=quantidade, unidade=unidade,
                                          conservacao=conservacao, forma=forma, lote=lote, vencido=vencido,

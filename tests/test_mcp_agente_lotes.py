@@ -125,7 +125,7 @@ def test_separacao_diz_de_qual_lote_pegar_sem_codigo_e_sem_conta_do_agente(coxin
     r = chamar("ver_separacao", itens=[ITEM])
     nv, nn = nome_lote(velho), nome_lote(novo)
     assert falavel(r["texto"], velho, novo) == (
-        f"30 unidades de Coxinha 150 g cru congelado: 18 do {nv}, que vence amanhã, e 12 do {nn}; o {nv} zera e no "
+        f"30 unidades de Coxinha 150 g congelado: 18 do {nv}, que vence amanhã, e 12 do {nn}; o {nv} zera e no "
         f"{nn} sobram 28.")
     # os números são os do núcleo (a mesma separação que a venda vai baixar)
     nucleo = separacao_venda(itens=[{"apresentacao_id": unidade, "quantidade": 30}])
@@ -141,7 +141,7 @@ def test_separacao_com_lote_indicado_avisa_o_deixado(coxinha, unidade, dois_lote
     nn = nome_lote(novo)
     r = chamar("ver_separacao", itens=[{**ITEM, "lotes": [{"lote": f"lote do dia {novo.criado_em.day}",
                                                            "unidades": 30}]}])
-    assert falavel(r["texto"], velho, novo).startswith(f"30 unidades de Coxinha 150 g cru congelado: 30 do {nn}")
+    assert falavel(r["texto"], velho, novo).startswith(f"30 unidades de Coxinha 150 g congelado: 30 do {nn}")
     assert f"Ficaram 18 unidades do {nome_lote(velho)}, que vencem amanhã: venda esse primeiro." in r["texto"]
     assert r["linhas"][0]["deixados"][0]["lote_id"] == velho.id
     # também pelo lote_id da separação e pelo "dia 8" curto
@@ -153,11 +153,11 @@ def test_separacao_com_lote_indicado_avisa_o_deixado(coxinha, unidade, dois_lote
 def test_lote_falado_desconhecido_ou_ambiguo_e_recusado_com_clareza(coxinha, unidade, dois_lotes):
     velho, novo = dois_lotes
     r = chamar("ver_separacao", itens=[{**ITEM, "lotes": [{"lote": "lote do dia 31 de fevereiro", "unidades": 5}]}])
-    assert r["erro"].startswith("Não há lote do dia 31 de fevereiro de Coxinha 150 g cru congelado com saldo")
+    assert r["erro"].startswith("Não há lote do dia 31 de fevereiro de Coxinha 150 g congelado com saldo")
     assert set(r["opcoes"]) == {nome_lote(velho), nome_lote(novo)}
     segundo = lote(coxinha, 5, validade=dia(20), feito=dia(-3))
     amb = chamar("ver_separacao", itens=[{**ITEM, "lotes": [{"lote": f"dia {novo.criado_em.day}", "unidades": 5}]}])
-    assert amb["erro"] == f"Há mais de um lote do dia {novo.criado_em.day} de Coxinha 150 g cru congelado; pergunte qual."
+    assert amb["erro"] == f"Há mais de um lote do dia {novo.criado_em.day} de Coxinha 150 g congelado; pergunte qual."
     assert amb["opcoes"] == [nome_lote(novo), nome_lote(segundo)]
     ok = chamar("ver_separacao", itens=[{**ITEM, "lotes": [{"lote": nome_lote(segundo), "unidades": 5}]}])
     assert ok["linhas"][0]["lotes"][0]["lote_id"] == segundo.id
@@ -182,7 +182,7 @@ def test_venda_repete_a_separacao_e_depois_avisa_o_deixado(coxinha, unidade, doi
     nv, nn = nome_lote(velho), nome_lote(novo)
     r = chamar("registrar_venda", itens=[{**ITEM, "lotes": [{"lote": nn, "unidades": 30}]}], forma_pagamento="pix")
     assert falavel(r["confirmar"], velho, novo) == (
-        "Vender 30 unidades de Coxinha 150 g, cru congelado, a 2 reais cada. Total 60 reais, à vista no pix. "
+        "Vender 30 unidades de Coxinha 150 g, congelado, a 2 reais cada. Total 60 reais, à vista no pix. "
         f"Sai do {nn}. Ficaram 18 "
         f"unidades do {nv}, que vencem amanhã: venda esse primeiro. Confirma?")
     assert Venda.objects.count() == 0
@@ -289,7 +289,7 @@ def test_entrega_com_separacao_e_lote_indicado(coxinha, unidade, dois_lotes):
     s = chamar("ver_separacao_encomenda", cliente="joão")
     nv, nn = nome_lote(velho), nome_lote(novo)
     assert falavel(s["texto"], velho, novo) == (
-        f"Encomenda {e['encomenda_id']} de João: 10 unidades de Coxinha 150 g cru congelado: 10 do {nv}, que vence "
+        f"Encomenda {e['encomenda_id']} de João: 10 unidades de Coxinha 150 g congelado: 10 do {nv}, que vence "
         f"amanhã; no {nv} sobram 8.")
     r = chamar("entregar_encomenda", cliente="joão", lotes=[{"lote": nn, "unidades": 10}])
     assert f"Sai do {nn}." in falavel(r["confirmar"], velho)
@@ -305,7 +305,7 @@ def test_contar_lote_propoe_e_so_grava_com_o_sim(coxinha, unidade, dois_lotes):
     nv = nome_lote(velho)
     r = chamar("contar_lote", produto="coxinha", lote=nv, contado=15, motivo="contei o freezer")
     assert falavel(r["confirmar"], velho) == (
-        f"Contagem do {nv} de Coxinha 150 g, cru, congelado: o sistema tinha 18 unidades e foi contado 15 "
+        f"Contagem do {nv} de Coxinha 150 g, congelado: o sistema tinha 18 unidades e foi contado 15 "
         "unidades; ajusta 3 unidades a menos (1 real e 80 centavos em mercadoria). Confirma?")
     assert saldo_lote(velho, "congelado") == 18
     confirmar(r)
@@ -341,7 +341,7 @@ def test_conferencia_do_vencido_e_dita_como_pergunta(coxinha, unidade):
     caixa = chamar("ver_decisoes", origem="vencido")
     [item] = caixa["itens"]
     assert falavel(item["texto"], venc) == (
-        f"Conferência do vencido: o {nome_lote(venc)} de Coxinha 150 g, cru, congelado, venceu ontem com 18 "
+        f"Conferência do vencido: o {nome_lote(venc)} de Coxinha 150 g, congelado, venceu ontem com 18 "
         "unidades no estoque. Ainda estão aí? Já foram vendidas, estão aqui ou não sabe?")
     assert f"Número {d.id}, aviso: Conferência do vencido" in caixa["texto"]
     assert falavel(chamar("ver_decisao", decisao_id=d.id)["texto"], venc)

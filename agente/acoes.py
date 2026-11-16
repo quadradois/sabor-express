@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from cadastros.models import Item
 from cadastros.unidades import fator
+from estoque.categorias import FINALIZADAS, acabamento, categoria
 from estoque.etiquetas import registrar_impressao
 from estoque.models import ESTADOS, FORMAS, Lote, Movimento
 from fichas.models import Ficha
@@ -39,7 +40,7 @@ JANELA_REPETICAO = timedelta(seconds=6)
 
 _SINONIMOS_ESTADO = {"fresc": "fresco", "resfri": "resfriado", "gelad": "resfriado",
                      "congel": "congelado", "freez": "congelado"}
-_SINONIMOS_FORMA = {"cru": "cru", "frit": "frito", "frita": "frito"}
+_SINONIMOS_FORMA = {"cru": "cru", "frit": "frito", "assad": "assado", "congel": "cru"}  # "congelado" é o cru
 
 
 # --- entradas faladas ------------------------------------------------------
@@ -133,8 +134,9 @@ def resolver_porcao(produto, estado="", codigo=""):
         raise ConsultaInvalida(f"Nenhum lote de '{produto}' com saldo{onde}.", 404)
     from .lotes import nome
     raise ConsultaInvalida(f"Mais de um lote de '{produto}' com saldo{onde}; diga o dia do lote ou a conservação.",
-                           409, opcoes=[f"{l.item.nome}, {nome(l)}, {e or '-'}, {fmt_qtd(s, l.item.unidade_base)}"
-                                        for l, e, s in porcoes])
+                           409, opcoes=[f"{l.item.nome}, {nome(l)}, "
+                                        f"{(categoria(l.forma, e) if l.item.tipo == 'produto' else e) or '-'}, "
+                                        f"{fmt_qtd(s, l.item.unidade_base)}" for l, e, s in porcoes])
 
 
 # --- nível 1: faz e repete -------------------------------------------------
@@ -276,7 +278,7 @@ def registrar_etiqueta(*, produto, conservacao="", copias=None, lote="", autor, 
     tipo = "Reimpressão" if r["reimpressao"] else "Impressão"
     from .lotes import nome
     dito = (f"{tipo} de {copias} etiqueta{'s' if copias > 1 else ''} registrada: {l.item.nome}, "
-            f"{nome(l)}, {estado}.")
+            f"{nome(l)}, {categoria(l.forma, estado) if l.item.tipo == 'produto' else estado}.")
     return _feito(dito, r, rep, lote_id=l.id)
 
 
@@ -291,6 +293,10 @@ def _proposta(operacao, parametros, resumir, autor, canal):
 def propor_iniciar_producao(*, produto, unidades, forma="cru", justificativa_falta="", autor, canal):
     prod = resolver_produto(produto)
     unidades, forma = _inteiro(unidades, "unidades"), _forma(forma)
+    acab = acabamento(prod)
+    if forma in FINALIZADAS and forma != acab:  # pediram frito de um salgado assado (ou o contrário)
+        raise ConsultaInvalida(f"{prod.nome} é {acab}, não {forma}. Pergunte se a produção é para guardar cru ou "
+                               f"já sai {acab}.", 409, opcoes=["cru", acab])
     parametros = {"produto_id": prod.id, "unidades": unidades, "forma": forma}
     falta = (justificativa_falta or "").strip()
     if falta:
@@ -337,7 +343,7 @@ def propor_concluir_producao(*, quantidade_boa, conservacao, perdas=0, motivo_pe
             return t + "PERDA TOTAL, nenhuma unidade boa" + (f", {perda}" if perda else "") + pendente
         lote = Lote.objects.get(id=r["lote_id"])
         return (t + f"{boa} boa{'s' if boa > 1 else ''}" + (f", {perda}" if perda else "")
-                + f", {estado}, validade {_data_br(lote.validade)}" + pendente)
+                + f", {categoria(p.forma, estado)}, validade {_data_br(lote.validade)}" + pendente)
 
     return pedir_motivo(lambda: _proposta("concluir_producao", parametros, resumir, autor, canal))
 
@@ -392,7 +398,8 @@ def propor_criar_tamanho(*, salgado, peso_g, oleo_por_unidade=None, autor, canal
     oleo = _decimal(oleo_por_unidade, "oleo_por_unidade") if oleo_por_unidade is not None else None
     parametros = {"ficha_id": ficha.id, "peso_g": _decimal(peso_g, "peso_g"), "oleo_ref_un": oleo}
     return _proposta("criar_tamanho", parametros,
-                     lambda r: f"Criar o tamanho {r['nome']}" + (f", óleo de {_reais(oleo)} por unidade frita" if oleo else ""),
+                     lambda r: f"Criar o tamanho {r['nome']}, {r['acabamento']}" + (
+                         f", óleo de {_reais(oleo)} por unidade frita" if oleo and r["acabamento"] == "frito" else ""),
                      autor, canal)
 
 

@@ -53,7 +53,7 @@ Entra:
 
 Entra:
 
-> Se houver mais de um lote, a ferramenta devolve opcoes: pergunte qual, pela conservação, se é cru ou frito, ou pelo dia do lote, como lote do dia 8. Para descartar o vencido, passe vencido verdadeiro; se for para a equipe comer ou doação, diga o destino.
+> Se houver mais de um lote, a ferramenta devolve opcoes: pergunte qual, se é congelado, frito ou assado, ou pelo dia do lote, como lote do dia 8. Para descartar o vencido, passe vencido verdadeiro; se for para a equipe comer ou doação, diga o destino.
 
 **3.** Confirmação de vendas. Sai:
 
@@ -118,7 +118,7 @@ admin:
 
 | # | O dono fala | Deve ouvir |
 |---|---|---|
-| 1 | "Vou vender 30 coxinhas, de onde eu pego?" | "30 unidades de coxinha cru congelado: 18 do lote do dia 8, que vence amanhã, e 12 do lote do dia 10; o lote do dia 8 zera e no lote do dia 10 sobram 28." Nada gravado. Sem código de lote. |
+| 1 | "Vou vender 30 coxinhas, de onde eu pego?" | "30 unidades de coxinha congelado: 18 do lote do dia 8, que vence amanhã, e 12 do lote do dia 10; o lote do dia 8 zera e no lote do dia 10 sobram 28." Nada gravado. Sem código de lote. |
 | 2 | "Vendi as 30 no pix." | A confirmação repete o preço, o total **e** "De onde sai: ... 18 do lote do dia 8 ... 12 do lote do dia 10 ...". Só grava depois do "sim". |
 | 3 | (refazer o estoque) "Vendi 30 coxinhas, peguei todas do lote do dia 10." | A confirmação diz "30 do lote do dia 10" e "Ficaram 18 unidades do lote do dia 8, que vencem amanhã: venda esse primeiro." Depois do "sim", o mesmo aviso, uma vez, sem sermão, e nada é recusado. |
 | 4 | "Ontem eu vendi 5 coxinhas e esqueci de lançar." | A confirmação diz "venda de ontem". Conferir no histórico que a venda ficou com a data de ontem. |

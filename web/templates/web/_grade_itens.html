@@ -2,7 +2,7 @@
 {# grade de apresentações: quantidade com − e +, preço de tabela e preço combinado (opcional) #}
 {% for a in grade %}{% ifchanged a.produto %}<h3>{{ a.produto }}</h3>{% endifchanged %}
 <div class="bloco item-venda">
-  <p><strong>{{ a.nome }}</strong> <span class="mudo">({{ a.forma|forma_nome|lower }}, {{ a.estado|conservacao|lower }})</span></p>
+  <p><strong>{{ a.nome }}</strong> <span class="mudo">({{ a.forma|categoria:a.estado }})</span></p>
   <p>Varejo {{ a.preco_varejo|dinheiro }}{% if a.preco_atacado %} · Atacado {{ a.preco_atacado|dinheiro }}{% else %} · sem preço de atacado{% endif %}</p>
   <p>{% if a.livre_apresentacoes %}Dá para vender <strong>{{ a.livre_apresentacoes }}</strong>{% else %}<span class="falta">Sem estoque para vender</span>{% endif %}
      {% if a.unidades > 1 %}<span class="mudo">({{ a.unidades }} un cada)</span>{% endif %}</p>

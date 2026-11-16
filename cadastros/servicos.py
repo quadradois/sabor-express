@@ -33,11 +33,59 @@ def criar_tamanho(*, ficha_id: int, peso_g: Decimal, oleo_ref_un: Decimal | None
                 indireto, herdado = modelo.indireto_ref_un, {"item_id": modelo.id, "nome": modelo.nome}
         i = Item.objects.create(nome=nome, tipo="produto", unidade_base="un", controla_validade=True,
                                 ficha=ficha, peso_g=peso_g, oleo_ref_un=oleo_ref_un, indireto_ref_un=indireto)
-        return {"item_id": i.id, "nome": nome, "indireto_ref_un": indireto, "indireto_herdado_de": herdado}
+        return {"item_id": i.id, "nome": nome, "indireto_ref_un": indireto, "indireto_herdado_de": herdado,
+                "acabamento": ficha.acabamento}
 
     return executar("criar_tamanho", func, autor=autor, canal=canal, chave=chave,
                     parametros={"ficha_id": ficha_id, "peso_g": peso_g, "oleo_ref_un": oleo_ref_un,
                                 "indireto_ref_un": indireto_ref_un})
+
+
+def travas_do_acabamento(ficha, novo) -> str:
+    """Por que o acabamento da ficha não pode virar `novo` agora ("" = pode): enquanto houver, em qualquer
+    tamanho, lote com saldo, apresentação ativa ou produção aberta no acabamento antigo, ele não muda."""
+    from django.db.models import Sum
+
+    from estoque.models import Movimento
+    from producao.models import Producao
+    from vendas.models import Apresentacao
+
+    # o gravado, não o do objeto: o formulário do admin já chega com o valor novo
+    antigo = type(ficha).objects.filter(pk=ficha.pk).values_list("acabamento", flat=True).first() if ficha.pk else None
+    if not antigo or antigo == novo:
+        return ""
+    tamanhos = Item.objects.filter(ficha=ficha, tipo="produto")
+    # saldo em qualquer conservação (o saldo de produto é por lote e conservação)
+    if (Movimento.objects.filter(lote__item__in=tamanhos, lote__forma=antigo).values("lote", "estado")
+            .annotate(s=Sum("quantidade")).filter(s__gt=0).exists()):
+        return f"Ainda há '{ficha.nome}' {antigo} no estoque: venda ou dê destino antes de mudar o acabamento."
+    if Apresentacao.objects.filter(produto__in=tamanhos, forma=antigo, ativo=True).exists():
+        return (f"'{ficha.nome}' tem preço de {antigo} na tabela: inative essas apresentações antes de mudar "
+                "o acabamento.")
+    if Producao.objects.filter(produto__in=tamanhos, forma=antigo, status="andamento").exists():
+        return f"Há produção de '{ficha.nome}' {antigo} em andamento: conclua ou cancele antes."
+    return ""
+
+
+def definir_acabamento(*, ficha_id, acabamento, autor, canal="web", chave=None) -> dict:
+    """Diz se o tipo do salgado (a ficha, com todos os tamanhos) é frito ou assado (Plano 10). Só pela tela."""
+    from fichas.models import Ficha
+
+    def func(op):
+        ficha = Ficha.objects.filter(id=ficha_id, tipo="produto").first()
+        if ficha is None:
+            raise RegraViolada("Escolha uma ficha de produto.")
+        if acabamento not in dict(Ficha.ACABAMENTOS):
+            raise RegraViolada("Escolha o acabamento: frito ou assado.")
+        antes = ficha.acabamento
+        if (trava := travas_do_acabamento(ficha, acabamento)):
+            raise RegraViolada(trava)
+        ficha.acabamento = acabamento
+        ficha.save(update_fields=["acabamento"])
+        return {"ficha_id": ficha.id, "ficha": ficha.nome, "antes": antes, "acabamento": acabamento}
+
+    return executar("definir_acabamento", func, autor=autor, canal=canal, chave=chave,
+                    parametros={"ficha_id": ficha_id, "acabamento": acabamento})
 
 
 def salvar_referencias(*, produto_id, oleo_ref_un=None, indireto_ref_un=None, autor, canal="web",

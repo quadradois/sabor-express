@@ -23,6 +23,7 @@ from custos import consultas as cc
 from custos import precos
 from custos.fichas import custo_estimado, custo_preparacao
 from custos.relatorios import relatorio_periodo
+from estoque.categorias import categoria
 from fichas.models import Ficha
 
 from .compras import _POR, MESES, _item, _juntar, _n, mes_falado, qtd, quando, reais
@@ -188,11 +189,14 @@ def _custo_produto(p: Item) -> dict:
             texto += " cru"
         if c["custo_frito"] is not None:
             texto += f"; frito, com {_rs(c['oleo'])} de óleo, {_rs(c['custo_frito'])}"
+        elif c["custo_assado"] is not None:
+            texto += "; assado custa o mesmo, o forno não soma óleo"
         texto += f". Não inclui {_nao_inclui(c['nao_inclui'])}."
     return {"tipo": "produto", "produto_id": c["produto_id"], "produto": nome, "peso_g": c["peso_g"],
             "completo": c["completo"], "faltando": c["faltando"], "ingredientes": c["ingredientes"],
             "ingredientes_conhecido": c["ingredientes_conhecido"], "indiretos": c["indiretos"], "oleo": c["oleo"],
-            "custo_cru": c["custo_cru"], "custo_frito": c["custo_frito"], "inclui": c["inclui"],
+            "custo_cru": c["custo_cru"], "custo_frito": c["custo_frito"], "acabamento": c["acabamento"],
+            "custo_assado": c["custo_assado"], "inclui": c["inclui"],
             "nao_inclui": c["nao_inclui"], "rotulo": "estimado", "partes": partes, "texto": texto}
 
 
@@ -337,7 +341,7 @@ def ver_margem(periodo="semana", agrupar="produto", comparar=True):
 # --- ver_margem_tabela ---------------------------------------------------------------------
 
 def _apres_txt(a) -> str:
-    nome = f"{a['nome']} de {a['produto']}, {a['forma']} {a['estado']}"
+    nome = f"{a['nome']} de {a['produto']}, {categoria(a['forma'], a['estado'])}"
     if a["erro"]:
         problema = "o produto não tem ficha técnica" if a["erro"] == "Produto não encontrado." else \
             f"a ficha tem um problema ({a['erro'].rstrip('.')})"
@@ -745,7 +749,7 @@ def _sobra_txt(c, unidades) -> str:
 
 
 def _estudo_txt(a, canais) -> str:
-    nome = f"{a['nome']} de {a['produto']}, {a['forma']}"
+    nome = f"{a['nome']} de {a['produto']}, {categoria(a['forma'], a['estado'])}"
     if a["preco"] is None:
         return f"{nome}: sem preço de {a['tabela']}"
     if a["cmv"] is None:
@@ -811,7 +815,7 @@ def simular_preco(produto, apresentacao="", preco=None, sobra_pct=None, canal=""
     p = None if preco in (None, "", 0) else _decimal(preco, "preco")
     s = precos.simular_preco(apresentacao_id=apr.id, preco=p, sobra_pct=pct, canal_id=_canal_unico(canal),
                              tabela=_tabela(tabela))
-    nome = f"{apr.nome} de {apr.produto.nome}, {apr.forma}"
+    nome = f"{apr.nome} de {apr.produto.nome}, {categoria(apr.forma, apr.estado)}"
     canal_txt = _canal_dito(s["canal"])
     if s["sobra_pct_pedida"] is None:
         texto = f"Simulação, o preço da tabela não muda: {nome} a {reais(s['preco'])} no {canal_txt}."
@@ -854,7 +858,7 @@ def ver_ponto_equilibrio(produto, apresentacao="", canal="", mes="", forma="", c
         texto = (f"Nenhuma despesa com valor em {nome_mes}: sem as despesas, não há ponto de equilíbrio para "
                  "dizer.")
     else:
-        texto = (f"Estimativa, como se todas as vendas fossem {apr.nome} de {apr.produto.nome}, {apr.forma}, a "
+        texto = (f"Estimativa, como se todas as vendas fossem {apr.nome} de {apr.produto.nome}, {categoria(apr.forma, apr.estado)}, a "
                  f"{reais(p['preco'])} no {_canal_dito(p['canal'])}: cada venda deixa {reais(p['contribuicao'])} "
                  f"depois do CMV e da taxa; as despesas de {nome_mes} somam {reais(p['despesas'])}. Para pagar as "
                  f"despesas, seria preciso vender {p['apresentacoes']} {_plural(apr.nome, p['apresentacoes'])}")

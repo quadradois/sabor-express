@@ -6,15 +6,26 @@ from cadastros.models import Item
 
 class Ficha(models.Model):
     TIPOS = [("preparacao", "Preparação"), ("produto", "Produto")]
+    ACABAMENTOS = [("frito", "Frito"), ("assado", "Assado")]
 
     nome = models.CharField(max_length=120, unique=True)
     tipo = models.CharField(max_length=20, choices=TIPOS)
     # obrigatório e > 0 para preparação; vazio para produto (validar_ficha)
     rendimento_g = models.DecimalField(max_digits=14, decimal_places=3, null=True, blank=True)
     ativa = models.BooleanField(default=True)
+    # como o salgado deste tipo é finalizado (Plano 10): vale para todos os tamanhos; só importa em ficha de produto
+    acabamento = models.CharField(max_length=10, choices=ACABAMENTOS, default="frito")
 
     def __str__(self):
         return self.nome
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        from cadastros.servicos import travas_do_acabamento
+
+        if (trava := travas_do_acabamento(self, self.acabamento)):
+            raise ValidationError({"acabamento": trava})
 
 
 class ComponenteItem(models.Model):

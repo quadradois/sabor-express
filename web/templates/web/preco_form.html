@@ -8,6 +8,7 @@
 <form method="post" class="form">{% csrf_token %}{% chave %}
   <p><label>Salgado <select name="produto"><option value="">—</option>{% for i in produtos %}<option value="{{ i.id }}" {% if d.produto == i.id|stringformat:"s" %}selected{% endif %}>{{ i.nome }}</option>{% endfor %}</select></label></p>
   <p><label>Nome (unidade, caixa com 25, cento...) <input name="nome" value="{{ d.nome|default:'' }}"></label></p>
+  <p class="mudo">As três categorias de venda: <strong>Congelado</strong> = forma Cru + conservação Congelado; <strong>Frito</strong> = Frito + Fresco; <strong>Assado</strong> = Assado + Fresco. Frito ou assado depende do acabamento do salgado.</p>
   <p><label>Forma <select name="forma">{% for v, nome in formas %}<option value="{{ v }}" {% if d.forma == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
   <p><label>Conservação <select name="estado">{% for v, nome in estados %}<option value="{{ v }}" {% if d.estado == v %}selected{% endif %}>{{ nome }}</option>{% endfor %}</select></label></p>
   <p><label>Unidades em cada <input name="unidades" value="{{ d.unidades|default:'1' }}" inputmode="numeric"></label></p>

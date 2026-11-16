@@ -57,7 +57,7 @@
   <p>{{ t.encomendas_hoje }} para hoje, {{ t.encomendas_proximas }} nos próximos {{ r.encomendas.dias }} dias{% if t.encomendas_atrasadas %}, <span class="falta">{{ t.encomendas_atrasadas }} atrasada(s)</span>{% endif %}{% if t.encomendas_sem_estoque %}, <span class="falta">{{ t.encomendas_sem_estoque }} sem estoque completo</span>{% endif %}.</p>
   {% for e in r.encomendas.atrasadas %}<p><a href="{% url 'encomenda' e.encomenda_id %}">#{{ e.encomenda_id }} {{ e.cliente }}</a> · {{ e.entrega_data|date:"d/m/Y" }} <span class="falta">atrasada</span>{% if e.encomenda_id in sem_estoque %} <span class="falta">falta {{ e.falta|numero }} un</span>{% endif %}</p>{% endfor %}
   {% for e in r.encomendas.proximas %}<p><a href="{% url 'encomenda' e.encomenda_id %}">#{{ e.encomenda_id }} {{ e.cliente }}</a> · {{ e.entrega_data|date:"d/m/Y" }}{% if e.entrega_hora %} {{ e.entrega_hora|time:"H:i" }}{% endif %} · {% if e.encomenda_id in sem_estoque %}<span class="falta">falta {{ e.falta|numero }} un</span>{% else %}pronta{% endif %}</p>{% endfor %}
-  {% for n in r.encomendas.necessidade %}{% if forloop.first %}<p><strong>Falta produzir:</strong></p>{% endif %}<p>{{ n.produto }} ({{ n.forma|forma_nome|lower }}): <span class="falta">{{ n.a_produzir|numero }} un</span></p>{% endfor %}
+  {% for n in r.encomendas.necessidade %}{% if forloop.first %}<p><strong>Falta produzir:</strong></p>{% endif %}<p>{{ n.produto }} ({{ n.forma|categoria:n.estado }}): <span class="falta">{{ n.a_produzir|numero }} un</span></p>{% endfor %}
   <p class="acoes"><a href="{% url 'encomenda_nova' %}">Nova encomenda</a> <a href="{% url 'necessidade' %}">O que falta produzir</a></p></section>
 
 <section class="bloco"><h2><a href="{% url 'receber' %}">A receber</a></h2>
@@ -66,9 +66,9 @@
   <p>Total a receber: <strong>{{ r.receber.total_a_receber|dinheiro }}</strong></p>
   <p><a href="{% url 'receber' %}">Ver contas a receber</a></p></section>
 
-<section class="bloco"><h2><a href="{% url 'sobras' %}">Sobras fritas</a></h2>
-  {% for s in r.sobras_fritas %}<p><a href="{% url 'lote' s.lote_id %}">{{ s.item }}</a> · {{ s.saldo|quantidade:s.unidade_base }} · frito em {{ s.frito_em|date:"d/m/Y" }}</p>{% empty %}<p>Nenhuma sobra frita.</p>{% endfor %}
-  <p class="acoes"><a href="{% url 'sobras' %}">Ver sobras</a> <a href="{% url 'fritura' %}">Registrar fritura</a></p></section>
+<section class="bloco"><h2><a href="{% url 'sobras' %}">Sobras fritas e assadas</a></h2>
+  {% for s in r.sobras_fritas %}<p><a href="{% url 'lote' s.lote_id %}">{{ s.item }}</a> · {{ s.saldo|quantidade:s.unidade_base }} · {{ s.forma }} em {{ s.frito_em|date:"d/m/Y" }}</p>{% empty %}<p>Nenhuma sobra frita ou assada.</p>{% endfor %}
+  <p class="acoes"><a href="{% url 'sobras' %}">Ver sobras</a> <a href="{% url 'fritura' %}">Fritar ou assar</a></p></section>
 
 <section class="bloco"><h2>Pendências</h2>
   <p><a href="{% url 'consumos' %}">{{ t.consumos_pendentes }} consumo(s) pendente(s)</a></p>
@@ -80,8 +80,8 @@
   <a href="{% url 'vendas' %}">Vendas do dia</a>
   <a href="{% url 'encomendas' %}">Encomendas</a>
   <a href="{% url 'necessidade' %}">O que falta produzir</a>
-  <a href="{% url 'fritura' %}">Fritura</a>
-  <a href="{% url 'sobras' %}">Sobras fritas</a>
+  <a href="{% url 'fritura' %}">Fritar ou assar</a>
+  <a href="{% url 'sobras' %}">Sobras fritas e assadas</a>
   <a href="{% url 'receber' %}">Contas a receber</a>
   <a href="{% url 'clientes' %}">Clientes</a>
   <a href="{% url 'precos' %}">Preços</a>

@@ -16,6 +16,7 @@ from django.utils import timezone
 from cadastros.models import Cliente, Item
 from cadastros.servicos import _normal
 from estoque.lotes import checar_vencido, nome_lote, texto_vencido, vencida
+from estoque.categorias import categoria, checar_forma
 from estoque.models import ESTADOS, FORMAS, Lote, Movimento
 from estoque.servicos import alocar_fefo, alocar_porcoes, saldo_lote, validade_porcao
 from financeiro.servicos import abrir_conta_receber, cancelar_conta_da_venda
@@ -94,7 +95,8 @@ def salvar_apresentacao(*, produto_id, nome, forma, estado, unidades, preco_vare
         if not n:
             raise RegraViolada("Dê um nome à apresentação (ex.: unidade, caixa com 25, cento).")
         if forma not in dict(FORMAS):
-            raise RegraViolada("Escolha a forma: cru ou frito.")
+            raise RegraViolada("Escolha a forma: cru, frito ou assado.")
+        checar_forma(produto, forma)
         if estado not in dict(ESTADOS):
             raise RegraViolada("Escolha a conservação: fresco, resfriado ou congelado.")
         un = _inteiro(unidades, "unidades")
@@ -209,7 +211,7 @@ def _baixar_embalagens(op, a, quantidade, motivo, hoje) -> list[dict]:
 
 def _falta_produto(a, unidades, falta) -> RegraViolada:
     tem = unidades - falta
-    return RegraViolada(f"Só há {_un(tem)} de '{a.produto.nome}' {a.forma} {a.estado} para vender "
+    return RegraViolada(f"Só há {_un(tem)} de '{a.produto.nome}' {categoria(a.forma, a.estado)} para vender "
                         f"(pedido: {_un(unidades)}). O resto está reservado, vencido ou não existe.")
 
 
@@ -569,8 +571,8 @@ def entregar_encomenda(*, encomenda_id, condicao="a_vista", forma_pagamento="", 
                 continue
             tem = sum((r.quantidade for r in reservas), Decimal("0"))
             if tem < ie.unidades:
-                raise RegraViolada(f"Falta reservar {_un(ie.unidades - tem)} de '{a.produto.nome}' {a.forma} "
-                                   f"{a.estado}. Complete a reserva antes de entregar.")
+                raise RegraViolada(f"Falta reservar {_un(ie.unidades - tem)} de '{a.produto.nome}' "
+                                   f"{categoria(a.forma, a.estado)}. Complete a reserva antes de entregar.")
             for r in reservas:
                 validade = validade_porcao(r.lote, r.estado)
                 checar_vencido(r.lote, r.estado, validade, quando=quando, motivo_vencido=motivo_vencido,

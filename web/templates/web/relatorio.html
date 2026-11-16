@@ -44,18 +44,18 @@
 <section class="bloco"><h2>Encomendas</h2>
   <p>{{ r.encomendas.criadas }} criada(s) ({{ r.encomendas.valor_criadas|din }}, sinais {{ r.encomendas.sinais|din }}) · {{ r.encomendas.entregues }} entregue(s) ({{ r.encomendas.valor_entregues|din }}) · {{ r.encomendas.canceladas }} cancelada(s) ({{ r.encomendas.valor_canceladas|din }})</p></section>
 
-<section class="bloco"><h2>Produção e fritura</h2>
+<section class="bloco"><h2>Produção e finalização (fritar ou assar)</h2>
   <p>{{ r.producao.producoes }} produção(ões): {{ r.producao.boas }} boas de {{ r.producao.unidades }} planejadas, {{ r.producao.perdas }} perdidas · custo real {{ r.producao.custo_real|din }}</p>
   {% for m, n in r.producao.perdas_por_motivo.items %}<p class="mudo">Perda por {{ m }}: {{ n }} un</p>{% endfor %}
   {% if r.producao.custo_pendente %}<p class="aviso">Custo pendente em: {% for i in r.producao.custo_pendente %}<a href="{% url 'previsto_producao' i %}">#{{ i }}</a> {% endfor %}</p>{% endif %}
-  <p>{{ r.producao.frituras.frituras }} fritura(s): {{ r.producao.frituras.boas }} boas de {{ r.producao.frituras.fritas }} fritas, {{ r.producao.frituras.perdas }} perdidas · custo {{ r.producao.frituras.custo_total|din }}</p>
+  <p>{{ r.producao.frituras.frituras }} finalização(ões), fritas ou assadas: {{ r.producao.frituras.boas }} boas de {{ r.producao.frituras.fritas }} feitas, {{ r.producao.frituras.perdas }} perdidas · custo {{ r.producao.frituras.custo_total|din }}</p>
   {% if r.producao.canceladas %}<p class="mudo">{{ r.producao.canceladas }} produção(ões) cancelada(s).</p>{% endif %}
   <p class="acoes"><a href="{% url 'previsto_realizado' %}?{% if p.periodo %}periodo={{ p.periodo }}{% else %}de={{ p.de|date:'Y-m-d' }}&amp;ate={{ p.ate|date:'Y-m-d' }}{% endif %}">Previsto × realizado</a></p></section>
 
 <section class="bloco"><h2>Perdas com valor</h2>
   <p><strong>{{ r.perdas.valor_total|din }}</strong>: descartes e perdas de estoque {{ r.perdas.valor_movimentos|din }} + vendas canceladas que foram para perda {{ r.perdas.vendas_canceladas.valor|din }}</p>
   {% for m in r.perdas.por_motivo %}<p class="mudo">{{ m.motivo }}: {{ m.valor|din }} ({{ m.movimentos }} registro(s))</p>{% empty %}<p class="mudo">Nenhuma perda de estoque registrada.</p>{% endfor %}
-  <p class="mudo">As {{ r.perdas.unidades_producao }} un perdidas na produção e as {{ r.perdas.unidades_fritura }} na fritura só aparecem em unidades: o custo delas já está no custo por unidade do lote.</p></section>
+  <p class="mudo">As {{ r.perdas.unidades_producao }} un perdidas na produção e as {{ r.perdas.unidades_fritura }} ao fritar ou assar só aparecem em unidades: o custo delas já está no custo por unidade do lote.</p></section>
 
 <section class="bloco"><h2>Compras</h2>
   <p>{{ r.compras.compras }} compra(s): <strong>{{ r.compras.total|din }}</strong></p>

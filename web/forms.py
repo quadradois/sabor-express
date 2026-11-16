@@ -32,7 +32,7 @@ class ProducaoForm(forms.Form):
     produto = forms.ModelChoiceField(Item.objects.filter(tipo="produto", ativo=True), label="Produto")
     unidades = forms.IntegerField(min_value=1, label="Unidades",
                                   error_messages={"min_value": MAIOR_QUE_ZERO})
-    forma = forms.ChoiceField(choices=[("cru", "Cru (guardar ou congelar)"), ("frito", "Frito")],
+    forma = forms.ChoiceField(choices=[("cru", "Cru (guardar ou congelar)"), ("frito", "Frito"), ("assado", "Assado")],
                               widget=forms.RadioSelect, initial="cru", label="Forma")
     pendente_justificativa = forms.CharField(required=False, widget=forms.HiddenInput)
     chave = forms.CharField(widget=forms.HiddenInput)

@@ -10,6 +10,7 @@ from nucleo.operacoes import RegraViolada, executar
 
 from web.templatetags.formato import quantidade as fmt_qtd
 
+from .categorias import categoria
 from .models import DESTINOS_PERDA, ESTADOS, ConsumoPendente, CriterioValidade, Lote, Movimento
 
 
@@ -215,7 +216,8 @@ def calcular_validade(produto, forma: str, estado: str, *, hoje, manual, justifi
     if c:
         return hoje + timedelta(days=c.dias), False
     if not manual:
-        raise RegraViolada(f"Sem critério de validade para '{produto.nome}' {forma} {estado}: informe a validade.")
+        raise RegraViolada(f"Sem critério de validade para '{produto.nome}' {categoria(forma, estado)}: "
+                           "informe a validade.")
     if not (justificativa or "").strip():
         raise RegraViolada("Justifique a validade informada.")
     return manual, True

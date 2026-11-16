@@ -70,7 +70,7 @@ gravações passam por `nucleo.operacoes.executar` com `canal="agente"` e
 | `cancelar_producao` | 2 | `motivo`, `producao_id?` | propõe cancelar |
 | `mudar_conservacao` | 2 | `produto`, `para`, `quantidade?`, `de=""`, `lote=""`, `validade=""`, `justificativa=""` | propõe mudar a conservação (sem quantidade: o lote todo) |
 | `entrada_estoque` | 2 | `item`, `quantidade`, `unidade`, `custo_total`, `motivo`, `validade=""`, `lote=""` | propõe entrada manual com valor |
-| `criar_tamanho` | 2 | `salgado`, `peso_g`, `oleo_por_unidade?` | propõe criar um tamanho novo de um salgado |
+| `criar_tamanho` | 2 | `salgado`, `peso_g`, `oleo_por_unidade?` | propõe criar um tamanho novo de um salgado; a confirmação diz o acabamento do tipo ("Criar o tamanho Esfirra 30 g, assado. Confirma?") |
 | `confirmar_proposta` | 2 | `proposta_id` | **grava** a proposta — só depois do "sim" falado |
 | `recusar_proposta` | 2 | `proposta_id` | descarta a proposta sem gravar |
 
@@ -79,7 +79,9 @@ com ela, a produção começa (ou fecha) mesmo faltando estoque, e o que faltar
 vira **consumo pendente** de conciliar (o "Confirma?" da conclusão diz quanto).
 
 Conservação aceita `fresco`, `resfriado` (ou "geladeira") e `congelado` (ou
-"freezer"); forma, `cru` ou `frito`. Datas em `AAAA-MM-DD`.
+"freezer"); forma, `cru`, `frito` ou `assado` (o finalizado tem de ser o do
+acabamento do salgado; ver "Acabamento e as três categorias"). Datas em
+`AAAA-MM-DD`.
 
 ### Compras, recebimento e contas a pagar
 
@@ -221,7 +223,7 @@ encomenda é `{produto, quantidade, apresentacao?, forma?, conservacao?}` e o
 sistema acha a apresentação (o jeito de vender, com preço) casando as palavras
 ditas com "produto + apresentação + forma + conservação", ignorando acento,
 caixa e plural ("duas caixas de coxinha congelada" casa "Coxinha 150 g — caixa
-com 25 (cru, congelado)"; "crua", "frita", "geladeira", "freezer", "gramas"
+com 25 (Congelado)"; "crua", "frita", "geladeira", "freezer", "gramas"
 também valem). Mais de um jeito de vender → `erro` + `opcoes` para perguntar.
 Cliente, encomenda ("a encomenda do João"), venda, parcela e lote são achados
 do mesmo jeito; com mais de um candidato volta `opcoes` com o número para a
@@ -253,7 +255,7 @@ próxima chamada (`encomenda_id`, `venda_id`, `parcela_id`, `pagamento_id`).
 | `ver_encomenda` | 0 | `encomenda_id` | `detalhe_encomenda()`: itens, reservado e falta, total, sinal, saldo, situação, observação |
 | `ver_necessidade_producao` | 0 | `dias=3` | `necessidade_producao()`: o que falta, quanto já dá para reservar do estoque livre e quanto produzir; não cria produção |
 | `ver_a_receber` | 0 | `cliente=""`, `situacao="todas"` (`vencidas`, `a_vencer`), `dias=7` | com cliente: quanto deve, quanto venceu e a parcela mais antiga; sem: `devido_por_cliente()` com o total geral |
-| `ver_sobras` | 0 | — | `sobras_fritas()`: fritos ainda no estoque, de quando são |
+| `ver_sobras` | 0 | — | `sobras_fritas()`: fritos e assados ainda no estoque, de quando são |
 | `cadastrar_cliente` | 1 | `nome`, `contato=""` | `salvar_cliente` (recusa nome repetido, mesmo com outra caixa ou sem acento) |
 | `completar_reserva` | 1 | `encomenda_id?`, `cliente=""` | `completar_reserva`: reserva o que entrou no estoque e troca o lote que venceria antes da entrega ("Encomenda 5 de João: reserva completa, está pronta para amanhã.") |
 | `registrar_venda` | 2 | `itens=[{produto, quantidade, apresentacao?, forma?, conservacao?}]`, `cliente=""`, `condicao="a_vista"` (`a_prazo`/"fiado"), `forma_pagamento=""`, `tabela="varejo"`, `prazo_dias?`, `vencimento=""`, `parcelas=1`, `intervalo_dias=30` | `registrar_venda`: baixa pelo que vence primeiro; a prazo vira conta a receber |
@@ -261,7 +263,7 @@ próxima chamada (`encomenda_id`, `venda_id`, `parcela_id`, `pagamento_id`).
 | `criar_encomenda` | 2 | `cliente`, `dia`, `itens`, `hora=""`, `modo="retirada"` (`entrega`), `observacao=""`, `sinal=0`, `sinal_forma=""`, `tabela="varejo"` | `criar_encomenda`: reserva o que há e diz o que falta produzir |
 | `entregar_encomenda` | 2 | `encomenda_id?`, `cliente=""`, `condicao="a_vista"`, `forma_pagamento=""`, `prazo_dias?`, `vencimento=""`, `parcelas=1`, `intervalo_dias=30` | `entregar_encomenda`: vira venda uma vez só; o saldo (total − sinal) entra na hora ou fica a prazo |
 | `cancelar_encomenda` | 2 | `motivo`, `encomenda_id?`, `cliente=""`, `devolver_sinal=true` | `cancelar_encomenda`: libera as reservas; o sinal fica anotado como devolvido ou retido |
-| `registrar_fritura` | 2 | `produto`, `quantidade`, `boas?` (vazio = todas), `motivo_perdas=""`, `conservacao=""` (do cru), `destino="fresco"`, `validade=""`, `justificativa=""` | `registrar_fritura` do lote cru que vence primeiro (`lotes_para_fritar`); cru em duas conservações → `opcoes`; diz o lote, o custo por unidade e a validade do frito |
+| `registrar_fritura` | 2 | `produto`, `quantidade`, `boas?` (vazio = todas), `motivo_perdas=""`, `conservacao=""` (do cru), `destino="fresco"`, `validade=""`, `justificativa=""` | `registrar_fritura` do lote cru que vence primeiro (`lotes_para_fritar`): frita ou assa conforme o acabamento do salgado (o assado não soma óleo); cru em duas conservações → `opcoes`; diz o lote, o custo por unidade e a validade do frito ou do assado |
 | `registrar_perda` | 2 | `produto`, `motivo`, `quantidade?` (vazio = o lote todo), `unidade=""`, `conservacao=""`, `forma=""`, `lote=""`, `vencido=false` | `registrar_perda` de salgado, ingrediente ou embalagem; mais de um lote → `opcoes`; descartar vencido libera a reserva |
 | `registrar_recebimento` | 2 | `cliente=""`, `valor?`, `data_pagamento=""`, `forma=""`, `venda_id?`, `parcela_id?`, `juros=0`, `multa=0`, `desconto=0`, `motivo_diferenca=""` | `registrar_recebimento`: anota que o cliente pagou (parcelas da mesma venda → a mais antiga; vendas diferentes → o `valor` igual ao saldo desfaz, senão `opcoes`) |
 | `estornar_recebimento_cliente` | 2 | `motivo`, `cliente=""`, `pagamento_id?` | `estornar_recebimento_cliente`: a parcela volta a ficar em aberto |
@@ -273,7 +275,7 @@ compra; `registrar_recebimento` é dinheiro de cliente, não `receber_compra`.
 usuário: "vendi duas caixas de coxinha congelada pro João, fiado pra 30 dias"
 agente → registrar_venda(itens=[{"produto": "coxinha", "apresentacao": "caixa", "conservacao": "congelada",
                                  "quantidade": 2}], cliente="João", condicao="fiado", prazo_dias=30)
-       ← {"confirmar": "Vender 2 caixas com 25 de Coxinha 150 g, cru congelado, a 45 reais cada, para João.
+       ← {"confirmar": "Vender 2 caixas com 25 de Coxinha 150 g, congelado, a 45 reais cada, para João.
                         Total 90 reais, a prazo, vence em 13 de dezembro. Confirma?", "proposta_id": 40, ...}
 usuário: "sim"
 agente → confirmar_proposta(proposta_id=40)
@@ -281,7 +283,7 @@ agente → confirmar_proposta(proposta_id=40)
 usuário: "o que tem de encomenda amanhã?"
 agente → ver_encomendas(dia="amanhã")
        ← {"texto": "1 encomenda em aberto para amanhã. Encomenda 5 de Maria, para amanhã às 15h, retirada:
-                    3 caixas com 25 de Coxinha 150 g, frito fresco; falta reservar 75 unidades de ..."}
+                    3 caixas com 25 de Coxinha 150 g, frito; falta reservar 75 unidades de ..."}
 ```
 
 **Caixa de decisões e resumo do dia com o Plano 6:** `ver_decisoes` reconhece
@@ -290,7 +292,7 @@ decisão de completar a reserva de uma encomenda se aprova com
 `aprovar_decisao` ("Vou reservar para a encomenda 5 o que houver no estoque;
 ela fica pronta, com tudo reservado. Confirma?"). `ver_resumo_do_dia` ganha os
 assuntos encomendas atrasadas, encomendas de hoje (prontas e faltando),
-contas a receber vencidas, o que falta produzir, sobra de frito, encomendas
+contas a receber vencidas, o que falta produzir, sobra de frito ou assado, encomendas
 dos próximos dias e vendas de hoje. O texto das decisões é falado sem
 "15/11", "R$ 100,00" nem "30 un" (`agente.decisoes.falavel`); o texto
 original continua em `texto_decisao` de `ver_decisao`.
@@ -330,7 +332,7 @@ números estruturados vêm ao lado (Decimal como número, datas ISO).
 
 | Ferramenta | Nível | Parâmetros | O que faz |
 |---|---|---|---|
-| `ver_custo` | 0 | `produto` (nome falado do tamanho, ou de uma preparação) | `custo_estimado` (ou `custo_preparacao`): ingredientes, indiretos, cru e frito por unidade, pela última compra de cada ingrediente, e o que não inclui; `partes` com cada preparação e item. Incompleto → diz o que falta, sem número. Dois tamanhos → `opcoes` |
+| `ver_custo` | 0 | `produto` (nome falado do tamanho, ou de uma preparação) | `custo_estimado` (ou `custo_preparacao`): ingredientes, indiretos, cru e frito (ou assado, que não soma óleo) por unidade, pela última compra de cada ingrediente, e o que não inclui; `partes` com cada preparação e item. Incompleto → diz o que falta, sem número. Dois tamanhos → `opcoes` |
 | `ver_margem` | 0 | `periodo="semana"`, `agrupar="produto"` (`apresentacao`, `cliente`, `tabela`, `dia`), `comparar=true` | `intervalo` + `comparar_margens` com `intervalo_anterior` (ou `margens` sem comparar): margem estimada em %, em reais, variação em **pontos**, descontos, o que ficou fora e os três maiores grupos; depois, a margem **com indiretos** de referência ("Com os indiretos de referência por salgado ..., a margem estimada fica em N por cento") ou quantos itens não têm indireto |
 | `ver_margem_tabela` | 0 | `produto=""` | `margem_apresentacoes`: custo estimado de cada jeito de vender e a margem estimada no varejo e no atacado pelo preço de tabela de hoje e, com referência, a margem com indiretos; sem custo → o que falta |
 | `ver_mais_vendidos` | 0 | `periodo="mes"`, `ordem="receita"` (`unidades`, `margem`; "lucro" vira `margem`) | `ranking_produtos`: os três primeiros com a participação no total; na ordem margem, quantos ficaram fora |
@@ -444,6 +446,53 @@ venceu e motivo. Prompt e roteiro de teste: [`agente-instrucoes-lotes.md`](agent
 | `registrar_venda`, `entregar_encomenda` | 2 | `registrar_venda`, `entregar_encomenda` | + `lotes`, `data`, `motivo_vencido`; confirmação com "De onde sai: ..."; `dito` com os `avisos` |
 | `registrar_fritura`, `mudar_conservacao`, `cancelar_venda`, `concluir_producao`, `conciliar_consumo` | 2 | os serviços de mesmo nome | + `motivo_vencido` (fritura e conservação também `lote` pelo nome) |
 | `registrar_perda` | 2 | `registrar_perda` | + `destino` (perda, descarte, consumo da equipe, doação) |
+
+### Acabamento e as três categorias (Plano 10)
+
+Cada **tipo** de salgado (a ficha) tem um acabamento, `frito` ou `assado`
+(`Ficha.acabamento`, padrão `frito`), que vale para todos os tamanhos. Nenhuma
+ferramenta nova: continuam 95. O acabamento se troca pela tela (Custos →
+"Acabamento (frito ou assado), óleo e indiretos") ou pelo admin; ainda não há
+ferramenta de voz para isso.
+
+Na fala e nas telas só existem três categorias, dadas por uma função única,
+`estoque.categorias.categoria(forma, estado)`:
+
+| No banco (forma + conservação) | Categoria falada |
+|---|---|
+| `cru` + `congelado` | congelado |
+| `frito` + `fresco` | frito |
+| `assado` + `fresco` | assado |
+
+O que não é de venda sai por extenso (`cru` + `resfriado` → "resfriado",
+`frito` + `congelado` → "frito congelado"). Na entrada, `forma` (ou as palavras
+do produto) aceita a categoria dita: "congelado" ou "cru" é o cru congelado,
+"frito" é o frito fresco e "assado" é o assado fresco
+(`categorias.forma_estado`).
+
+- `registrar_fritura` mantém o nome e serve aos dois: "assei 40 esfirras, 38
+  boas" → "Assar 40 unidades de Esfirra 100 g do lote ..., congelado, ...: 38
+  boas e 2 perdidas (queimaram). Custo de 63 centavos por unidade assada; o
+  assado fica fresco e vale até amanhã. Confirma?". O assado não soma o óleo
+  de referência; o `resultado` traz `forma`.
+- `iniciar_producao` aceita `forma="assado"`; `concluir_producao` fecha o lote
+  assado. Forma finalizada que não é a do salgado → `erro` + `opcoes`
+  (`["cru", "assado"]`).
+- Pedir o acabamento errado numa venda, encomenda ou separação devolve
+  `ConsultaInvalida` com as opções reais: `{"erro": "Esfirra é assado, não
+  frito. O que há para vender está nas opções; pergunte qual.", "opcoes":
+  ["unidade de Esfirra 100 g, congelado", "unidade assada de Esfirra 100 g,
+  assado"]}`.
+- `ver_sobras` fala "Sobras fritas", "Sobras assadas" ou "Sobras fritas e
+  assadas"; `ver_custo` do assado diz "assado custa o mesmo, o forno não soma
+  óleo".
+- No serviço, a trava é `categorias.checar_forma`: lote, apresentação,
+  produção ou critério de validade com forma finalizada diferente do
+  acabamento levanta `RegraViolada` ("'Esfirra 100 g' é assado, não frito: o
+  acabamento desse salgado é assado. Use cru ou assado.").
+
+Trecho para o prompt e roteiro de voz:
+[`agente-instrucoes-acabamento.md`](agente-instrucoes-acabamento.md).
 
 ### Fluxo de proposta (nível 2)
 

@@ -9,9 +9,10 @@
 <p class="mudo">Custo <strong>estimado</strong> de 1 unidade ({{ c.peso_g|quantidade:"g" }}), ficha "{{ c.ficha }}" versão {{ c.versao|default:"—" }}, pelo preço da última compra de cada item.</p>
 <section class="bloco">
   {% if c.completo %}<p>Ingredientes: <strong>{{ c.ingredientes|custo4 }}</strong></p>
-  <p>Indiretos: {% if c.indiretos is None %}sem valor de referência{% else %}{{ c.indiretos|custo4 }}{% endif %} · Óleo: {% if c.oleo is None %}sem valor de referência{% else %}{{ c.oleo|custo4 }}{% endif %}</p>
+  <p>Indiretos: {% if c.indiretos is None %}sem valor de referência{% else %}{{ c.indiretos|custo4 }}{% endif %} {% if c.acabamento == "assado" %}· Assado: não leva óleo{% else %}· Óleo: {% if c.oleo is None %}sem valor de referência{% else %}{{ c.oleo|custo4 }}{% endif %}{% endif %}</p>
   <p>Cru (ingredientes + indiretos): <strong>{{ c.custo_cru|custo4 }}</strong></p>
-  <p>Frito (cru + óleo): <strong>{{ c.custo_frito|custo4 }}</strong></p>
+  {% if c.acabamento == "assado" %}<p>Assado (igual ao cru, sem óleo): <strong>{{ c.custo_assado|custo4 }}</strong></p>
+  {% else %}<p>Frito (cru + óleo): <strong>{{ c.custo_frito|custo4 }}</strong></p>{% endif %}
   {% else %}<p class="falta">incompleto: falta comprar {% for f in c.faltando %}{{ f.item }} ({{ f.motivo }}){% if not forloop.last %}, {% endif %}{% endfor %}</p>
   <p>Só com o que tem preço: {{ c.ingredientes_conhecido|custo4 }} — não é o custo do produto.</p>{% endif %}
   <p class="mudo">Inclui: {{ c.inclui|join:"; " }}.</p>

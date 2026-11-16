@@ -323,20 +323,20 @@ def test_ver_margem_tabela(bolinha, atacadao, caixa):
     comprar(atacadao, farinha, "2", "kg", "10")  # bolinha 100 g: 50 centavos de farinha
     apresentacao(bolinha, "caixa com 25", 25, "45", atacado="40", embalagem_id=caixa.id, embalagens=1)
     t = falado(chamar("ver_margem_tabela", produto="bolinha"))
-    assert ("caixa com 25 de Bolinha 100 g, cru congelado: sem custo estimado, falta o preço de Caixa de papelão; "
+    assert ("caixa com 25 de Bolinha 100 g, congelado: sem custo estimado, falta o preço de Caixa de papelão; "
             "nunca foi comprado") in t
     comprar(atacadao, caixa, "10", "un", "10")
     r = chamar("ver_margem_tabela")
     t = falado(r)
     [a] = r["apresentacoes"]
     assert (a["custo"], a["margem_varejo_pct"], a["margem_atacado_pct"]) == (13.5, 70.0, 66.3)
-    assert ("caixa com 25 de Bolinha 100 g, cru congelado: custo estimado 13 reais e 50 centavos; no varejo, "
+    assert ("caixa com 25 de Bolinha 100 g, congelado: custo estimado 13 reais e 50 centavos; no varejo, "
             "45 reais, margem estimada de 70 por cento, 31 reais e 50 centavos; no atacado, 40 reais, "
             "66,3 por cento.") in t
     assert "não inclui indiretos" in t
     sem_ficha = Item.objects.create(nome="Empada", tipo="produto", unidade_base="un")
     apresentacao(sem_ficha, preco="6")
-    assert "unidade de Empada, cru congelado: sem custo estimado, o produto não tem ficha técnica" in \
+    assert "unidade de Empada, congelado: sem custo estimado, o produto não tem ficha técnica" in \
         falado(chamar("ver_margem_tabela", produto="empada"))
     assert "Nenhum preço de tabela para 'quibe'" in chamar("ver_margem_tabela", produto="quibe")["erro"]
 
